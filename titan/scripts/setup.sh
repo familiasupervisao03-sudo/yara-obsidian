@@ -15,19 +15,27 @@ if [ "${FREE_KB:-0}" -lt 307200 ]; then
   echo "Espaço livre insuficiente: $((FREE_KB / 1024)) MB (mínimo ~300 MB)."; exit 1
 fi
 
+venv_help() {
+  PYV="$("$PY" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
+  echo "Não foi possível criar o ambiente virtual Python (falta o módulo venv/ensurepip)."
+  echo "Em Linux Mint/Ubuntu/Debian ele vem no pacote do sistema python${PYV}-venv:"
+  echo "    sudo apt install python${PYV}-venv"
+  echo "Depois apague o ambiente incompleto criado agora e rode o script de novo:"
+  echo "    rm -rf .venv"
+}
 if [ ! -d .venv ]; then
-  "$PY" -m venv .venv 2>/dev/null || {
-    echo "Não foi possível criar o ambiente virtual."
-    echo "Em Debian/Ubuntu/Mint, o módulo venv vem no pacote python3-venv (exige sudo; peça autorização)."
-    exit 1
-  }
+  echo "Criando ambiente virtual em .venv/ ..."
+  "$PY" -m venv .venv || { venv_help; exit 1; }
 fi
+# Um .venv sem pip indica criação incompleta (ex.: python3-venv ausente).
+.venv/bin/python -m pip --version >/dev/null 2>&1 || { venv_help; exit 1; }
+echo "Atualizando o pip e baixando as dependências (pode levar alguns minutos)..."
 .venv/bin/python -m pip install -q --upgrade pip
 EXTRAS="${TITAN_EXTRAS:-}"   # ex.: TITAN_EXTRAS=dev  (dev = pytest, para os testes)
 TARGET="."
 [ -n "$EXTRAS" ] && TARGET=".[$EXTRAS]"
 # Somente pacotes pré-compilados: nada é compilado neste computador.
-.venv/bin/python -m pip install -q --only-binary=:all: -e "$TARGET" || {
+.venv/bin/python -m pip install --only-binary=:all: -e "$TARGET" || {
   echo "Falha ao instalar dependências pré-compiladas para esta arquitetura ($(uname -m))."
   echo "Nada foi compilado nem instalado no sistema. Veja docs/notebook-install.md (seção Problemas)."
   exit 1
