@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import mimetypes
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -30,6 +31,7 @@ from titan_api.security import (
 )
 
 log = logging.getLogger("titan.api")
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 _STATUS_CODES = {
     400: "bad_request",

@@ -43,6 +43,8 @@ export interface Message {
   content: string;
   model_provider: string | null;
   model_name: string | null;
+  status?: "complete" | "interrupted" | "error";
+  interrupted_at_char?: number | null;
   created_at: ISODateTime;
 }
 
@@ -98,4 +100,125 @@ export interface SystemStatus {
 export interface SettingsView {
   config: Record<string, string | number | boolean>;
   policies: Record<string, string | number | boolean>;
+}
+
+// ---------- Fase 2: tarefas e aprovações ----------
+
+export type TaskStatus =
+  | "RECEIVED" | "PLANNING" | "PENDING_APPROVAL" | "READY" | "RUNNING" | "VERIFYING"
+  | "WAITING_FOR_USER" | "CANCEL_REQUESTED" | "CANCELLED" | "INTERRUPTED" | "COMPLETED" | "FAILED";
+
+export interface Criterion {
+  type: "output_nonempty" | "contains" | "not_contains" | "equals" | "max_length";
+  value?: string | number;
+}
+
+export interface StepInput {
+  title: string;
+  description?: string;
+  action_type: string;
+  parameters: Record<string, string>;
+  success_criteria: Criterion[];
+  requires_approval?: boolean;
+  depends_on?: number[];
+}
+
+export interface TaskSummary {
+  id: UUID;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  status_reason: string | null;
+  plan_version: number;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
+export interface TaskStep {
+  id: UUID;
+  position: number;
+  title: string;
+  description: string;
+  action_type: string;
+  action_label: string;
+  parameters: Record<string, unknown>;
+  requires_approval: boolean;
+  depends_on: number[];
+  success_criteria: Criterion[];
+  status: string;
+  last_output: string | null;
+  last_error: string | null;
+}
+
+export interface ApprovalItem {
+  id: UUID;
+  task_id: UUID;
+  task_title: string;
+  step_position: number | null;
+  step_title: string | null;
+  plan_version: number;
+  action_type: string;
+  action_label: string;
+  parameters: Record<string, unknown>;
+  risk: string;
+  scope_hash: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "INVALIDATED" | "EXPIRED";
+  expires_at: ISODateTime | null;
+  decided_at: ISODateTime | null;
+  reason: string | null;
+  created_at: ISODateTime;
+}
+
+export interface TaskDetail {
+  task: TaskSummary;
+  steps: TaskStep[];
+  approvals: ApprovalItem[];
+  plans: { version: number; created_by: string; change_note: string; created_at: ISODateTime }[];
+  verification: { criterion: string; passed: boolean; details: string; created_at: ISODateTime }[];
+}
+
+export interface ActionInfo {
+  name: string;
+  label: string;
+  sensitive: boolean;
+  risk: string;
+  required_params: string[];
+  available: boolean;
+  unavailable_reason: string;
+}
+
+export interface ExecutionItem {
+  id: UUID;
+  step_id: UUID | null;
+  attempt: number;
+  command: string;
+  status: string;
+  output: string;
+  error: string;
+  started_at: ISODateTime;
+  finished_at: ISODateTime | null;
+}
+
+export interface TaskEvent {
+  event_type: string;
+  actor_type: string;
+  created_at: ISODateTime;
+  data: Record<string, unknown>;
+  task_status: TaskStatus;
+}
+
+// ---------- voz ----------
+
+export interface VoiceEngine {
+  name: string;
+  kind: "stt" | "tts";
+  available: boolean;
+  local: boolean;
+  detail: string;
+}
+
+export interface VoiceStatus {
+  engines: VoiceEngine[];
+  sample_rate: number;
+  notes: string[];
 }

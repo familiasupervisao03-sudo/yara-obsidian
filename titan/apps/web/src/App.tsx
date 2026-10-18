@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { SessionInfo } from "@titan/api-contracts";
 import { api, HttpError } from "./api";
 import { Login } from "./components/Login";
-import { Dashboard } from "./components/Dashboard";
+import { Shell } from "./components/Shell";
 
 export function App() {
   const [session, setSession] = useState<SessionInfo | null>(null);
@@ -20,10 +20,10 @@ export function App() {
   }, []);
 
   if (checking) return <div className="boot">TITAN // inicializando…</div>;
-  if (fatal) return <div className="boot error">Falha ao contatar o servidor local: {fatal}</div>;
+  if (fatal) return <div className="boot error">Falha ao contatar o servidor do notebook: {fatal}</div>;
   if (!session) return <Login onLogin={setSession} />;
   return (
-    <Dashboard
+    <Shell
       session={session}
       onLogout={async () => {
         await api.logout().catch(() => undefined);

@@ -76,6 +76,9 @@ def test_security_headers(client):
     assert "default-src 'self'" in r.headers["content-security-policy"]
     assert r.headers["x-frame-options"] == "DENY"
     assert r.headers["x-content-type-options"] == "nosniff"
+    # Microfone só para o próprio TITAN (modo de voz); câmera e localização bloqueadas.
+    assert "microphone=(self)" in r.headers["permissions-policy"]
+    assert "camera=()" in r.headers["permissions-policy"]
 
 
 def test_no_cors_headers(client):

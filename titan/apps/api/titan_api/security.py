@@ -19,7 +19,8 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
     "connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; "
-    "frame-ancestors 'none'; form-action 'self'"
+    "frame-ancestors 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'; "
+    "media-src 'self' blob:"
 )
 
 
@@ -72,7 +73,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
-        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(self), geolocation=()")
         if request.url.path.startswith("/api/"):
             response.headers.setdefault("Cache-Control", "no-store")
         return response
