@@ -95,8 +95,18 @@ def test_key_redacted_from_logs(paid):
     assert KEY not in content
 
 
+def _fake_sdk(monkeypatch):
+    """O comando exige a biblioteca 'anthropic' (extra opcional); simula sua presença."""
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, "anthropic", types.ModuleType("anthropic"))
+
+
 def test_enable_and_disable_commands(tmp_path, monkeypatch, capsys):
     from titan import cli
+
+    _fake_sdk(monkeypatch)
     from titan.envfile import read_env
 
     env = tmp_path / ".env"
@@ -127,6 +137,8 @@ def test_enable_and_disable_commands(tmp_path, monkeypatch, capsys):
 def test_enable_requires_explicit_confirmation(tmp_path, monkeypatch):
     from titan import cli
 
+    _fake_sdk(monkeypatch)
+
     env = tmp_path / ".env"
     env.write_text("TITAN_MODEL_PROVIDER=none\n")
     answers = iter(["claude-opus-5-5", "2", "5.8", "sim"])
@@ -139,6 +151,8 @@ def test_enable_requires_explicit_confirmation(tmp_path, monkeypatch):
 def test_enable_rejects_unknown_model(tmp_path, monkeypatch):
     from titan import cli
 
+    _fake_sdk(monkeypatch)
+
     env = tmp_path / ".env"
     env.write_text("TITAN_MODEL_PROVIDER=none\n")
     answers = iter(["hauki"])
@@ -150,6 +164,8 @@ def test_enable_rejects_unknown_model(tmp_path, monkeypatch):
 def test_enable_accepts_haiku_alias(tmp_path, monkeypatch):
     from titan import cli
     from titan.envfile import read_env
+
+    _fake_sdk(monkeypatch)
 
     env = tmp_path / ".env"
     env.write_text("TITAN_MODEL_PROVIDER=none\n")
