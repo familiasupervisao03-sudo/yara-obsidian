@@ -319,6 +319,21 @@ def cmd_restore(args: argparse.Namespace) -> int:
     return 0
 
 
+def uvicorn_options(s) -> dict:
+    opts = dict(
+        host=s.host,
+        port=s.port,
+        workers=1,
+        # Não confiar em X-Forwarded-For: impediria falsificar a rede de origem.
+        proxy_headers=False,
+        server_header=False,
+        log_level=s.log_level.lower(),
+    )
+    if s.tls_enabled:
+        opts.update(ssl_certfile=str(s.tls_cert_file), ssl_keyfile=str(s.tls_key_file))
+    return opts
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -329,16 +344,10 @@ def cmd_serve(args: argparse.Namespace) -> int:
         upgrade_head(s.database_url)
     from titan_api.app import create_app
 
-    uvicorn.run(
-        create_app(s),
-        host=s.host,
-        port=s.port,
-        workers=1,
-        # Não confiar em X-Forwarded-For: impediria falsificar a rede de origem.
-        proxy_headers=False,
-        server_header=False,
-        log_level=s.log_level.lower(),
-    )
+    if s.lan_enabled:
+        print(f"ATENÇÃO: acessível na rede local ({s.host}:{s.port}) para {s.allowed_networks}. "
+              + ("HTTPS ativo." if s.tls_enabled else "SEM HTTPS: o tráfego na Wi-Fi não é cifrado."))
+    uvicorn.run(create_app(s), **uvicorn_options(s))
     return 0
 
 

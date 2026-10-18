@@ -50,7 +50,8 @@ def test_unsafe_config_is_refused(kw, msg):
 
 
 def test_lan_with_private_network_is_accepted():
-    s = make(host="0.0.0.0", allowed_networks="127.0.0.1/32,192.168.0.0/24")
+    s = make(host="0.0.0.0", allowed_networks="127.0.0.1/32,192.168.0.0/24",
+             lan_acknowledge_http_risk=True)
     assert any(str(n) == "192.168.0.0/24" for n in s.networks)
 
 
@@ -108,3 +109,27 @@ def test_anthropic_key_never_in_public_view():
     assert "sk-ant" not in str(view)
     assert view["anthropic_api_key_configured"] is True
     assert view["external_provider_active"] is True
+
+
+def test_lan_without_https_requires_explicit_ack():
+    with pytest.raises(ValidationError, match="sem HTTPS"):
+        Settings(_env_file=None, env="development", auth_secret=SECRET, host="0.0.0.0",
+                 allowed_networks="192.168.0.0/24")
+    s = make(host="0.0.0.0", allowed_networks="192.168.0.0/24", lan_acknowledge_http_risk=True)
+    assert s.lan_enabled and not s.tls_enabled and not s.secure_cookies
+
+
+def test_tls_settings(tmp_path):
+    from titan.cli import uvicorn_options
+
+    cert, key = tmp_path / "c.pem", tmp_path / "k.pem"
+    cert.write_text("x")
+    key.write_text("y")
+    s = make(host="0.0.0.0", allowed_networks="192.168.0.0/24", tls_cert_file=cert, tls_key_file=key)
+    assert s.tls_enabled and s.secure_cookies
+    opts = uvicorn_options(s)
+    assert opts["ssl_certfile"] == str(cert) and opts["proxy_headers"] is False
+    with pytest.raises(ValidationError, match="juntos"):
+        make(tls_cert_file=cert)
+    with pytest.raises(ValidationError, match="não encontrado"):
+        make(tls_cert_file=tmp_path / "nao.pem", tls_key_file=key)

@@ -63,6 +63,14 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         if request.method not in SAFE_METHODS and request.url.path.startswith("/api/"):
             if request.headers.get(CSRF_HEADER) != "1":
                 return _error(403, "csrf_header_missing", "Cabeçalho X-Titan-Request ausente.")
+            # Defesa extra: se o navegador informar a origem, ela deve ser o próprio TITAN.
+            origin = request.headers.get("origin")
+            host = request.headers.get("host", "")
+            if origin and origin != "null":
+                from urllib.parse import urlsplit
+
+                if urlsplit(origin).netloc.lower() != host.lower():
+                    return _error(403, "bad_origin", "Origem da requisição não autorizada.")
         return await call_next(request)
 
 

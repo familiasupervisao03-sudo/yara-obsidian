@@ -11,6 +11,7 @@ import ipaddress
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
+from typing import Optional
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -68,6 +69,11 @@ class Settings(BaseSettings):
     session_ttl_hours: int = Field(default=12, ge=1, le=24 * 30)
     # Marca o cookie como Secure; só funciona com HTTPS (ver docs/security.md).
     cookie_secure: bool = False
+    # HTTPS local (ver docs/mobile.md). Com os dois arquivos, o servidor usa TLS.
+    tls_cert_file: Optional[Path] = None
+    tls_key_file: Optional[Path] = None
+    # Escutar na rede local SEM HTTPS exige este aceite explícito do risco.
+    lan_acknowledge_http_risk: bool = False
     login_max_attempts: int = Field(default=5, ge=1, le=100)
     login_lockout_seconds: int = Field(default=300, ge=10)
 
@@ -209,8 +215,20 @@ class Settings(BaseSettings):
             elif secret == EXAMPLE_AUTH_SECRET:
                 errors.append("TITAN_AUTH_SECRET ainda é o valor de exemplo.")
 
+        if bool(self.tls_cert_file) != bool(self.tls_key_file):
+            errors.append("Defina TITAN_TLS_CERT_FILE e TITAN_TLS_KEY_FILE juntos.")
+        for f in (self.tls_cert_file, self.tls_key_file):
+            if f is not None and not Path(f).expanduser().is_file():
+                errors.append(f"Arquivo TLS não encontrado: {f}")
+
         # Rede local: escutar fora do loopback exige restringir as redes permitidas.
         if not _is_loopback_host(self.host):
+            if not self.tls_enabled and not self.lan_acknowledge_http_risk:
+                errors.append(
+                    "Escutar na rede local sem HTTPS expõe senha, cookie e conversas a quem "
+                    "estiver na mesma Wi-Fi. Configure HTTPS (docs/mobile.md) ou, ciente do "
+                    "risco, defina TITAN_LAN_ACKNOWLEDGE_HTTP_RISK=true."
+                )
             nets = [n.strip() for n in self.allowed_networks.split(",") if n.strip()]
             for n in nets:
                 net = ipaddress.ip_network(n, strict=False)
@@ -240,6 +258,18 @@ class Settings(BaseSettings):
         ]
 
     @property
+    def tls_enabled(self) -> bool:
+        return bool(self.tls_cert_file and self.tls_key_file)
+
+    @property
+    def secure_cookies(self) -> bool:
+        return self.cookie_secure or self.tls_enabled
+
+    @property
+    def lan_enabled(self) -> bool:
+        return not _is_loopback_host(self.host)
+
+    @property
     def is_sqlite(self) -> bool:
         return self.database_url.startswith("sqlite")
 
@@ -251,6 +281,8 @@ class Settings(BaseSettings):
             "local_only": self.local_only,
             "host": self.host,
             "port": self.port,
+            "lan_enabled": self.lan_enabled,
+            "tls_enabled": self.tls_enabled,
             "database_backend": "sqlite" if self.is_sqlite else "postgresql",
             "sandbox_enabled": self.sandbox_enabled,
             "sandbox_network": self.sandbox_network,

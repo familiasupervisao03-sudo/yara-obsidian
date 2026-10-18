@@ -54,7 +54,8 @@ def test_clients_outside_allowed_networks_are_refused(settings, ip):
 def test_lan_client_allowed_when_network_configured(make_settings):
     from titan.db.migrate import upgrade_head
 
-    s = make_settings(host="0.0.0.0", allowed_networks="127.0.0.1/32,192.168.0.0/24")
+    s = make_settings(host="0.0.0.0", allowed_networks="127.0.0.1/32,192.168.0.0/24",
+                      lan_acknowledge_http_risk=True)
     upgrade_head(s.database_url)
     create_user(s)
     with build_client(s, client=("192.168.0.50", 1234)) as phone:
@@ -105,3 +106,12 @@ def test_session_token_not_stored_in_plaintext(settings):
         hashes = [s.token_hash for s in db.query(Session).all()]
     engine.dispose()
     assert token not in hashes and len(hashes) == 1
+
+
+def test_foreign_origin_rejected_even_with_csrf_header(auth_client):
+    r = auth_client.post("/api/v1/conversations", json={"title": "x"},
+                         headers={**CSRF, "Origin": "http://evil.example"})
+    assert r.status_code == 403 and r.json()["error"]["code"] == "bad_origin"
+    ok = auth_client.post("/api/v1/conversations", json={"title": "x"},
+                          headers={**CSRF, "Origin": "http://testserver"})
+    assert ok.status_code == 201

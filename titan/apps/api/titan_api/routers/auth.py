@@ -63,7 +63,7 @@ def login(
         max_age=int(ctx.auth.ttl.total_seconds()),
         httponly=True,
         samesite="strict",
-        secure=ctx.settings.cookie_secure,
+        secure=ctx.settings.secure_cookies,
         path="/",
     )
     return SessionOut(user=UserOut.model_validate(issued.user), expires_at=issued.session.expires_at)
