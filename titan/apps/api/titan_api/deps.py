@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session as DBSession, sessionmaker
 from sqlalchemy import Engine
 
 from titan.auth.service import AuthService
+from titan.tasks.runner import TaskRunner
 from titan.config.settings import Settings
 from titan.db.models import Session, User
 
@@ -22,6 +23,7 @@ class AppContext:
     engine: Engine
     session_factory: sessionmaker[DBSession]
     auth: AuthService
+    runner: "TaskRunner"
 
 
 def get_ctx(request: Request) -> AppContext:

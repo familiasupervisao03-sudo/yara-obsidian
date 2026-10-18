@@ -19,7 +19,9 @@ from titan.config.settings import Settings, get_settings
 from titan.core.runtime import prepare_runtime
 from titan.db.engine import make_engine, make_session_factory
 from titan_api.deps import AppContext
-from titan_api.routers import auth, conversations, health, system
+from titan.tasks.runner import TaskRunner
+from titan.tasks.service import recover_on_startup
+from titan_api.routers import auth, conversations, health, system, tasks
 from titan_api.security import (
     CSRFMiddleware,
     NetworkAllowlistMiddleware,
@@ -42,8 +44,20 @@ _STATUS_CODES = {
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    _recover_interrupted(app.state.ctx)
     yield
     app.state.ctx.engine.dispose()
+
+
+def _recover_interrupted(ctx: AppContext) -> None:
+    """Tarefas em execução quando o servidor parou viram INTERRUPTED (retomada manual)."""
+    try:
+        with ctx.session_factory.begin() as db:
+            n = recover_on_startup(db)
+        if n:
+            log.warning("%d tarefa(s) marcadas como INTERRUPTED após reinício.", n)
+    except Exception:
+        log.exception("Recuperação de tarefas não executada (banco sem migrações?)")
 
 
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
@@ -51,10 +65,12 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     prepare_runtime(settings)
 
     engine = make_engine(settings.database_url)
+    session_factory = make_session_factory(engine)
     ctx = AppContext(
         settings=settings,
         engine=engine,
-        session_factory=make_session_factory(engine),
+        session_factory=session_factory,
+        runner=TaskRunner(settings, session_factory, inline=settings.task_runner == "inline"),
         auth=AuthService(
             settings.auth_secret.get_secret_value() or "test-only-secret",
             settings.session_ttl_hours,
@@ -85,6 +101,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(conversations.router)
     app.include_router(system.router)
+    app.include_router(tasks.router)
 
     if settings.serve_web:
         _mount_web(app, settings.web_dist_dir)

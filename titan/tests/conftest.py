@@ -53,6 +53,7 @@ def make_settings(tmp_path: Path, db_url: str) -> Callable[..., Settings]:
             auth_secret=TEST_SECRET,
             web_dist_dir=tmp_path / "no-web",
             log_level="WARNING",
+            task_runner="inline",
         )
         values.update(overrides)
         return Settings(_env_file=None, **values)

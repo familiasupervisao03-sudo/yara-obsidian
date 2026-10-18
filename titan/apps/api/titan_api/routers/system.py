@@ -71,8 +71,8 @@ def system_status(
             "TITAN_SANDBOX_ENABLED=true, mas o executor ainda não existe; execução bloqueada.",
         )
     )
-    services.append(ServiceStatus(name="orchestrator", state="planned",
-                                  detail="Tarefas, planos e aprovações: Fase 2."))
+    services.append(ServiceStatus(name="orchestrator", state="online",
+                                  detail="Tarefas, planos versionados e aprovações (Fase 2)."))
     chain_ok, _bad = verify_chain(db)
     return SystemStatusOut(
         version=__version__,

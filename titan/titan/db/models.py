@@ -241,6 +241,25 @@ class Approval(TimestampMixin, Base):
     )
     decided_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
     reason: Mapped[Optional[str]] = mapped_column(Text)
+    # Consequências/riscos mostrados ao usuário no momento da decisão.
+    risk: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    expires_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+
+
+class TaskPlan(TimestampMixin, Base):
+    """Uma versão do plano de uma tarefa. Versões antigas nunca são alteradas."""
+
+    __tablename__ = "task_plans"
+    __table_args__ = (UniqueConstraint("task_id", "version", name="uq_task_plans_version"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(16), nullable=False)  # user | model
+    change_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    plan_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class Execution(Base):

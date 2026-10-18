@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     login_max_attempts: int = Field(default=5, ge=1, le=100)
     login_lockout_seconds: int = Field(default=300, ge=10)
 
+    approval_ttl_hours: int = Field(default=24, ge=1, le=24 * 30)
+    # "inline" executa tarefas na própria requisição (somente testes).
+    task_runner: str = "thread"
+
     sandbox_enabled: bool = False
     sandbox_network: bool = False
     max_runtime_seconds: int = Field(default=30, ge=1, le=3600)
@@ -172,6 +176,10 @@ class Settings(BaseSettings):
             errors.append(
                 f"Provedor de modelo '{self.model_provider}' desconhecido ou não suportado."
             )
+        if self.task_runner not in {"thread", "inline"}:
+            errors.append("TITAN_TASK_RUNNER deve ser 'thread' ou 'inline'.")
+        elif self.task_runner == "inline" and self.env != Environment.test:
+            errors.append("TITAN_TASK_RUNNER=inline só é permitido em TITAN_ENV=test.")
         if self.model_effort not in {"low", "medium", "high", "xhigh", "max"}:
             errors.append("TITAN_MODEL_EFFORT deve ser low, medium, high, xhigh ou max.")
         if (
