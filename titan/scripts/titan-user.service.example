@@ -1,0 +1,23 @@
+# MODELO — NÃO instalado automaticamente. Ver docs/autostart.md.
+# Serviço de USUÁRIO do systemd (não precisa de root para instalar).
+# Destino: ~/.config/systemd/user/titan.service
+[Unit]
+Description=TITAN (servidor local, somente 127.0.0.1)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Projetos/TITAN/titan
+ExecStart=%h/Projetos/TITAN/titan/.venv/bin/titan serve
+Restart=on-failure
+RestartSec=10
+# Recursos limitados para não pesar no notebook antigo.
+Nice=10
+MemoryMax=400M
+# Endurecimento compatível com serviço de usuário.
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=default.target

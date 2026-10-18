@@ -21,7 +21,9 @@ npm install && npm run build      # 3. interface (precisa de Node 20.19+, só pa
 .venv/bin/titan serve             # http://127.0.0.1:8000
 ```
 
+**Instalação no notebook, passo a passo:** [`docs/notebook-install.md`](docs/notebook-install.md).
 Detalhes, celular na Wi-Fi, PostgreSQL e backup: [`docs/setup.md`](docs/setup.md).
+Início automático (avaliação): [`docs/autostart.md`](docs/autostart.md).
 
 ## Documentação
 
