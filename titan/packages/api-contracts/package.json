@@ -1,0 +1,12 @@
+{
+  "name": "@titan/api-contracts",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Tipos TypeScript dos contratos da API do TITAN (espelham apps/api/titan_api/schemas.py)",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  }
+}

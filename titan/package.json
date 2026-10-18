@@ -1,0 +1,18 @@
+{
+  "name": "titan",
+  "private": true,
+  "version": "0.1.0",
+  "description": "TITAN — workspaces do frontend e contratos da API",
+  "workspaces": [
+    "packages/api-contracts",
+    "apps/web"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace apps/web",
+    "dev": "npm run dev --workspace apps/web",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}
