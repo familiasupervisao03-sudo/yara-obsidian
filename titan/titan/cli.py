@@ -195,6 +195,50 @@ def cmd_disable_external(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_diagnose_network(args: argparse.Namespace) -> int:
+    """Mede DNS e conexão TCP com a Anthropic (IPv4 e IPv6). Não envia dados nem a chave."""
+    import socket
+    import time
+
+    host = args.host
+    print(f"Diagnóstico de rede para {host}:443 (nenhum dado é enviado)\n")
+    t0 = time.monotonic()
+    try:
+        infos = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+    except OSError as exc:
+        print(f"DNS: FALHOU ({exc}). Verifique a internet.")
+        return 1
+    print(f"DNS: {(time.monotonic() - t0):.2f}s")
+    results = {}
+    seen = set()
+    for family, _type, _proto, _canon, addr in infos:
+        if addr[0] in seen:
+            continue
+        seen.add(addr[0])
+        label = "IPv4" if family == socket.AF_INET else "IPv6"
+        sock = socket.socket(family, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        t = time.monotonic()
+        try:
+            sock.connect(addr[:2] if family == socket.AF_INET else addr)
+            ms = (time.monotonic() - t) * 1000
+            print(f"{label} {addr[0]}: conectou em {ms:.0f} ms")
+            results.setdefault(label, True)
+        except OSError as exc:
+            print(f"{label} {addr[0]}: FALHOU em {(time.monotonic() - t):.1f}s ({exc.__class__.__name__})")
+            results.setdefault(label, False)
+        finally:
+            sock.close()
+    print()
+    if results.get("IPv6") is False and results.get("IPv4"):
+        print("Conclusão: IPv6 com problema e IPv4 OK. Mantenha TITAN_NETWORK_FORCE_IPV4=true (padrão).")
+    elif results.get("IPv4"):
+        print("Conclusão: conexão OK. Se o chat ainda demora, o tempo está na geração da resposta.")
+    else:
+        print("Conclusão: não foi possível conectar por IPv4. Verifique a internet/firewall.")
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -239,6 +283,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--env-file", default=".env")
     p.add_argument("--keep-key", action="store_true", help="mantém a chave no .env")
     p.set_defaults(fn=cmd_disable_external)
+    p = sub.add_parser("diagnose-network", help="mede a conexão com a Anthropic (sem enviar dados)")
+    p.add_argument("--host", default="api.anthropic.com")
+    p.set_defaults(fn=cmd_diagnose_network)
     p = sub.add_parser("serve", help="inicia o servidor local")
     p.add_argument("--no-migrate", action="store_true")
     p.set_defaults(fn=cmd_serve)

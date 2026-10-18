@@ -180,3 +180,13 @@ def test_opus_keeps_default_thinking(paid_settings, factory):
     AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client).chat(
         [ChatTurn("user", "oi")])
     assert "thinking" not in client.calls[0]  # Opus 5.5 recusa thinking disabled
+
+
+def test_real_client_forces_ipv4_and_short_connect_timeout(paid_settings, factory):
+    """Constrói o cliente real (sem enviar nada) e confere IPv4 e timeout de conexão."""
+    pytest.importorskip("anthropic")
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory))
+    client = p._get_client()
+    assert client.timeout.connect == 10.0
+    pool = client._client._transport._pool
+    assert pool._local_address == "0.0.0.0"

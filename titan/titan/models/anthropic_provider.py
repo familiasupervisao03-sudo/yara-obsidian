@@ -76,10 +76,22 @@ class AnthropicProvider:
                     "Biblioteca 'anthropic' não instalada. Rode: "
                     ".venv/bin/pip install -e '.[anthropic]'"
                 ) from exc
+            kwargs: dict[str, Any] = {}
+            if self.settings.network_force_ipv4:
+                import httpx2
+
+                # local_address="0.0.0.0" faz a conexão usar somente IPv4.
+                kwargs["http_client"] = anthropic.DefaultHttpxClient(
+                    transport=httpx2.HTTPTransport(local_address="0.0.0.0")
+                )
             self._client = anthropic.Anthropic(
                 api_key=self.settings.anthropic_api_key.get_secret_value(),
-                timeout=float(self.settings.model_timeout_seconds),
+                timeout=anthropic.Timeout(
+                    float(self.settings.model_timeout_seconds),
+                    connect=float(self.settings.model_connect_timeout_seconds),
+                ),
                 max_retries=0,  # sem reenvios automáticos: cada envio é contabilizado
+                **kwargs,
             )
         return self._client
 

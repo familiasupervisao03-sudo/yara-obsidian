@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     model_max_output_tokens: int = Field(default=2048, ge=64, le=32000)
     model_effort: str = "low"
     model_timeout_seconds: int = Field(default=90, ge=5, le=600)
+    model_connect_timeout_seconds: int = Field(default=10, ge=2, le=60)
+    # IPv6 doméstico quebrado faz o Python esperar ~1 min antes de tentar IPv4.
+    network_force_ipv4: bool = True
     anthropic_fallbacks: bool = True
     anthropic_api_key: SecretStr = Field(
         default=SecretStr(""), validation_alias="ANTHROPIC_API_KEY"
