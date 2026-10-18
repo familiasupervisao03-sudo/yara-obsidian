@@ -71,6 +71,8 @@ class Settings(BaseSettings):
     login_max_attempts: int = Field(default=5, ge=1, le=100)
     login_lockout_seconds: int = Field(default=300, ge=10)
 
+    backup_dir: Path = Path("./backups")
+    backup_keep: int = Field(default=7, ge=1, le=365)
     approval_ttl_hours: int = Field(default=24, ge=1, le=24 * 30)
     # "inline" executa tarefas na própria requisição (somente testes).
     task_runner: str = "thread"

@@ -239,6 +239,86 @@ def cmd_diagnose_network(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_backup(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from titan.core.backup import BackupError, create_backup, prune, verify_restore
+
+    s = _settings()
+    dest = Path(args.dest) if args.dest else s.backup_dir
+    try:
+        info = create_backup(s, dest)
+        print(f"Backup criado: {info.path} ({info.manifest['size_bytes']} bytes, "
+              f"integridade: {info.manifest['integrity']})")
+        report = verify_restore(info.path)
+        print(f"Teste de restauração em pasta temporária: {'OK' if report['ok'] else 'FALHOU'} "
+              f"(auditoria íntegra: {report['audit_chain_ok']}, linhas: {report['row_counts']})")
+        if not report["ok"]:
+            return 2
+        removed = prune(dest, args.keep or s.backup_keep)
+        if removed:
+            print(f"Backups antigos removidos: {len(removed)} (retenção {args.keep or s.backup_keep}).")
+    except BackupError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+    print("Lembrete: o .env (segredos) não entra no backup; guarde-o separadamente.")
+    return 0
+
+
+def cmd_backup_list(args: argparse.Namespace) -> int:
+    from titan.core.backup import list_backups
+
+    s = _settings()
+    items = list_backups(s.backup_dir)
+    if not items:
+        print(f"Nenhum backup em {s.backup_dir}")
+    for b in items:
+        m = b.manifest
+        print(f"{b.path.name}  {m.get('created_at', '?')}  {m.get('size_bytes', '?')} bytes  "
+              f"integridade={m.get('integrity')}")
+    return 0
+
+
+def cmd_backup_verify(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from titan.core.backup import BackupError, list_backups, verify_restore
+
+    s = _settings()
+    path = Path(args.file) if args.file else None
+    if path is None:
+        valid = [b for b in list_backups(s.backup_dir) if b.valid]
+        if not valid:
+            print("Nenhum backup válido encontrado.", file=sys.stderr)
+            return 1
+        path = valid[-1].path
+    try:
+        report = verify_restore(path)
+    except BackupError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+    print(f"{path.name}: {'OK' if report['ok'] else 'FALHOU'} — {report}")
+    return 0 if report["ok"] else 2
+
+
+def cmd_restore(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from titan.core.backup import BackupError, restore
+
+    if not args.yes:
+        print("A restauração SUBSTITUI o banco atual. Pare o servidor (Ctrl+C) e rode de novo "
+              "com --yes. Uma cópia do banco atual será guardada antes.", file=sys.stderr)
+        return 1
+    try:
+        safety = restore(_settings(), Path(args.file))
+    except BackupError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+    print(f"Banco restaurado. Cópia do banco anterior: {safety}")
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -283,6 +363,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--env-file", default=".env")
     p.add_argument("--keep-key", action="store_true", help="mantém a chave no .env")
     p.set_defaults(fn=cmd_disable_external)
+    p = sub.add_parser("backup", help="cria backup do banco e testa a restauração")
+    p.add_argument("--dest")
+    p.add_argument("--keep", type=int)
+    p.set_defaults(fn=cmd_backup)
+    sub.add_parser("backup-list", help="lista os backups").set_defaults(fn=cmd_backup_list)
+    p = sub.add_parser("backup-verify", help="testa a restauração de um backup (sem tocar no banco)")
+    p.add_argument("file", nargs="?")
+    p.set_defaults(fn=cmd_backup_verify)
+    p = sub.add_parser("restore", help="restaura um backup (servidor parado)")
+    p.add_argument("file")
+    p.add_argument("--yes", action="store_true")
+    p.set_defaults(fn=cmd_restore)
     p = sub.add_parser("diagnose-network", help="mede a conexão com a Anthropic (sem enviar dados)")
     p.add_argument("--host", default="api.anthropic.com")
     p.set_defaults(fn=cmd_diagnose_network)
