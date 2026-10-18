@@ -101,7 +101,7 @@ def test_enable_and_disable_commands(tmp_path, monkeypatch, capsys):
 
     env = tmp_path / ".env"
     env.write_text("TITAN_AUTH_SECRET=abc\nTITAN_MODEL_PROVIDER=none\n# comentário\n")
-    answers = iter(["claude-sonnet-5-5", "3", "5.8", "AUTORIZO"])
+    answers = iter(["sonnet", "3", "5.8", "autorizo"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
     monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": KEY)
     assert cli.main(["enable-anthropic", "--env-file", str(env)]) == 0
@@ -134,3 +134,27 @@ def test_enable_requires_explicit_confirmation(tmp_path, monkeypatch):
     monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": KEY)
     assert cli.main(["enable-anthropic", "--env-file", str(env)]) == 1
     assert env.read_text() == "TITAN_MODEL_PROVIDER=none\n"
+
+
+def test_enable_rejects_unknown_model(tmp_path, monkeypatch):
+    from titan import cli
+
+    env = tmp_path / ".env"
+    env.write_text("TITAN_MODEL_PROVIDER=none\n")
+    answers = iter(["hauki"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    assert cli.main(["enable-anthropic", "--env-file", str(env)]) == 1
+    assert env.read_text() == "TITAN_MODEL_PROVIDER=none\n"
+
+
+def test_enable_accepts_haiku_alias(tmp_path, monkeypatch):
+    from titan import cli
+    from titan.envfile import read_env
+
+    env = tmp_path / ".env"
+    env.write_text("TITAN_MODEL_PROVIDER=none\n")
+    answers = iter(["Haiku", "10", "5.8", "Autorizo"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": KEY)
+    assert cli.main(["enable-anthropic", "--env-file", str(env)]) == 0
+    assert read_env(env)["TITAN_MODEL_NAME"] == "claude-haiku-5-5"

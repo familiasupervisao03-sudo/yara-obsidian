@@ -121,14 +121,23 @@ def cmd_enable_anthropic(args: argparse.Namespace) -> int:
 
     print(ANTHROPIC_WARNING)
     current = read_env(env_path)
-    model = _ask("Modelo (ex.: claude-opus-5-5, claude-sonnet-5-5, claude-haiku-5-5)",
-                 args.model or current.get("TITAN_MODEL_NAME") or "claude-opus-5-5")
+    aliases = {"opus": "claude-opus-5-5", "sonnet": "claude-sonnet-5-5",
+               "haiku": "claude-haiku-5-5"}
+    model = _ask("Modelo: opus (mais capaz), sonnet (metade do preço) ou haiku (o mais barato)",
+                 args.model or current.get("TITAN_MODEL_NAME") or "opus").strip().lower()
+    model = aliases.get(model, model)
     if model not in ANTHROPIC_PRICES_USD_PER_MTOK:
-        print(f"Aviso: '{model}' não está na tabela de preços; será cobrado no orçamento "
-              "pelo preço mais alto (conservador).")
+        print(f"Modelo '{model}' não reconhecido. Use opus, sonnet, haiku ou um nome completo "
+              f"da lista: {', '.join(sorted(ANTHROPIC_PRICES_USD_PER_MTOK))}. Nada foi alterado.",
+              file=sys.stderr)
+        return 1
+    print(f"Modelo escolhido: {model}")
     budget = _ask_float("Orçamento máximo por DIA em reais (R$)", args.budget_brl, 0, 1000)
-    rate = _ask_float("Cotação do dólar em reais (ex.: 5.60) — use um valor um pouco acima do atual",
-                      args.usd_brl, 0, 100)
+    rate = _ask_float("Cotação do dólar em reais (ex.: 5.80)", args.usd_brl, 0, 100)
+    if rate > 15:
+        print(f"Aviso: R$ {rate:.2f} por dólar é bem acima da cotação real (~R$ 5 a 6). "
+              "Isso só torna o orçamento mais conservador (o TITAN bloqueia antes), "
+              "mas o 'gasto hoje' no painel aparecerá maior que o real.")
     key = getpass.getpass("Cole a chave da API da Anthropic (não aparece na tela): ").strip()
     if not key:
         print("Nenhuma chave informada. Nada foi alterado.", file=sys.stderr)
@@ -138,7 +147,7 @@ def cmd_enable_anthropic(args: argparse.Namespace) -> int:
 
     print(f"\nResumo: modelo {model}, orçamento R$ {budget:.2f}/dia, cotação R$ {rate:.2f}/US$.")
     print("As conversas passarão a ser enviadas à Anthropic.")
-    if _ask("Digite AUTORIZO para confirmar") != "AUTORIZO":
+    if _ask("Digite AUTORIZO para confirmar").strip().upper() != "AUTORIZO":
         print("Não confirmado. Nada foi alterado.")
         return 1
 
