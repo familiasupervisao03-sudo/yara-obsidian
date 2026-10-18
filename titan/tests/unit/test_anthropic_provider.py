@@ -190,3 +190,71 @@ def test_real_client_forces_ipv4_and_short_connect_timeout(paid_settings, factor
     assert client.timeout.connect == 10.0
     pool = client._client._transport._pool
     assert pool._local_address == "0.0.0.0"
+
+
+class FakeStream:
+    def __init__(self, chunks, final):
+        self.chunks, self.final, self.closed = chunks, final, False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        self.closed = True
+
+    @property
+    def text_stream(self):
+        yield from self.chunks
+
+    def get_final_message(self):
+        return self.final
+
+
+class FakeStreamingClient(FakeClient):
+    def __init__(self, chunks, final):
+        super().__init__(final)
+        self.stream_obj = FakeStream(chunks, final)
+        stream = self._stream
+        self.messages.stream = stream
+        self.beta.messages.stream = stream
+
+    def _stream(self, **kw):
+        self.calls.append(kw)
+        return self.stream_obj
+
+
+def test_stream_yields_deltas_and_records_cost(paid_settings, factory):
+    client = FakeStreamingClient(["Olá", ", tudo", " bem?"], response(text="Olá, tudo bem?"))
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client)
+    events = list(p.chat_stream([ChatTurn("user", "oi")]))
+    assert [e[1] for e in events[:-1]] == ["Olá", ", tudo", " bem?"]
+    assert events[-1][0] == "done" and events[-1][1].content == "Olá, tudo bem?"
+    (row,) = rows(factory)
+    assert row.status == "FINAL"
+
+
+def test_stream_interrupted_closes_connection_and_keeps_reservation(paid_settings, factory):
+    client = FakeStreamingClient(["um", " dois", " três"], response())
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client)
+    gen = p.chat_stream([ChatTurn("user", "oi")])
+    assert next(gen) == ("delta", "um")
+    gen.close()  # usuário interrompeu
+    assert client.stream_obj.closed is True
+    (row,) = rows(factory)
+    assert row.status == "FAILED" and row.cost_brl > 0  # conservador: conta a reserva
+
+
+def test_stream_budget_blocks_before_opening_stream(make_settings):
+    from titan.db.migrate import upgrade_head
+
+    s = make_settings(model_provider="anthropic", model_name="claude-haiku-5-5", local_only=False,
+                      allow_external_models=True, allow_paid_apis=True,
+                      daily_paid_budget_brl=0.0001, usd_brl_rate=5.0, anthropic_api_key=KEY)
+    upgrade_head(s.database_url)
+    engine = make_engine(s.database_url)
+    client = FakeStreamingClient(["x"], response())
+    p = AnthropicProvider(s, BudgetGuard(s, make_session_factory(engine)), client=client)
+    with pytest.raises(ProviderBlocked):
+        list(p.chat_stream([ChatTurn("user", "oi")]))
+    assert client.calls == []
+    engine.dispose()

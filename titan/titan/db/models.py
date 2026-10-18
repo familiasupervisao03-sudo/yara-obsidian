@@ -164,6 +164,10 @@ class Message(TimestampMixin, Base):
     model_name: Mapped[Optional[str]] = mapped_column(String(128))
     # Chave de idempotência enviada pelo cliente para evitar duplicatas.
     client_request_id: Mapped[Optional[str]] = mapped_column(String(64))
+    # complete | interrupted (usuário interrompeu) | error
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="complete")
+    # Até onde a resposta foi efetivamente mostrada/falada antes da interrupção.
+    interrupted_at_char: Mapped[Optional[int]] = mapped_column(Integer)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
 

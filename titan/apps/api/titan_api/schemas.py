@@ -64,6 +64,8 @@ class MessageOut(BaseModel):
     content: str
     model_provider: Optional[str]
     model_name: Optional[str]
+    status: str = "complete"
+    interrupted_at_char: Optional[int] = None
     created_at: datetime
 
 

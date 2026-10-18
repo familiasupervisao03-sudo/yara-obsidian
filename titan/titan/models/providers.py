@@ -37,6 +37,17 @@ class ModelProvider(Protocol):
     def chat(self, history: list[ChatTurn]) -> ModelReply: ...
 
 
+def stream_reply(provider: ModelProvider, history: list[ChatTurn]):
+    """("delta", texto)... e ("done", ModelReply). Provedores sem streaming entregam tudo de uma vez."""
+    streamer = getattr(provider, "chat_stream", None)
+    if streamer is not None:
+        yield from streamer(history)
+        return
+    reply = provider.chat(history)
+    yield "delta", reply.content
+    yield "done", reply
+
+
 class MockProvider:
     """Provedor determinístico para testes automatizados. Bloqueado fora de TITAN_ENV=test."""
 
@@ -45,9 +56,22 @@ class MockProvider:
     def __init__(self, model: str = "mock-echo") -> None:
         self.model = model or "mock-echo"
 
+    # Atraso artificial entre pedaços (somente testes de streaming/interrupção).
+    delay = 0.0
+
     def chat(self, history: list[ChatTurn]) -> ModelReply:
         last = history[-1].content if history else ""
         return ModelReply(content=f"[mock] {last}", provider="mock", model=self.model)
+
+    def chat_stream(self, history: list[ChatTurn]):
+        import time
+
+        reply = self.chat(history)
+        for word in reply.content.split(" "):
+            if self.delay:
+                time.sleep(self.delay)
+            yield "delta", word + " "
+        yield "done", ModelReply(content=reply.content, provider="mock", model=self.model)
 
 
 def get_provider(settings: Settings, session_factory=None) -> ModelProvider:

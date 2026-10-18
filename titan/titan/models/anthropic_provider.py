@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterator
 from typing import Any, Optional
 
 from titan.config.settings import Settings
@@ -95,7 +96,7 @@ class AnthropicProvider:
             )
         return self._client
 
-    def chat(self, history: list[ChatTurn]) -> ModelReply:
+    def _prepare(self, history: list[ChatTurn]):
         messages = to_api_messages(history)
         if not messages:
             raise ModelUnavailable("Nenhuma mensagem do usuário para enviar.")
@@ -106,8 +107,6 @@ class AnthropicProvider:
             )
         except BudgetExceeded as exc:
             raise ProviderBlocked(str(exc)) from exc
-
-        client = self._get_client()
         params: dict[str, Any] = dict(
             model=self.model,
             max_tokens=max_out,
@@ -117,17 +116,11 @@ class AnthropicProvider:
         )
         if self.model in THINKING_OFF_MODELS and self.settings.model_effort in ("low", "medium", "high"):
             params["thinking"] = {"type": "disabled"}
-        started = time.monotonic()
-        try:
-            if self.settings.anthropic_fallbacks and self.model in FALLBACK_MODELS:
-                response = client.beta.messages.create(
-                    **params, betas=[FALLBACK_BETA], fallbacks="default"
-                )
-            else:
-                response = client.messages.create(**params)
-        except Exception as exc:
-            self._handle_error(exc, reservation)  # registra e levanta ModelUnavailable
+        if self.settings.anthropic_fallbacks and self.model in FALLBACK_MODELS:
+            params.update(betas=[FALLBACK_BETA], fallbacks="default")
+        return reservation, params
 
+    def _finish(self, response: Any, reservation, started: float) -> ModelReply:
         usage = response.usage
         served_by = getattr(response, "model", None) or self.model
         cost = self.budget.finalize(
@@ -157,6 +150,46 @@ class AnthropicProvider:
                 f"A API respondeu sem texto (stop_reason={response.stop_reason})."
             )
         return ModelReply(content=text, provider="anthropic", model=served_by)
+
+    def chat(self, history: list[ChatTurn]) -> ModelReply:
+        reservation, params = self._prepare(history)
+        client = self._get_client()
+        started = time.monotonic()
+        try:
+            api = client.beta.messages if "betas" in params else client.messages
+            response = api.create(**params)
+        except Exception as exc:
+            self._handle_error(exc, reservation)  # registra e levanta ModelUnavailable
+        return self._finish(response, reservation, started)
+
+    def chat_stream(self, history: list[ChatTurn]) -> Iterator[tuple[str, Any]]:
+        """Gera ("delta", texto) à medida que chega e, no fim, ("done", ModelReply).
+
+        Se o consumidor fechar o gerador (usuário interrompeu), a conexão com a API é
+        encerrada e a reserva do orçamento fica contada como gasto (conservador).
+        """
+        reservation, params = self._prepare(history)
+        client = self._get_client()
+        started = time.monotonic()
+        finished = False
+        try:
+            api = client.beta.messages if "betas" in params else client.messages
+            with api.stream(**params) as stream:
+                for text in stream.text_stream:
+                    if text:
+                        yield "delta", text
+                response = stream.get_final_message()
+            finished = True
+        except GeneratorExit:
+            self.budget.fail(reservation, "interrompido pelo usuário durante o streaming",
+                             billed_unknown=True)
+            log.info("anthropic: streaming interrompido pelo usuário após %.1fs",
+                     time.monotonic() - started)
+            raise
+        except Exception as exc:
+            self._handle_error(exc, reservation)
+        if finished:
+            yield "done", self._finish(response, reservation, started)
 
     def _handle_error(self, exc: Exception, reservation) -> None:
         name = type(exc).__name__

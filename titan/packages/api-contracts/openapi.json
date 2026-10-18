@@ -548,6 +548,21 @@
         "title": "HealthOut",
         "type": "object"
       },
+      "InterruptionIn": {
+        "properties": {
+          "spoken_chars": {
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Spoken Chars",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "spoken_chars"
+        ],
+        "title": "InterruptionIn",
+        "type": "object"
+      },
       "LoginIn": {
         "properties": {
           "password": {
@@ -615,6 +630,17 @@
             "title": "Id",
             "type": "string"
           },
+          "interrupted_at_char": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interrupted At Char"
+          },
           "model_name": {
             "anyOf": [
               {
@@ -639,6 +665,11 @@
           },
           "role": {
             "title": "Role",
+            "type": "string"
+          },
+          "status": {
+            "default": "complete",
+            "title": "Status",
             "type": "string"
           }
         },
@@ -1852,6 +1883,157 @@
           }
         },
         "summary": "Post Message",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/messages/stream": {
+      "post": {
+        "description": "Envia a mensagem e recebe a resposta em pedaços (SSE).\n\nEventos: user_message, delta, done | interrupted | error. Fechar a conexão\ncancela a geração; o trecho já gerado é salvo como 'interrupted'.",
+        "operationId": "post_message_stream_api_v1_conversations__conversation_id__messages_stream_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Message Stream",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/messages/{message_id}/interruption": {
+      "post": {
+        "description": "Registra até onde a resposta foi falada/mostrada quando o usuário interrompeu.",
+        "operationId": "record_interruption_api_v1_conversations__conversation_id__messages__message_id__interruption_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InterruptionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Interruption",
         "tags": [
           "conversations"
         ]
