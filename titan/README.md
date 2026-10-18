@@ -4,11 +4,13 @@ IA pessoal com interface de centro de comando tático, executada **no seu
 notebook**, com privacidade local, orçamento de APIs pagas de **R$ 0/dia** e
 nenhuma ação apresentada como concluída sem verificação.
 
-**Estado: Fase 1 — Fundação.** Funciona hoje: servidor local, login, chat com
-histórico persistente, painel tático (desktop e celular), auditoria encadeada,
-bloqueios de APIs pagas/externas. Ainda **não** existe: tarefas e aprovações
-(Fase 2), execução de código em sandbox (Fase 3, desativada), modelo de IA
-local (Fase 4).
+**Estado: Fase 2 — Tarefas e aprovações.** Funciona hoje: servidor local, login,
+chat em streaming com histórico, modo de voz (local com Vosk/Piper, opcional),
+tarefas com planos versionados, aprovações humanas, cancelamento/retomada e
+eventos ao vivo, backups testados, interface mobile/PWA, integração opcional com
+a Anthropic com orçamento. Preparado mas **desligado**: acesso pelo celular via
+HTTPS local, laboratório de código (Fase 3 — execução bloqueada até validar o
+isolamento).
 
 ## Início rápido
 
@@ -31,6 +33,11 @@ Início automático (avaliação): [`docs/autostart.md`](docs/autostart.md).
 - [`docs/security.md`](docs/security.md) — o que está protegido, como foi testado e limitações
 - [`docs/api.md`](docs/api.md) — contratos da API e erros
 - [`docs/environment-audit.md`](docs/environment-audit.md) — Fase Zero
+- [`docs/voice.md`](docs/voice.md) — modo de voz, privacidade e medições
+- [`docs/mobile.md`](docs/mobile.md) — acesso pelo celular (HTTPS local)
+- [`docs/backup.md`](docs/backup.md) — backup e recuperação
+- [`docs/sandbox.md`](docs/sandbox.md) — preparação do laboratório isolado
+- [`docs/anthropic.md`](docs/anthropic.md) — API da Anthropic (opcional, paga)
 - [`docs/roadmap.md`](docs/roadmap.md) — próximas fases
 
 ## Regras que o código aplica
@@ -46,6 +53,7 @@ Início automático (avaliação): [`docs/autostart.md`](docs/autostart.md).
 ## Testes
 
 ```sh
-.venv/bin/pytest                    # unit, integration, security, acceptance
+.venv/bin/pytest                    # backend: unit, integration, security, acceptance
+npm test                            # lógica do modo de voz (node:test)
 npm run typecheck && npm run build
 ```

@@ -334,6 +334,15 @@ def uvicorn_options(s) -> dict:
     return opts
 
 
+def cmd_sandbox_probe(args: argparse.Namespace) -> int:
+    import json
+
+    from titan.sandbox.probe import probe
+
+    print(json.dumps(probe(), indent=2, ensure_ascii=False))
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -384,6 +393,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("file")
     p.add_argument("--yes", action="store_true")
     p.set_defaults(fn=cmd_restore)
+    sub.add_parser("sandbox-probe", help="verifica mecanismos de isolamento (somente leitura)").set_defaults(fn=cmd_sandbox_probe)
     p = sub.add_parser("diagnose-network", help="mede a conexão com a Anthropic (sem enviar dados)")
     p.add_argument("--host", default="api.anthropic.com")
     p.set_defaults(fn=cmd_diagnose_network)

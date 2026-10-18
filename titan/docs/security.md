@@ -135,3 +135,32 @@ permanece bloqueada.
   `docs/setup.md`). O `.env` deve ser guardado à parte; se vazar, gere outro
   segredo (isso invalida todas as sessões).
 - Disco antigo pode falhar sem aviso: faça backups regulares.
+
+
+## Fase 2 — tarefas e aprovações (testado em tests/integration/test_tasks.py)
+
+- Transições validadas pela máquina de estados e aplicadas com concorrência
+  otimista (`UPDATE ... WHERE status = atual`): duas requisições não executam a
+  mesma tarefa (`test_double_start_does_not_run_twice`).
+- Ação sensível sempre exige aprovação, mesmo que o plano diga o contrário
+  (`test_plan_cannot_disable_approval_for_sensitive_action`).
+- Aprovação vinculada a tarefa + versão do plano + etapa + ação + parâmetros
+  (`scope_hash`); a interface precisa reenviar o hash exibido; expira
+  (`approval_ttl_hours`); um novo plano invalida as anteriores
+  (`test_plan_change_invalidates_previous_approvals`, `test_expired_approval_is_refused`).
+- Somente usuário autenticado decide; o modelo não pode
+  (`test_model_cannot_decide_approvals`). Ação rejeitada não executa.
+- Após queda, etapa iniciada e sem resultado exige confirmação para repetir
+  (`test_interrupted_task_resume_without_duplication`).
+- Tarefa só fica COMPLETED com todos os critérios verificados.
+
+## Voz e celular
+
+- Áudio só em memória, nunca em disco ou logs (`test_no_audio_written_to_disk_or_logs`);
+  voz local sem conexões externas (`test_real_round_trip_piper_to_vosk`).
+- Transcrição é texto do usuário e não aprova ações.
+- `Permissions-Policy: microphone=(self)`; câmera e localização bloqueadas.
+- Requisições com `Origin` de outro site são recusadas
+  (`test_foreign_origin_rejected_even_with_csrf_header`).
+- Rede local sem HTTPS exige aceite explícito do risco; com HTTPS o cookie é
+  `Secure` (`test_lan_without_https_requires_explicit_ack`, `test_tls_settings`).

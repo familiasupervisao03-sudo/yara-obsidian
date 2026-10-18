@@ -255,7 +255,16 @@ class TaskRunner:
         return WAIT
 
     def _action_run_code(self, params: dict, user_id: uuid.UUID, task_id: uuid.UUID):
-        raise ActionFailed(ACTIONS["run_code"].unavailable_reason)
+        from titan.sandbox.contract import SandboxRequest, SandboxUnavailable, get_sandbox
+
+        sandbox = get_sandbox(self.settings)
+        try:
+            result = sandbox.run(SandboxRequest(language=str(params["language"]),
+                                                files={"main": str(params["code"])},
+                                                command=[]))
+        except SandboxUnavailable as exc:
+            raise ActionFailed(str(exc)) from exc
+        return result.stdout
 
 
 def submit_reply(db: DBSession, task: Task, user_id: uuid.UUID, text: str) -> None:

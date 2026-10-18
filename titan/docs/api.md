@@ -71,15 +71,41 @@ POST /api/v1/conversations/{id}/messages
   idempotente: um reenvio com a mesma chave devolve a mensagem original com
   `duplicate: true` e não cria nada novo.
 
-## Rotas planejadas
+## Fase 2 — tarefas e aprovações
 
-| Rota | Fase |
+| Método e rota | Descrição |
 |---|---|
-| `POST/GET /api/v1/tasks`, `GET /api/v1/tasks/{id}` | 2 |
-| `POST /api/v1/tasks/{id}/cancel`, `/resume` | 2 |
-| `GET /api/v1/tasks/{id}/events` (SSE) | 2 |
-| `GET /api/v1/approvals`, `POST /api/v1/approvals/{id}/decision` | 2 |
-| `GET /api/v1/tasks/{id}/audit` | 2 |
-| `GET /api/v1/tasks/{id}/executions` | 3 |
+| `GET /api/v1/tasks/catalog` | ações permitidas (com risco e se exigem aprovação) e tipos de critério |
+| `POST /api/v1/tasks` | `{title, description, steps?}`; cabeçalho `Idempotency-Key` evita duplicata (201/200) |
+| `GET /api/v1/tasks` · `GET /api/v1/tasks/{id}` | lista · detalhe (etapas, aprovações, versões do plano, verificação) |
+| `PUT /api/v1/tasks/{id}/plan` | nova versão do plano; invalida aprovações anteriores |
+| `POST /api/v1/tasks/{id}/start` | inicia (só em READY) |
+| `POST /api/v1/tasks/{id}/cancel` | cancela (CANCEL_REQUESTED se em execução) |
+| `POST /api/v1/tasks/{id}/resume` | `{retry_uncertain}`; 409 `needs_confirmation` se houver etapa incerta |
+| `POST /api/v1/tasks/{id}/reply` | resposta a uma etapa `wait_for_user` |
+| `GET /api/v1/tasks/{id}/events` | SSE (`event: task`, `id` = evento de auditoria); `Last-Event-ID` retoma sem duplicar |
+| `GET /api/v1/tasks/{id}/executions` · `/audit` | execuções · trilha de auditoria da tarefa |
+| `GET /api/v1/approvals?status=` | aprovações do usuário (padrão PENDING) |
+| `POST /api/v1/approvals/{id}/decision` | `{decision: approve\|reject, scope_hash, reason}` — o `scope_hash` exibido deve ser reenviado |
 
-Essas rotas **não existem** ainda (respondem 404 ou 405).
+Estados: RECEIVED, PLANNING, PENDING_APPROVAL, READY, RUNNING, VERIFYING,
+WAITING_FOR_USER, CANCEL_REQUESTED, CANCELLED, INTERRUPTED, COMPLETED, FAILED.
+
+## Chat em streaming
+
+`POST /api/v1/conversations/{id}/messages/stream` (SSE): `user_message`,
+`delta {text}`, `done {message, metrics}`, `interrupted {message}`,
+`error {detail}`. Fechar a conexão cancela a geração.
+`POST /api/v1/conversations/{id}/messages/{mid}/interruption {spoken_chars}`
+registra até onde a resposta foi falada.
+
+## Voz (local)
+
+| Rota | Descrição |
+|---|---|
+| `GET /api/v1/voice/status` | mecanismos (local/externo, disponível, motivo) |
+| `POST /api/v1/voice/stt/sessions` | abre sessão de reconhecimento (503 se indisponível) |
+| `POST /api/v1/voice/stt/sessions/{sid}/audio` | PCM 16 bits mono 16 kHz (≤256 KB por pedaço) → texto parcial |
+| `POST /api/v1/voice/stt/sessions/{sid}/finish` | texto final (a sessão é encerrada) |
+| `DELETE /api/v1/voice/stt/sessions/{sid}` | cancela |
+| `POST /api/v1/voice/speak` | `{text}` → `audio/wav` (Piper) |

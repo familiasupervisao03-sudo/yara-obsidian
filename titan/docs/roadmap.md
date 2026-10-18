@@ -4,7 +4,7 @@
 
 Ver relatório no histórico do commit e `docs/architecture.md`.
 
-## Fase 2 — Orquestração e aprovações (próxima)
+## Fase 2 — Orquestração e aprovações ✔ (implementada; ver docs/api.md)
 
 1. `titan/tasks/state_machine.py`: estados RECEIVED … FAILED com tabela de
    transições permitidas; transições gravadas em `audit_events` na mesma
@@ -28,7 +28,7 @@ Ver relatório no histórico do commit e `docs/architecture.md`.
 7. Endpoints: tasks, cancel, resume, events, approvals, decision, audit.
 8. Testes de aceitação 3, 4, 5, 6, 12 e 13.
 
-## Fase 3 — Laboratório isolado
+## Fase 3 — Laboratório isolado (preparada; execução desativada — ver docs/sandbox.md)
 
 Escolher o mecanismo conforme `scripts/audit_host.sh` (ordem de preferência:
 bubblewrap → Podman rootless → Docker restrito). Testes de fuga (leitura fora
