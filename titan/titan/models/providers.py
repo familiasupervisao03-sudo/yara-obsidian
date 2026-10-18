@@ -1,8 +1,8 @@
 """Interface de modelos de linguagem, independente de provedor.
 
-Fase 1: apenas a interface, o bloqueio de políticas e os provedores ``none``
-(nenhum modelo) e ``mock`` (somente testes). Adaptadores locais reais
-(Ollama/llama.cpp) chegam na Fase 4.
+Provedores: ``none`` (nenhum modelo), ``mock`` (somente testes) e
+``anthropic`` (externo e pago; exige autorização explícita completa e
+orçamento diário). Adaptadores locais (Ollama/llama.cpp) chegam na Fase 4.
 """
 
 from __future__ import annotations
@@ -50,8 +50,11 @@ class MockProvider:
         return ModelReply(content=f"[mock] {last}", provider="mock", model=self.model)
 
 
-def get_provider(settings: Settings) -> ModelProvider:
-    """Seleciona o provedor configurado, aplicando as políticas antes de qualquer chamada."""
+def get_provider(settings: Settings, session_factory=None) -> ModelProvider:
+    """Seleciona o provedor configurado, aplicando as políticas antes de qualquer chamada.
+
+    ``session_factory`` é necessário para provedores pagos (controle de orçamento).
+    """
     name = settings.model_provider
     if name == "none":
         raise ModelUnavailable(
@@ -61,6 +64,15 @@ def get_provider(settings: Settings) -> ModelProvider:
         if settings.env != Environment.test:
             raise ModelUnavailable("Provedor 'mock' só é permitido em testes.")
         provider: ModelProvider = MockProvider(settings.model_name)
+    elif name == "anthropic":
+        # Bloqueio de política ANTES de construir o cliente.
+        from titan.models.anthropic_provider import AnthropicProvider
+        from titan.policies.budget import BudgetGuard
+
+        assert_provider_allowed(AnthropicProvider.info, settings)
+        if session_factory is None:
+            raise ModelUnavailable("Provedor pago exige o controle de orçamento (banco).")
+        provider = AnthropicProvider(settings, BudgetGuard(settings, session_factory))
     elif name in {"ollama", "llamacpp"}:
         raise ModelUnavailable(
             f"Adaptador local '{name}' ainda não implementado (previsto para a Fase 4)."

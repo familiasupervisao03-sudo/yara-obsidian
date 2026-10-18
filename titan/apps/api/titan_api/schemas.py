@@ -122,4 +122,7 @@ class SystemStatusOut(BaseModel):
     services: list[ServiceStatus]
     paid_apis_blocked: bool
     external_models_blocked: bool
+    external_provider_active: bool
+    paid_budget_brl: float
+    paid_spent_today_brl: float
     audit_chain_ok: bool

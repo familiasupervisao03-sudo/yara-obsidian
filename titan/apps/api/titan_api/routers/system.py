@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session as DBSession
 
 from titan import PHASE, __version__
 from titan.audit.log import verify_chain
+from titan.config.settings import EXTERNAL_PAID_PROVIDERS
+from titan.policies.budget import BudgetGuard
 from titan.db.engine import ping
 from titan.models.providers import ModelUnavailable, get_provider
 from titan.policies.model_gate import ProviderBlocked
@@ -24,6 +26,7 @@ def get_settings_view(
         config=s.public_view(),
         policies={
             "paid_apis": "blocked" if not s.allow_paid_apis else "allowed",
+            "external_provider_active": s.model_provider in EXTERNAL_PAID_PROVIDERS,
             "daily_paid_budget_brl": s.daily_paid_budget_brl,
             "external_models": "blocked" if not s.allow_external_models else "allowed",
             "sandbox_network": "disabled" if not s.sandbox_network else "enabled",
@@ -49,8 +52,13 @@ def system_status(
         services.append(ServiceStatus(name="database", state="offline", detail=type(exc).__name__))
 
     try:
-        p = get_provider(s)
-        services.append(ServiceStatus(name="model", state="online", detail=p.info.name))
+        p = get_provider(s, ctx.session_factory)
+        detail = p.info.name
+        if not p.info.local:
+            detail = (f"{p.info.name} · {s.model_name} — EXTERNO"
+                      + (" e PAGO" if p.info.paid else "")
+                      + ": as conversas são enviadas a este provedor")
+        services.append(ServiceStatus(name="model", state="online", detail=detail))
     except (ModelUnavailable, ProviderBlocked) as exc:
         services.append(ServiceStatus(name="model", state="unavailable", detail=str(exc)))
 
@@ -72,5 +80,8 @@ def system_status(
         services=services,
         paid_apis_blocked=not s.allow_paid_apis,
         external_models_blocked=not s.allow_external_models,
+        external_provider_active=s.model_provider in EXTERNAL_PAID_PROVIDERS,
+        paid_budget_brl=s.daily_paid_budget_brl,
+        paid_spent_today_brl=round(BudgetGuard(s, ctx.session_factory).spent_today(db), 4),
         audit_chain_ok=chain_ok,
     )

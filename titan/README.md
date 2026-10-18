@@ -35,8 +35,10 @@ Início automático (avaliação): [`docs/autostart.md`](docs/autostart.md).
 
 ## Regras que o código aplica
 
-- `TITAN_ALLOW_PAID_APIS=true` ou orçamento ≠ 0 → o servidor **não inicia**.
-- Provedores de IA externos → recusados na configuração e antes de cada chamada.
+- APIs pagas desligadas por padrão (R$ 0/dia). A Anthropic (Claude) pode ser ligada por você com
+  `sh scripts/enable_anthropic.sh`: exige orçamento diário, chave e a palavra AUTORIZO, e o
+  servidor recusa qualquer chamada que possa passar do orçamento ([`docs/anthropic.md`](docs/anthropic.md)).
+- Sem autorização completa, provedores externos são recusados na configuração e antes de cada chamada.
 - Escuta só em `127.0.0.1` por padrão; LAN exige lista de redes privadas explícita.
 - Sem túneis, encaminhamento de portas, telemetria ou recursos externos na interface.
 - Execução de código desativada até existir um sandbox validado por testes.

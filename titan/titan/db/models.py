@@ -12,6 +12,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -350,3 +351,28 @@ class AppSetting(Base):
     updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
+
+
+USAGE_STATES = ("RESERVED", "FINAL", "FAILED")
+
+
+class ModelUsage(TimestampMixin, Base):
+    """Gasto com provedores pagos. A reserva é gravada ANTES da chamada."""
+
+    __tablename__ = "model_usage"
+    __table_args__ = (
+        CheckConstraint(_in("status", USAGE_STATES), name="ck_model_usage_status"),
+        Index("ix_model_usage_day", "day"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    # Data local do servidor (AAAA-MM-DD): o orçamento é diário no fuso do notebook.
+    day: Mapped[str] = mapped_column(String(10), nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost_brl: Mapped[float] = mapped_column(Float, nullable=False)
+    request_id: Mapped[Optional[str]] = mapped_column(String(128))
+    detail: Mapped[Optional[str]] = mapped_column(Text)

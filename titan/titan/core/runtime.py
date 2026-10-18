@@ -29,6 +29,7 @@ class RedactingFormatter(logging.Formatter):
 
 def configure_logging(settings: Settings) -> None:
     register_secret(settings.auth_secret.get_secret_value())
+    register_secret(settings.anthropic_api_key.get_secret_value())
     root = logging.getLogger("titan")
     root.setLevel(settings.log_level)
     # Substitui handlers de uma configuração anterior (ex.: outro diretório de dados).

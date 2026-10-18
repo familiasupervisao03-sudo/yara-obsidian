@@ -62,13 +62,22 @@ export function Dashboard({
           <span className="muted small">{status ? `${status.phase} · v${status.version}` : "…"}</span>
         </div>
         <div className="badges">
-          <span className="badge badge-ok">MODO LOCAL</span>
-          <span className={`badge ${status?.paid_apis_blocked ? "badge-block" : "badge-warn"}`}>
-            APIs PAGAS: {status ? (status.paid_apis_blocked ? "BLOQUEADAS" : "LIBERADAS") : "…"}
-            {budget !== undefined && ` · R$ ${budget}/dia`}
+          <span className={`badge ${status?.external_provider_active ? "badge-warn" : "badge-ok"}`}>
+            {status?.external_provider_active ? "MODO HÍBRIDO" : "MODO LOCAL"}
           </span>
-          <span className={`badge ${status?.external_models_blocked ? "badge-block" : "badge-warn"}`}>
-            MODELOS EXTERNOS: {status ? (status.external_models_blocked ? "BLOQUEADOS" : "LIBERADOS") : "…"}
+          <span className={`badge ${status?.paid_apis_blocked ? "badge-block" : "badge-warn"}`}>
+            {!status
+              ? "APIs PAGAS: …"
+              : status.paid_apis_blocked
+                ? `APIs PAGAS: BLOQUEADAS · R$ ${budget ?? 0}/dia`
+                : `APIs PAGAS: LIBERADAS · gasto hoje R$ ${status.paid_spent_today_brl.toFixed(2)} de R$ ${status.paid_budget_brl.toFixed(2)}`}
+          </span>
+          <span className={`badge ${status?.external_provider_active ? "badge-warn" : "badge-block"}`}>
+            {!status
+              ? "MODELOS EXTERNOS: …"
+              : status.external_provider_active
+                ? `MODELO EXTERNO ATIVO: ${String(settings?.config.model_provider ?? "")} — conversas saem do notebook`
+                : "MODELOS EXTERNOS: BLOQUEADOS"}
           </span>
         </div>
         <div className="user">

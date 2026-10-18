@@ -20,6 +20,9 @@ EXAMPLE_AUTH_SECRET = "troque-este-valor-por-um-segredo-local-de-64-caracteres"
 
 LOCAL_MODEL_PROVIDERS = {"none", "mock", "ollama", "llamacpp"}
 TEST_ONLY_MODEL_PROVIDERS = {"mock"}
+# Provedores externos e pagos: só com autorização explícita completa (ver _enforce_policies).
+EXTERNAL_PAID_PROVIDERS = {"anthropic"}
+MAX_DAILY_BUDGET_BRL = 1000.0  # trava contra erro de digitação
 
 
 class Environment(str, Enum):
@@ -78,6 +81,15 @@ class Settings(BaseSettings):
     allow_external_models: bool = False
     allow_paid_apis: bool = False
     daily_paid_budget_brl: float = 0.0
+    # Cotação usada para converter o custo em dólar; definida pelo usuário (sem valor padrão).
+    usd_brl_rate: float = 0.0
+    model_max_output_tokens: int = Field(default=2048, ge=64, le=32000)
+    model_effort: str = "low"
+    model_timeout_seconds: int = Field(default=90, ge=5, le=600)
+    anthropic_fallbacks: bool = True
+    anthropic_api_key: SecretStr = Field(
+        default=SecretStr(""), validation_alias="ANTHROPIC_API_KEY"
+    )
 
     log_level: str = "INFO"
     log_max_bytes: int = Field(default=1_000_000, ge=10_000)
@@ -112,25 +124,53 @@ class Settings(BaseSettings):
     def _enforce_policies(self) -> "Settings":
         errors: list[str] = []
 
-        # Orçamento: R$ 0/dia até autorização explícita em fase futura.
-        if self.allow_paid_apis:
+        # Orçamento: APIs pagas exigem autorização explícita E orçamento diário > 0.
+        budget = self.daily_paid_budget_brl
+        if budget < 0 or budget > MAX_DAILY_BUDGET_BRL:
             errors.append(
-                "TITAN_ALLOW_PAID_APIS=true não é permitido: APIs pagas estão bloqueadas "
-                "(orçamento R$ 0/dia) até autorização explícita do usuário."
+                f"TITAN_DAILY_PAID_BUDGET_BRL deve estar entre 0 e {MAX_DAILY_BUDGET_BRL:.0f}."
             )
-        if self.daily_paid_budget_brl != 0:
-            errors.append("TITAN_DAILY_PAID_BUDGET_BRL deve ser 0 nesta versão.")
+        if self.allow_paid_apis and budget <= 0:
+            errors.append(
+                "TITAN_ALLOW_PAID_APIS=true exige TITAN_DAILY_PAID_BUDGET_BRL maior que 0."
+            )
+        if not self.allow_paid_apis and budget != 0:
+            errors.append(
+                "TITAN_DAILY_PAID_BUDGET_BRL deve ser 0 enquanto TITAN_ALLOW_PAID_APIS=false."
+            )
 
         # Privacidade: modo local não aceita provedores externos.
         if self.local_only and self.allow_external_models:
             errors.append(
                 "Conflito: TITAN_LOCAL_ONLY=true e TITAN_ALLOW_EXTERNAL_MODELS=true."
             )
-        if self.model_provider not in LOCAL_MODEL_PROVIDERS:
+        if self.model_provider in EXTERNAL_PAID_PROVIDERS:
+            missing = []
+            if self.local_only:
+                missing.append("TITAN_LOCAL_ONLY=false")
+            if not self.allow_external_models:
+                missing.append("TITAN_ALLOW_EXTERNAL_MODELS=true")
+            if not self.allow_paid_apis:
+                missing.append("TITAN_ALLOW_PAID_APIS=true")
+            if budget <= 0:
+                missing.append("TITAN_DAILY_PAID_BUDGET_BRL > 0")
+            if self.usd_brl_rate <= 0:
+                missing.append("TITAN_USD_BRL_RATE > 0")
+            if not self.anthropic_api_key.get_secret_value().strip():
+                missing.append("ANTHROPIC_API_KEY")
+            if not self.model_name.strip():
+                missing.append("TITAN_MODEL_NAME")
+            if missing:
+                errors.append(
+                    f"O provedor '{self.model_provider}' envia dados a terceiros e é pago; "
+                    "faltam autorizações/configurações: " + ", ".join(missing) + "."
+                )
+        elif self.model_provider not in LOCAL_MODEL_PROVIDERS:
             errors.append(
-                f"Provedor de modelo '{self.model_provider}' não é local e provedores "
-                "externos estão bloqueados (TITAN_ALLOW_EXTERNAL_MODELS=false)."
+                f"Provedor de modelo '{self.model_provider}' desconhecido ou não suportado."
             )
+        if self.model_effort not in {"low", "medium", "high", "xhigh", "max"}:
+            errors.append("TITAN_MODEL_EFFORT deve ser low, medium, high, xhigh ou max.")
         if (
             self.model_provider in TEST_ONLY_MODEL_PROVIDERS
             and self.env != Environment.test
@@ -203,6 +243,11 @@ class Settings(BaseSettings):
             "allow_external_models": self.allow_external_models,
             "allow_paid_apis": self.allow_paid_apis,
             "daily_paid_budget_brl": self.daily_paid_budget_brl,
+            "usd_brl_rate": self.usd_brl_rate,
+            "model_max_output_tokens": self.model_max_output_tokens,
+            "model_effort": self.model_effort,
+            "external_provider_active": self.model_provider in EXTERNAL_PAID_PROVIDERS,
+            "anthropic_api_key_configured": bool(self.anthropic_api_key.get_secret_value()),
             "log_level": self.log_level,
         }
 

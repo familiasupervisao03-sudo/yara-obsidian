@@ -89,6 +89,9 @@ export interface SystemStatus {
   services: ServiceStatus[];
   paid_apis_blocked: boolean;
   external_models_blocked: boolean;
+  external_provider_active: boolean;
+  paid_budget_brl: number;
+  paid_spent_today_brl: number;
   audit_chain_ok: boolean;
 }
 

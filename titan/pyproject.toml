@@ -21,6 +21,8 @@ dependencies = [
 
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.1,<4"]
+# Provedor EXTERNO e PAGO; só instale se for usar (ver docs/anthropic.md).
+anthropic = ["anthropic>=1.15,<2"]
 dev = ["pytest>=8,<9", "httpx>=0.27,<1"]
 
 [project.scripts]

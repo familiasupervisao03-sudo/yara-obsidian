@@ -222,12 +222,23 @@ def check_real_config() -> None:
                        capture_output=True, text=True)
     out = r.stdout
     check("Configuração real válida", r.returncode == 0, (r.stderr or "").strip()[-300:])
-    for key, expected in [("allow_paid_apis", "False"), ("daily_paid_budget_brl", "0.0"),
-                          ("allow_external_models", "False"), ("local_only", "True"),
-                          ("sandbox_enabled", "False"), ("host", "127.0.0.1"),
-                          ("model_provider", "none")]:
+    def value(key: str) -> str:
         line = next((l for l in out.splitlines() if l.startswith(key + " =")), "")
-        check(f"config real: {key} = {expected}", line.endswith("= " + expected), line or "ausente")
+        return line.split("=", 1)[1].strip() if line else "ausente"
+
+    common = [("sandbox_enabled", "False"), ("host", "127.0.0.1")]
+    if value("model_provider") == "anthropic":
+        print("[AVISO] MODO HÍBRIDO: o chat usa a Anthropic (externa e paga); as conversas "
+              "saem do notebook. Desligar: .venv/bin/titan disable-external")
+        expected = common + [("allow_paid_apis", "True"), ("anthropic_api_key_configured", "True")]
+        budget = float(value("daily_paid_budget_brl") or 0)
+        check("config real: orçamento diário definido (> 0)", budget > 0, f"R$ {budget:.2f}")
+    else:
+        expected = common + [("allow_paid_apis", "False"), ("daily_paid_budget_brl", "0.0"),
+                             ("allow_external_models", "False"), ("local_only", "True"),
+                             ("model_provider", "none")]
+    for key, exp in expected:
+        check(f"config real: {key} = {exp}", value(key) == exp, f"{key} = {value(key)}")
     data_dir = ROOT / "var"
     if data_dir.exists():
         mode = stat.S_IMODE(data_dir.stat().st_mode)

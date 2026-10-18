@@ -114,10 +114,20 @@ def post_message(
                  entity_type="message", entity_id=str(user_msg.id),
                  data={"conversation_id": str(conv.id), "length": len(body.content)})
 
+    # Grava a mensagem do usuário ANTES de chamar o modelo: ela persiste mesmo se a
+    # chamada falhar, e o banco não fica bloqueado durante uma chamada externa lenta.
+    db.commit()
+
     reply_out = None
     try:
-        provider = get_provider(ctx.settings)
+        provider = get_provider(ctx.settings, ctx.session_factory)
         turns = [ChatTurn(m.role, m.content) for m in repo.history(db, conv.id)]
+        if not provider.info.local:
+            audit.record(db, "model.external_request", actor_type="system",
+                         entity_type="conversation", entity_id=str(conv.id),
+                         data={"provider": provider.info.name, "paid": provider.info.paid,
+                               "messages_sent": len(turns)})
+            db.commit()
         reply = provider.chat(turns)
         reply_msg = repo.add_message(
             db, conv, "assistant", reply.content,

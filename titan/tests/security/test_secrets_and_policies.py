@@ -44,7 +44,7 @@ def test_external_provider_cannot_be_selected():
 
     from titan.config.settings import Settings
 
-    for provider in ("openai", "anthropic", "gemini", "openrouter"):
+    for provider in ("openai", "anthropic", "gemini", "openrouter"):  # anthropic: sem autorizações
         with pytest.raises(ValidationError):
             Settings(_env_file=None, env="test", model_provider=provider)
 

@@ -467,9 +467,21 @@
             "title": "External Models Blocked",
             "type": "boolean"
           },
+          "external_provider_active": {
+            "title": "External Provider Active",
+            "type": "boolean"
+          },
           "paid_apis_blocked": {
             "title": "Paid Apis Blocked",
             "type": "boolean"
+          },
+          "paid_budget_brl": {
+            "title": "Paid Budget Brl",
+            "type": "number"
+          },
+          "paid_spent_today_brl": {
+            "title": "Paid Spent Today Brl",
+            "type": "number"
           },
           "phase": {
             "title": "Phase",
@@ -493,6 +505,9 @@
           "services",
           "paid_apis_blocked",
           "external_models_blocked",
+          "external_provider_active",
+          "paid_budget_brl",
+          "paid_spent_today_brl",
           "audit_chain_ok"
         ],
         "title": "SystemStatusOut",

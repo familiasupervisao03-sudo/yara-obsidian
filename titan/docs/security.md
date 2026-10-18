@@ -16,16 +16,18 @@ sincronização, telemetria, CDN ou fontes externas (a CSP só permite `'self'`)
 |---|---|
 | `pip install` / `npm install` | só na instalação, manualmente |
 | Uso normal do TITAN | **nenhuma** — `test_no_outbound_connections` |
-| Modelos externos | bloqueados (`TITAN_ALLOW_EXTERNAL_MODELS=false`, `LOCAL_ONLY=true`) |
+| Modelos externos | bloqueados por padrão; a Anthropic pode ser ligada com `titan enable-anthropic` (modo híbrido: conversas enviadas à Anthropic — ver `docs/anthropic.md`) |
 | APIs pagas | bloqueadas (R$ 0/dia) |
 
 ## Políticas aplicadas no backend
 
 | Regra | Onde | Teste |
 |---|---|---|
-| `TITAN_ALLOW_PAID_APIS=true` impede a inicialização | `titan/config/settings.py` | `test_unsafe_config_is_refused`, `test_paid_env_variable_blocks_startup` |
-| Orçamento diferente de 0 impede a inicialização | idem | idem |
-| Provedor não-local (openai, anthropic, …) recusado | idem | `test_external_provider_cannot_be_selected` |
+| APIs pagas só com `TITAN_ALLOW_PAID_APIS=true` **e** orçamento diário > 0 (e vice-versa) | `titan/config/settings.py` | `test_unsafe_config_is_refused`, `test_paid_env_variable_blocks_startup` |
+| Anthropic só com TODAS as autorizações (local_only=false, externos, pagos, orçamento, cotação, chave, modelo); senão o servidor não inicia | idem | `test_anthropic_accepted_only_with_every_authorization` |
+| Provedor desconhecido (openai, gemini, …) recusado | idem | `test_external_provider_cannot_be_selected` |
+| Orçamento diário reservado **antes** de cada chamada paga; acima do limite nada é enviado | `titan/policies/budget.py` | `test_budget_blocks_before_sending`, `test_daily_budget_accumulates` |
+| Chave da Anthropic fora de respostas, logs e auditoria | `settings.public_view`, redação | `test_anthropic_key_never_in_public_view`, `test_key_redacted_from_logs` |
 | `LOCAL_ONLY` + `ALLOW_EXTERNAL_MODELS` = conflito | idem | `test_unsafe_config_is_refused` |
 | Provedor pago/externo recusado **antes da chamada** | `titan/policies/model_gate.py` | `test_paid_provider_blocked_before_call`, `test_paid_blocked_even_if_settings_object_is_tampered` |
 | Sem fallback automático | `titan/models/providers.py` | `test_none_provider_reports_unavailable` |

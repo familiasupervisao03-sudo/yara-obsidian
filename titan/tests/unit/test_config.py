@@ -27,10 +27,13 @@ def test_defaults_are_local_and_block_paid():
 @pytest.mark.parametrize(
     "kw,msg",
     [
-        ({"allow_paid_apis": True}, "APIs pagas"),
-        ({"daily_paid_budget_brl": 5}, "DAILY_PAID_BUDGET"),
+        ({"allow_paid_apis": True}, "exige TITAN_DAILY_PAID_BUDGET_BRL maior que 0"),
+        ({"daily_paid_budget_brl": 5}, "deve ser 0 enquanto TITAN_ALLOW_PAID_APIS=false"),
+        ({"allow_paid_apis": True, "daily_paid_budget_brl": 5000}, "entre 0 e 1000"),
         ({"allow_external_models": True}, "LOCAL_ONLY"),
-        ({"model_provider": "openai"}, "não é local"),
+        ({"model_provider": "openai"}, "desconhecido"),
+        ({"model_provider": "anthropic"}, "faltam autorizações"),
+        ({"model_effort": "turbo"}, "TITAN_MODEL_EFFORT"),
         ({"model_provider": "mock"}, "mock"),
         ({"sandbox_network": True}, "SANDBOX_NETWORK"),
         ({"auth_secret": ""}, "TITAN_AUTH_SECRET"),
@@ -78,3 +81,30 @@ def test_paid_env_variable_blocks_startup(monkeypatch):
     monkeypatch.setenv("TITAN_ALLOW_PAID_APIS", "true")
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
+
+
+ANTHROPIC_OK = dict(
+    model_provider="anthropic", model_name="claude-opus-5-5", local_only=False,
+    allow_external_models=True, allow_paid_apis=True, daily_paid_budget_brl=5,
+    usd_brl_rate=5.5, anthropic_api_key="sk-ant-teste-0000000000000000000000",
+)
+
+
+def test_anthropic_accepted_only_with_every_authorization():
+    s = make(**ANTHROPIC_OK)
+    assert s.model_provider == "anthropic"
+    for key, bad in [("local_only", True), ("allow_external_models", False),
+                     ("allow_paid_apis", False), ("usd_brl_rate", 0),
+                     ("anthropic_api_key", ""), ("model_name", "")]:
+        kw = dict(ANTHROPIC_OK, **{key: bad})
+        if key == "allow_paid_apis":
+            kw["daily_paid_budget_brl"] = 0
+        with pytest.raises(ValidationError):
+            make(**kw)
+
+
+def test_anthropic_key_never_in_public_view():
+    view = make(**ANTHROPIC_OK).public_view()
+    assert "sk-ant" not in str(view)
+    assert view["anthropic_api_key_configured"] is True
+    assert view["external_provider_active"] is True
