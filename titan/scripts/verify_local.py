@@ -199,9 +199,11 @@ def run_tests() -> None:
     except ImportError:
         check("Testes automatizados", False, "pytest não instalado (use TITAN_EXTRAS=dev no setup)")
         return
-    r = subprocess.run([PY, "-m", "pytest", "-q", "-p", "no:cacheprovider"], cwd=ROOT,
+    r = subprocess.run([PY, "-m", "pytest", "-p", "no:cacheprovider"], cwd=ROOT,
                        capture_output=True, text=True)
-    last = (r.stdout.strip().splitlines() or ["(sem saída)"])[-1]
+    lines = r.stdout.strip().splitlines()
+    last = next((l for l in reversed(lines) if " passed" in l or " failed" in l or " error" in l),
+                lines[-1] if lines else "(sem saída)")
     check("Testes automatizados (pytest)", r.returncode == 0, last)
     if r.returncode != 0:
         print(r.stdout[-4000:])
