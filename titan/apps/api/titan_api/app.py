@@ -21,7 +21,8 @@ from titan.db.engine import make_engine, make_session_factory
 from titan_api.deps import AppContext
 from titan.tasks.runner import TaskRunner
 from titan.tasks.service import recover_on_startup
-from titan_api.routers import auth, conversations, health, system, tasks
+from titan.voice.engines import VoiceService
+from titan_api.routers import auth, conversations, health, system, tasks, voice
 from titan_api.security import (
     CSRFMiddleware,
     NetworkAllowlistMiddleware,
@@ -71,6 +72,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         engine=engine,
         session_factory=session_factory,
         runner=TaskRunner(settings, session_factory, inline=settings.task_runner == "inline"),
+        voice=VoiceService(settings),
         auth=AuthService(
             settings.auth_secret.get_secret_value() or "test-only-secret",
             settings.session_ttl_hours,
@@ -102,6 +104,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(conversations.router)
     app.include_router(system.router)
     app.include_router(tasks.router)
+    app.include_router(voice.router)
 
     if settings.serve_web:
         _mount_web(app, settings.web_dist_dir)

@@ -23,6 +23,8 @@ dependencies = [
 postgres = ["psycopg[binary]>=3.1,<4"]
 # Provedor EXTERNO e PAGO; só instale se for usar (ver docs/anthropic.md).
 anthropic = ["anthropic>=1.15,<2"]
+# Voz LOCAL opcional (~230 MB com onnxruntime; ver docs/voice.md).
+voice = ["vosk>=0.3.41,<0.4", "piper-tts>=1.3,<2"]
 dev = ["pytest>=8,<9", "httpx>=0.27,<1"]
 
 [project.scripts]

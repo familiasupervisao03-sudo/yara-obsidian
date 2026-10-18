@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     login_max_attempts: int = Field(default=5, ge=1, le=100)
     login_lockout_seconds: int = Field(default=300, ge=10)
 
+    # Voz local (opcional; ver docs/voice.md).
+    voice_vosk_model_dir: Path = Path("./var/models/vosk-model-small-pt-0.3")
+    voice_piper_model: Path = Path("./var/models/piper/pt_BR-faber-medium.onnx")
+    voice_max_utterance_seconds: int = Field(default=60, ge=5, le=300)
+
     backup_dir: Path = Path("./backups")
     backup_keep: int = Field(default=7, ge=1, le=365)
     approval_ttl_hours: int = Field(default=24, ge=1, le=24 * 30)

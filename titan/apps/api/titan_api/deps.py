@@ -11,6 +11,7 @@ from sqlalchemy import Engine
 
 from titan.auth.service import AuthService
 from titan.tasks.runner import TaskRunner
+from titan.voice.engines import VoiceService
 from titan.config.settings import Settings
 from titan.db.models import Session, User
 
@@ -24,6 +25,7 @@ class AppContext:
     session_factory: sessionmaker[DBSession]
     auth: AuthService
     runner: "TaskRunner"
+    voice: "VoiceService"
 
 
 def get_ctx(request: Request) -> AppContext:
