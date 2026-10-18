@@ -157,3 +157,26 @@ def test_history_is_normalized():
 
 def test_unknown_model_priced_at_worst_case(paid_settings):
     assert cost_brl(paid_settings, "modelo-novo", 1_000_000, 0) == pytest.approx(50.0)
+
+
+def test_haiku_runs_without_thinking_for_speed(make_settings):
+    from titan.db.migrate import upgrade_head
+
+    s = make_settings(model_provider="anthropic", model_name="claude-haiku-5-5", local_only=False,
+                      allow_external_models=True, allow_paid_apis=True,
+                      daily_paid_budget_brl=2.0, usd_brl_rate=5.0, anthropic_api_key=KEY)
+    upgrade_head(s.database_url)
+    engine = make_engine(s.database_url)
+    client = FakeClient(response(model="claude-haiku-5-5"))
+    AnthropicProvider(s, BudgetGuard(s, make_session_factory(engine)), client=client).chat(
+        [ChatTurn("user", "oi")])
+    assert client.calls[0]["thinking"] == {"type": "disabled"}
+    assert "fallbacks" not in client.calls[0]
+    engine.dispose()
+
+
+def test_opus_keeps_default_thinking(paid_settings, factory):
+    client = FakeClient(response())
+    AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client).chat(
+        [ChatTurn("user", "oi")])
+    assert "thinking" not in client.calls[0]  # Opus 5.5 recusa thinking disabled

@@ -8,6 +8,7 @@ reserva o custo máximo possível; sem orçamento, nada é enviado.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Optional
 
 from titan.config.settings import Settings
@@ -27,6 +28,10 @@ SYSTEM_PROMPT = (
 # Modelos que aceitam o fallback automático do servidor no modo "default".
 FALLBACK_MODELS = {"claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"}
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
+
+# Modelos em que o raciocínio interno pode ser desligado (effort <= high).
+# Desligar deixa o chat bem mais rápido; no Opus 5.5 isso não é permitido.
+THINKING_OFF_MODELS = {"claude-haiku-5-5"}
 
 # Estimativa conservadora: ~3 caracteres por token (português tende a ~4).
 CHARS_PER_TOKEN = 3
@@ -98,6 +103,9 @@ class AnthropicProvider:
             messages=messages,
             output_config={"effort": self.settings.model_effort},
         )
+        if self.model in THINKING_OFF_MODELS and self.settings.model_effort in ("low", "medium", "high"):
+            params["thinking"] = {"type": "disabled"}
+        started = time.monotonic()
         try:
             if self.settings.anthropic_fallbacks and self.model in FALLBACK_MODELS:
                 response = client.beta.messages.create(
@@ -118,8 +126,8 @@ class AnthropicProvider:
             int(getattr(usage, "output_tokens", 0) or 0),
             getattr(response, "_request_id", None),
         )
-        log.info("anthropic: modelo=%s custo=R$ %.4f stop=%s", served_by, cost,
-                 response.stop_reason)
+        log.info("anthropic: modelo=%s duração=%.1fs custo=R$ %.4f stop=%s", served_by,
+                 time.monotonic() - started, cost, response.stop_reason)
 
         if response.stop_reason == "refusal":
             details = getattr(response, "stop_details", None)

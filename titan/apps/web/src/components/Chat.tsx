@@ -9,6 +9,15 @@ export function Chat({ onError }: { onError: (e: unknown) => void }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [model, setModel] = useState<ModelStatus | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!sending) return;
+    setElapsed(0);
+    const started = Date.now();
+    const id = window.setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => window.clearInterval(id);
+  }, [sending]);
   const endRef = useRef<HTMLDivElement>(null);
   // Reutiliza a mesma chave se o envio falhar e o usuário tentar de novo,
   // para que o servidor não grave a mensagem duas vezes.
@@ -96,7 +105,12 @@ export function Chat({ onError }: { onError: (e: unknown) => void }) {
           ))}
           <div ref={endRef} />
         </div>
-        {model && !model.available && (
+        {sending && (
+          <p className="notice" role="status">
+            TITAN está respondendo… {elapsed}s
+          </p>
+        )}
+        {!sending && model && !model.available && (
           <p className="notice">
             Mensagem salva. Sem resposta da IA: {model.detail}
           </p>
