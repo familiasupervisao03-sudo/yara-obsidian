@@ -138,3 +138,25 @@ mas leva ~46 s para uma frase de 4 s **aqui**; no T4500 seria mais lento ainda �
 inviável para conversa. O base empata com o Vosk e é ~9× mais lento. Decisão:
 **manter o Vosk**; nenhum modelo novo no TITAN. Para repetir no notebook, compile
 o whisper.cpp lá com `-DGGML_NATIVE=ON` e rode o script acima.
+
+## Etapa 4 — verificação do dono: avaliada, não implementada
+
+Modelo de locutor do Vosk (`vosk-model-spk-0.4`, ~15 MB, x-vector; roda dentro do
+Vosk, sem AVX). Cadastro com 3 frases do "dono" (voz Piper faber); teste com 10
+frases diferentes em 4 condições contra 3 outras vozes Piper e o dono com outra
+pessoa ao fundo (`scripts/voice_eval/speaker_eval.py`). **Vozes sintéticas são muito
+mais regulares que voz humana: estes números são otimistas.**
+
+| Limiar de semelhança | Recusa o dono | Aceita outra pessoa | Dono + voz ao fundo aceito |
+|---|---|---|---|
+| 0,30 (erro igual) | 11–17% | 18,5% | 100% |
+| 0,40 | 38,9% | 0% | 0% |
+| 0,50 | 63,9% | 0% | 0% |
+
+Semelhança média do dono: 0,46 normal, 0,30 com ventilador; outras vozes 0,12–0,30.
+Decisão: **não usar como filtro** — mesmo no caso otimista ele ignoraria o dono com
+frequência (ou deixaria outras pessoas passarem), e a regra é não descartar falas
+só porque outra pessoa pode estar presente. Também não serviria como autenticação
+(uma gravação da voz engana). O que mais reduz vozes de fundo é **microfone perto da
+boca** (headset/lapela). Se no futuro houver gravações reais voluntárias do dono,
+dá para medir de novo com o mesmo script antes de decidir.
