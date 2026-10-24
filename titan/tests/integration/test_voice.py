@@ -68,12 +68,12 @@ def test_incremental_session_partial_then_final(fake_voice):
     sid = c.post("/api/v1/voice/stt/sessions", headers=CSRF).json()["session_id"]
     r = c.post(f"/api/v1/voice/stt/sessions/{sid}/audio", content=b"\x00" * 32000,
                headers={**CSRF, "Content-Type": "application/octet-stream"})
-    assert r.json() == {"text": "parcial 32000", "final": False}
+    assert r.json() == {"text": "parcial 32000", "final": False, "confidence": None, "verdict": "ok"}
     r = c.post(f"/api/v1/voice/stt/sessions/{sid}/audio", content=b"\x00" * 32000,
                headers={**CSRF, "Content-Type": "application/octet-stream"})
     assert r.json()["text"] == "segmento"
     r = c.post(f"/api/v1/voice/stt/sessions/{sid}/finish", headers=CSRF)
-    assert r.json() == {"text": "segmento final", "final": True}
+    assert r.json() == {"text": "segmento final", "final": True, "confidence": None, "verdict": "ok"}
     # Sessão encerrada: não pode ser reutilizada (evita enviar a mesma fala duas vezes).
     assert c.post(f"/api/v1/voice/stt/sessions/{sid}/finish", headers=CSRF).status_code == 404
 
@@ -279,3 +279,36 @@ def test_enable_online_voice_command(tmp_path, monkeypatch):
     assert cli.main(["disable-online-voice", "--env-file", str(env)]) == 0
     v = read_env(env)
     assert (v["TITAN_VOICE_TTS"], v["TITAN_ALLOW_EXTERNAL_VOICE"]) == ("piper", "false")
+
+
+# --- veredito da transcrição (etapa 2 da voz; ver docs/voice-eval.md) -------------
+
+def test_judge_transcript_rules():
+    from titan.voice.engines import judge_transcript
+
+    w = lambda *pairs: [{"word": a, "conf": c} for a, c in pairs]
+    assert judge_transcript("o", w(("o", 0.99))).verdict == "noise"  # música virou "o" (nota alta!)
+    assert judge_transcript("é hum", w(("é", 0.9), ("hum", 0.8))).verdict == "noise"
+    assert judge_transcript("sim", w(("sim", 0.6))).verdict == "ok"  # palavra útil curta continua valendo
+    t = judge_transcript("ter o maior", w(("ter", 0.39), ("o", 0.27), ("maior", 0.32)))
+    assert t.verdict == "unclear" and round(t.confidence, 2) == 0.33
+    assert judge_transcript("abre a lista", w(("abre", 0.9), ("a", 0.9), ("lista", 1.0))).verdict == "ok"
+    assert judge_transcript("abre a lista", []).verdict == "ok"  # sem notas: não inventa veredito
+    assert judge_transcript("", []).verdict == "ok"
+
+
+class NoiseRecognizer(FakeRecognizer):
+    def FinalResult(self):
+        return json.dumps({"text": "o", "result": [{"word": "o", "conf": 0.99}]})
+
+
+def test_finish_reports_verdict_and_confidence(settings, monkeypatch):
+    from titan.voice import engines
+
+    monkeypatch.setattr(engines.VoskSTT, "recognizer", lambda self: NoiseRecognizer())
+    create_user(settings)
+    with build_client(settings) as c:
+        login(c)
+        sid = c.post("/api/v1/voice/stt/sessions", headers=CSRF).json()["session_id"]
+        r = c.post(f"/api/v1/voice/stt/sessions/{sid}/finish", headers=CSRF).json()
+        assert r == {"text": "o", "final": True, "confidence": 0.99, "verdict": "noise"}

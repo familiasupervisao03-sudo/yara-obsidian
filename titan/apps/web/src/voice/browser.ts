@@ -1,7 +1,7 @@
 // Implementações para o navegador: microfone, reconhecimento, voz e chat.
 // Privacidade: cada mecanismo informa se é local (true) ou envia dados para fora.
 
-import type { AudioFrame, ChatBackend, ChatResult, Microphone, SttEngine } from "./session.ts";
+import type { AudioFrame, ChatBackend, ChatResult, Microphone, SttEngine, SttResult } from "./session.ts";
 import type { Clip, TtsEngine } from "./player.ts";
 import { InterruptedError } from "./player.ts";
 import { rmsOf } from "./vad.ts";
@@ -61,74 +61,79 @@ export function downsampleTo16k(input: Float32Array, rate: number): Int16Array {
 
 // ---------- reconhecimento local (Vosk no notebook) ----------
 
+interface ServerTurn {
+  sid: Promise<string>;
+  buffer: Int16Array[];
+  buffered: number;
+  sending: Promise<void>;
+  onPartial: (t: string) => void;
+}
+
 export class ServerStt implements SttEngine {
   name = "vosk";
   local = true;
-  private sid: Promise<string> | null = null;
-  private buffer: Int16Array[] = [];
-  private buffered = 0;
-  private sending: Promise<void> = Promise.resolve();
-  private onPartial: (t: string) => void = () => undefined;
+  /** Cada trecho tem a própria sessão no servidor: um trecho novo pode começar enquanto
+   *  o anterior ainda é transcrito (a sessão emenda os dois numa mensagem só). */
+  overlap = true;
+  private turn: ServerTurn | null = null;
 
   async begin(onPartial: (t: string) => void): Promise<void> {
-    this.onPartial = onPartial;
-    this.buffer = [];
-    this.buffered = 0;
-    this.sending = Promise.resolve();
-    this.sid = fetch("/api/v1/voice/stt/sessions", { method: "POST", headers: CSRF, credentials: "same-origin" })
+    const sid = fetch("/api/v1/voice/stt/sessions", { method: "POST", headers: CSRF, credentials: "same-origin" })
       .then(async (r) => {
         if (!r.ok) throw new Error((await r.json().catch(() => null))?.error?.message ?? `HTTP ${r.status}`);
         return (await r.json()).session_id as string;
       });
-    await this.sid;
+    this.turn = { sid, buffer: [], buffered: 0, sending: Promise.resolve(), onPartial };
+    await sid;
   }
 
   push(pcm16: Int16Array): void {
-    if (!this.sid) return;
-    this.buffer.push(pcm16);
-    this.buffered += pcm16.length;
-    if (this.buffered >= 16000 * 0.4) this.flushChunk(); // ~400 ms por envio
+    const t = this.turn;
+    if (!t) return;
+    t.buffer.push(pcm16);
+    t.buffered += pcm16.length;
+    if (t.buffered >= 16000 * 0.4) this.flushChunk(t); // ~400 ms por envio
   }
 
-  private flushChunk(): void {
-    if (!this.buffered || !this.sid) return;
-    const chunk = new Int16Array(this.buffered);
+  private flushChunk(t: ServerTurn): void {
+    if (!t.buffered) return;
+    const chunk = new Int16Array(t.buffered);
     let off = 0;
-    for (const b of this.buffer) {
+    for (const b of t.buffer) {
       chunk.set(b, off);
       off += b.length;
     }
-    this.buffer = [];
-    this.buffered = 0;
-    const sid = this.sid;
-    this.sending = this.sending.then(async () => {
-      const id = await sid;
+    t.buffer = [];
+    t.buffered = 0;
+    t.sending = t.sending.then(async () => {
+      const id = await t.sid;
       const r = await fetch(`/api/v1/voice/stt/sessions/${id}/audio`, {
         method: "POST", credentials: "same-origin",
         headers: { ...CSRF, "Content-Type": "application/octet-stream" }, body: chunk.buffer,
       });
-      if (r.ok) this.onPartial((await r.json()).text);
+      if (r.ok) t.onPartial((await r.json()).text);
     });
   }
 
-  async end(): Promise<string> {
-    if (!this.sid) throw new Error("sem sessão");
-    this.flushChunk();
-    await this.sending;
-    const id = await this.sid;
-    this.sid = null;
+  async end(): Promise<SttResult> {
+    const t = this.turn;
+    if (!t) throw new Error("sem sessão");
+    this.turn = null; // um begin() seguinte já usa uma sessão nova
+    this.flushChunk(t);
+    await t.sending;
+    const id = await t.sid;
     const r = await fetch(`/api/v1/voice/stt/sessions/${id}/finish`, {
       method: "POST", headers: CSRF, credentials: "same-origin",
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return (await r.json()).text as string;
+    const body = await r.json();
+    return { text: body.text as string, verdict: body.verdict ?? "ok", confidence: body.confidence ?? null };
   }
 
   abort(): void {
-    const sid = this.sid;
-    this.sid = null;
-    this.buffer = [];
-    void sid?.then((id) => fetch(`/api/v1/voice/stt/sessions/${id}`, {
+    const t = this.turn;
+    this.turn = null;
+    void t?.sid.then((id) => fetch(`/api/v1/voice/stt/sessions/${id}`, {
       method: "DELETE", headers: CSRF, credentials: "same-origin",
     })).catch(() => undefined);
   }

@@ -49,6 +49,10 @@ class SttSessionOut(BaseModel):
 class SttTextOut(BaseModel):
     text: str
     final: bool
+    # Só no texto final: nota média (0..1) e o veredito — ok, noise (ruído: ignorar)
+    # ou unclear (provavelmente mal entendido: pedir para repetir).
+    confidence: Optional[float] = None
+    verdict: str = "ok"
 
 
 class SpeakIn(BaseModel):
@@ -104,7 +108,8 @@ async def stt_audio(session_id: str, request: Request, cu: CurrentUser = Depends
 def stt_finish(session_id: str, cu: CurrentUser = Depends(current_user),
                ctx: AppContext = Depends(get_ctx)):
     try:
-        return SttTextOut(text=ctx.voice.sessions.finish(session_id, cu.user.id), final=True)
+        t = ctx.voice.sessions.finish(session_id, cu.user.id)
+        return SttTextOut(text=t.text, final=True, confidence=t.confidence, verdict=t.verdict)
     except KeyError:
         return _err(404, "not_found", "Sessão de reconhecimento expirada ou inexistente.")
 

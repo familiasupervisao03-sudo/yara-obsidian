@@ -1124,12 +1124,28 @@
       },
       "SttTextOut": {
         "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
           "final": {
             "title": "Final",
             "type": "boolean"
           },
           "text": {
             "title": "Text",
+            "type": "string"
+          },
+          "verdict": {
+            "default": "ok",
+            "title": "Verdict",
             "type": "string"
           }
         },

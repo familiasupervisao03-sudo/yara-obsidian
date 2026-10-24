@@ -1,12 +1,12 @@
 // Testes do modo de voz (lógica pura). Rodar: npm test --workspace apps/web
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Vad } from "../src/voice/vad.ts";
+import { Vad, VoiceBandMeter, looksIncomplete } from "../src/voice/vad.ts";
 import { SpeechSegmenter, cleanForSpeech } from "../src/voice/segmenter.ts";
 import { SpeechPlayer, InterruptedError } from "../src/voice/player.ts";
 import type { Clip, TtsEngine } from "../src/voice/player.ts";
 import { VoiceSession } from "../src/voice/session.ts";
-import type { AudioFrame, ChatBackend, ChatResult, SttEngine, VoiceState } from "../src/voice/session.ts";
+import type { AudioFrame, ChatBackend, ChatResult, SttEngine, SttResult, VoiceState } from "../src/voice/session.ts";
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 async function flush(n = 10) { for (let i = 0; i < n; i++) await tick(); }
@@ -172,6 +172,13 @@ test("falha de síntese é reportada e para a fila", async () => {
 
 // ---------- Sessão ----------
 
+/** Quadro de 20 ms com um tom de 1 kHz (faixa da voz) com o RMS pedido. */
+function tone(rms: number): Int16Array {
+  const out = new Int16Array(320);
+  for (let i = 0; i < 320; i++) out[i] = Math.round(Math.sin((2 * Math.PI * 1000 * i) / 16000) * rms * Math.SQRT2 * 32767);
+  return out;
+}
+
 class FakeMic {
   onFrame?: (f: AudioFrame) => void;
   started = false; stopped = false; deny = false;
@@ -220,7 +227,7 @@ function setup(opts: { confirm?: boolean; tts?: boolean } = {}) {
     { onState: (x) => states.push(x), onError: (e) => errors.push(e), onNotice: (x) => notices.push(x) },
     { confirmBeforeSend: opts.confirm ?? false, ttsEnabled: true },
   );
-  const frame = (rms: number) => { now += 20; mic.onFrame?.({ rms, pcm16: new Int16Array(320), durationMs: 20 }); };
+  const frame = (rms: number) => { now += 20; mic.onFrame?.({ rms, pcm16: tone(rms), durationMs: 20 }); };
   const speak = async (ms = 600) => {
     for (let t = 0; t < 400; t += 20) frame(0.003);
     for (let t = 0; t < ms; t += 20) frame(0.3);
@@ -375,6 +382,8 @@ test("sem mecanismo de voz: só texto, sem erro", async () => {
 test("encerrar a sessão no meio desliga tudo e ignora áudio posterior", async () => {
   const t = setup();
   await t.s.start();
+  // a calibração (500 ms) aprende o ambiente; depois a pessoa fala e encerra no meio
+  for (let i = 0; i < 25; i++) t.frame(0.003);
   for (let i = 0; i < 30; i++) t.frame(0.3);
   t.s.stop();
   const pushed = t.stt.pushed;
@@ -395,4 +404,151 @@ test("erro definitivo do servidor (ex.: orçamento) não é repetido", async () 
   assert.equal(t.chat.sends.length, 1);
   assert.match(t.errors.at(-1)!, /Orçamento/);
   assert.equal(t.s.state, "listening");
+});
+
+
+// ---------- Etapa 2: detecção e captura (medido com scripts/voice_eval) ----------
+
+test("VAD: ruído constante desde o início não dispara (calibração) e a fala depois sim", () => {
+  const v = new Vad();
+  assert.deepEqual(feed(v, 0.04, 0, 3000), []); // ventilador forte desde o primeiro instante
+  assert.equal(feed(v, 0.3, 3000, 3400)[0]?.type, "speech_start");
+});
+
+test("VAD: ruído que aparece no meio não deixa o detector preso", () => {
+  const v = new Vad();
+  feed(v, 0.003, 0, 1000);
+  const ev = feed(v, 0.05, 1000, 9000); // começa um ruído constante (ex.: música)
+  assert.equal(ev[0]?.type, "speech_start"); // o começo do ruído parece fala...
+  assert.equal(ev.at(-1)?.type, "speech_end"); // ...mas a captura termina sozinha, sem ficar presa
+});
+
+test("VAD: frase incompleta espera mais antes de encerrar", () => {
+  const v = new Vad({ silenceEndMs: 1000 });
+  feed(v, 0.003, 0, 600);
+  feed(v, 0.3, 600, 1400);
+  v.holdLonger = true; // o texto parcial terminou em "e…"
+  assert.deepEqual(feed(v, 0.003, 1400, 2900), []); // 1,5 s de pausa ainda não encerra
+  assert.equal(feed(v, 0.003, 2900, 3600)[0]?.type, "speech_end");
+});
+
+test("VAD: estalos de teclado depois da fala não mantêm a captura aberta", () => {
+  const v = new Vad({ silenceEndMs: 800 });
+  feed(v, 0.003, 0, 600);
+  feed(v, 0.3, 600, 1400);
+  const events = [];
+  for (let t = 1400; t < 4000; t += 20) {
+    const e = v.process(t % 140 === 0 ? 0.3 : 0.003, t); // um estalo a cada 140 ms
+    if (e) events.push(e);
+  }
+  assert.equal(events[0]?.type, "speech_end");
+});
+
+test("palavras finais que indicam frase incompleta", () => {
+  for (const t of ["me lembra de ligar pro dentista e", "eu queria, mas", "pesquisa pra", "abre o"])
+    assert.equal(looksIncomplete(t), true, t);
+  for (const t of ["abre a lista de tarefas", "sim", "", "qual é a capital do paraná"])
+    assert.equal(looksIncomplete(t), false, t);
+});
+
+test("energia na faixa da voz: zumbido grave é atenuado, voz não", () => {
+  const sine = (hz: number) => Int16Array.from({ length: 3200 }, (_, i) => Math.round(Math.sin((2 * Math.PI * hz * i) / 16000) * 8000));
+  const low = new VoiceBandMeter().rms(sine(60));
+  const voice = new VoiceBandMeter().rms(sine(1000));
+  assert.ok(low < voice * 0.15, `60 Hz=${low} 1 kHz=${voice}`);
+});
+
+/** Reconhecedor como o do servidor: cada trecho tem sessão própria e termina quando mandarmos. */
+class OverlapStt implements SttEngine {
+  name = "overlap"; local = true; overlap = true;
+  results: SttResult[] = [];
+  pending: ((r: SttResult) => void)[] = [];
+  partial = "";
+  async begin(onPartial: (t: string) => void) { if (this.partial) onPartial(this.partial); }
+  push() {}
+  end() { return new Promise<SttResult>((r) => this.pending.push(r)); }
+  abort() {}
+  async finishNext() { await flush(); this.pending.shift()!(this.results.shift()!); }
+}
+
+function setupOverlap() {
+  let now = 0, n = 0;
+  const mic = new FakeMic(), stt = new OverlapStt(), chat = new FakeChat();
+  const notices: string[] = [];
+  const s = new VoiceSession(
+    { mic, stt, tts: null, chat, now: () => now, newId: () => `u${++n}`, sleep: async () => {} },
+    { onNotice: (x) => notices.push(x) },
+    { confirmBeforeSend: false, ttsEnabled: false, vad: { silenceEndMs: 600 } },
+  );
+  const frames = (rms: number, ms: number) => { for (let t = 0; t < ms; t += 20) { now += 20; mic.onFrame?.({ rms, pcm16: tone(rms), durationMs: 20 }); } };
+  return { s, stt, chat, notices, frames };
+}
+
+test("continuação falada durante a transcrição vira UMA mensagem (nada se perde)", async () => {
+  const t = setupOverlap();
+  t.stt.results = [{ text: "me lembra de ligar pro dentista e" }, { text: "depois pagar a luz" }];
+  await t.s.start();
+  t.frames(0.003, 600);
+  t.frames(0.3, 800);
+  t.frames(0.003, 700); // pausa: o turno termina e a transcrição começa
+  assert.equal(t.s.state, "transcribing");
+  t.frames(0.3, 600); // volta a falar ANTES de a transcrição terminar
+  assert.equal(t.s.state, "user_speaking");
+  await t.stt.finishNext(); // primeira parte transcrita: não pode ser enviada sozinha
+  await flush();
+  assert.equal(t.chat.sends.length, 0);
+  t.frames(0.003, 700);
+  await t.stt.finishNext();
+  await flush();
+  assert.deepEqual(t.chat.sends.map((x) => x.text), ["me lembra de ligar pro dentista e depois pagar a luz"]);
+});
+
+test("ruído transcrito como 'o' é ignorado em silêncio; mal entendido pede para repetir", async () => {
+  const t = setupOverlap();
+  t.stt.results = [{ text: "o", verdict: "noise" }, { text: "ter o maior", verdict: "unclear", confidence: 0.3 }];
+  await t.s.start();
+  t.frames(0.003, 600);
+  for (let k = 0; k < 2; k++) {
+    t.frames(0.3, 600);
+    t.frames(0.003, 700);
+    await t.stt.finishNext();
+    await flush();
+  }
+  assert.equal(t.chat.sends.length, 0);
+  assert.equal(t.notices.length, 1);
+  assert.match(t.notices[0], /Não entendi bem.*ter o maior.*repetir/);
+  assert.equal(t.s.state, "listening");
+});
+
+test("frase que termina incompleta espera a continuação mesmo depois do texto final", async () => {
+  const t = setupOverlap();
+  t.stt.results = [{ text: "me lembra de ligar pro dentista e" }, { text: "depois pagar a luz" }];
+  await t.s.start();
+  t.frames(0.003, 600);
+  t.frames(0.3, 800);
+  t.frames(0.003, 700); // fim da fala (silêncio de 600 ms)
+  await t.stt.finishNext(); // texto final já chegou e termina em "e": não envia ainda
+  await flush();
+  assert.equal(t.chat.sends.length, 0);
+  t.frames(0.003, 300); // ainda dentro da espera
+  t.frames(0.3, 600); // a pessoa continua
+  t.frames(0.003, 700);
+  await t.stt.finishNext();
+  await flush();
+  assert.deepEqual(t.chat.sends.map((x) => x.text), ["me lembra de ligar pro dentista e depois pagar a luz"]);
+});
+
+test("frase incompleta sem continuação é enviada depois da espera", async () => {
+  const t = setupOverlap();
+  t.stt.results = [{ text: "abre a lista e" }];
+  await t.s.start();
+  t.frames(0.003, 600);
+  t.frames(0.3, 600);
+  t.frames(0.003, 700);
+  await t.stt.finishNext();
+  await flush();
+  assert.equal(t.chat.sends.length, 0);
+  t.frames(0.003, 700); // espera (600 ms) passa sem fala
+  await flush();
+  assert.deepEqual(t.chat.sends.map((x) => x.text), ["abre a lista e"]);
 });

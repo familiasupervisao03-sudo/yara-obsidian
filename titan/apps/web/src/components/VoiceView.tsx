@@ -29,7 +29,7 @@ interface Prefs {
 }
 
 const DEFAULT_PREFS: Prefs = {
-  stt: "vosk", tts: "piper", allowExternalStt: false, confirm: false, silenceMs: 1300, volume: 1,
+  stt: "vosk", tts: "piper", allowExternalStt: false, confirm: false, silenceMs: 1000, volume: 1,
 };
 
 function loadPrefs(): Prefs {

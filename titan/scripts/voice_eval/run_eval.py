@@ -21,6 +21,7 @@ import statistics
 import subprocess
 import sys
 import time
+import types
 import unicodedata
 import uuid
 from datetime import datetime
@@ -72,6 +73,29 @@ def p95(values: list[float]) -> float:
 
 # --- execução -------------------------------------------------------------------------
 
+def partial_timelines(engine, samples: Path, labels: list[dict]) -> dict:
+    """Texto parcial do Vosk ao longo de cada arquivo (a cada ~400 ms), para a simulação
+    poder aplicar a regra de frase incompleta. Aproximação: o reconhecedor ouve o
+    arquivo inteiro, não só os trechos capturados (só a última palavra importa)."""
+    import wave
+
+    out = {}
+    for lab in labels:
+        rec = engine.recognizer()
+        with wave.open(str(samples / lab["file"])) as wf:
+            data = wf.readframes(wf.getnframes())
+        finals, timeline = [], []
+        for i in range(0, len(data), CHUNK_BYTES):
+            if rec.AcceptWaveform(data[i:i + CHUNK_BYTES]):
+                finals.append(json.loads(rec.Result()).get("text", ""))
+                partial = ""
+            else:
+                partial = json.loads(rec.PartialResult()).get("partial", "")
+            timeline.append([int((i + CHUNK_BYTES) / 32), " ".join([*finals, partial]).strip()])
+        out[lab["file"].removesuffix(".wav")] = timeline
+    return out
+
+
 def cpu_info() -> dict:
     info = {"machine": platform.machine(), "python": platform.python_version()}
     try:
@@ -100,12 +124,6 @@ def run(args: argparse.Namespace) -> dict:
 
     out = args.out or ROOT / "var" / "voice_eval" / f"{datetime.now():%Y%m%d-%H%M%S}-{args.label}"
     out.mkdir(parents=True, exist_ok=True)
-    cmd = ["node", "--experimental-strip-types", "--no-warnings", str(HERE / "simulate.ts"),
-           str(args.samples), str(out), str(args.transcribe_ms)] + ([str(args.vad)] if args.vad else [])
-    subprocess.run(cmd, check=True, cwd=ROOT)
-    sim = json.loads((out / "simulation.json").read_text())
-    labels = {s["file"].removesuffix(".wav"): s for s in json.loads((args.samples / "labels.json").read_text())["samples"]}
-
     settings = Settings(_env_file=None, env="test", auth_secret="x" * 40, voice_vosk_model_dir=args.model)
     engine = VoskSTT(settings)
     st = engine.status()
@@ -115,6 +133,15 @@ def run(args: argparse.Namespace) -> dict:
     t0 = time.perf_counter()
     engine.recognizer()  # carrega o modelo (medido)
     load_s = time.perf_counter() - t0
+    labels_all = json.loads((args.samples / "labels.json").read_text())["samples"]
+    (out / "partials.json").write_text(json.dumps(partial_timelines(engine, args.samples, labels_all),
+                                                  ensure_ascii=False))
+
+    cmd = ["node", "--experimental-strip-types", "--no-warnings", str(HERE / "simulate.ts"),
+           str(args.samples), str(out), str(args.transcribe_ms)] + ([str(args.vad)] if args.vad else [])
+    subprocess.run(cmd, check=True, cwd=ROOT)
+    sim = json.loads((out / "simulation.json").read_text())
+    labels = {s["file"].removesuffix(".wav"): s for s in labels_all}
     sessions = SttSessions(engine, 120)
     uid = uuid.uuid4()
     cpu0 = resource.getrusage(resource.RUSAGE_SELF)
@@ -124,7 +151,8 @@ def run(args: argparse.Namespace) -> dict:
     endpoint_delays = []
     for r in sim["results"]:
         lab = labels[r["name"]]
-        texts = []
+        texts, held = [], []
+        parts: dict[int, list] = {}
         for t in r["turns"]:
             pcm = (out / t["pcmFile"]).read_bytes()
             sid = sessions.open(uid)
@@ -132,18 +160,32 @@ def run(args: argparse.Namespace) -> dict:
             for i in range(0, len(pcm), CHUNK_BYTES):
                 sessions.feed(sid, uid, pcm[i:i + CHUNK_BYTES])
             b = time.perf_counter()
-            text = sessions.finish(sid, uid)
+            tr = sessions.finish(sid, uid)
+            if isinstance(tr, str):  # versões antigas (linha de base) devolviam só o texto
+                tr = types.SimpleNamespace(text=tr, verdict="ok", confidence=None)
             c = time.perf_counter()
             finish_ms.append((c - b) * 1000)
             proc_s += c - a
             audio_s += len(pcm) / 32000
-            t["text"] = text
-            if t["sent"] and text.strip():
+            t.update(text=tr.text, verdict=tr.verdict, confidence=tr.confidence)
+            if t["sent"]:
+                parts.setdefault(t.get("message", 0), []).append(tr)
+        # Mesma regra da sessão: junta as partes emendadas, ignora as de ruído e não envia
+        # se todas as úteis forem "mal entendidas".
+        for msg in sorted(parts):
+            useful = [p for p in parts[msg] if p.verdict != "noise" and p.text.strip()]
+            text = " ".join(p.text.strip() for p in useful)
+            if not text:
+                if any(p.text.strip() for p in parts[msg]):
+                    held.append("[ruído] " + " ".join(p.text for p in parts[msg]))
+            elif all(p.verdict == "unclear" for p in useful):
+                held.append(f"[pediu para repetir] {text}")
+            else:
                 texts.append(text)
         row = {"name": r["name"], "category": lab["category"], "expected": lab["expected"],
                "triggers": r["triggers"], "turns": len(r["turns"]),
                "stuck": any(t.get("stuck") for t in r["turns"]),
-               "sent_texts": texts, "notes": lab["notes"]}
+               "sent_texts": texts, "held_texts": held, "notes": lab["notes"]}
         if lab["category"] == "speech":
             first = texts[0] if texts else ""
             row.update(missed=not texts, wer_first=wer(lab["expected"], first),
@@ -172,7 +214,8 @@ def run(args: argparse.Namespace) -> dict:
         "false_send": sum(x["false_send"] for x in noise),
         "stuck_noise": sum(x["stuck"] for x in noise),
         "speech_samples": len(speech),
-        "missed": sum(x["missed"] for x in speech),
+        "missed": sum(x["missed"] and not x["held_texts"] for x in speech),
+        "asked_repeat": sum(x["missed"] and bool(x["held_texts"]) for x in speech),
         "fragmented": sum(x["fragmented"] for x in speech),
         "stuck_speech": sum(x["stuck"] for x in speech),
         "first_word_ok": sum(x["first_word_ok"] for x in speech),
@@ -219,6 +262,7 @@ def markdown(rep: dict) -> str:
         f"| Ruídos que viraram mensagem enviada | {pct(s['false_send'], s['noise_samples'])} |",
         f"| Detector preso capturando (ruído / fala) | {s['stuck_noise']} / {s['stuck_speech']} |",
         f"| Falas perdidas | {pct(s['missed'], s['speech_samples'])} |",
+        f"| Falas em que pediu para repetir (não entendeu) | {pct(s['asked_repeat'], s['speech_samples'])} |",
         f"| Falas partidas em mais de uma mensagem | {pct(s['fragmented'], s['speech_samples'])} |",
         f"| Primeira palavra correta | {pct(s['first_word_ok'], s['speech_samples'])} |",
         f"| WER médio (1ª mensagem) | {s['wer_first_mean']:.1%} |",
@@ -233,7 +277,7 @@ def markdown(rep: dict) -> str:
         "| Amostra | Categoria | Disparos | Enviado | WER |", "|---|---|---|---|---|",
     ]
     for r in rep["samples"]:
-        sent = " ⏐ ".join(r["sent_texts"]) or "—"
+        sent = " ⏐ ".join(r["sent_texts"] + r.get("held_texts", [])) or "—"
         if r["stuck"]:
             sent = "(preso) " + sent
         w = f"{r['wer_first']:.0%}" if r["category"] == "speech" else ""

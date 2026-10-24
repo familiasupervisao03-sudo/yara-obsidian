@@ -5,7 +5,7 @@
 import { SpeechSegmenter } from "./segmenter.ts";
 import { SpeechPlayer } from "./player.ts";
 import type { TtsEngine } from "./player.ts";
-import { Vad } from "./vad.ts";
+import { Vad, VoiceBandMeter, looksIncomplete } from "./vad.ts";
 import type { VadConfig } from "./vad.ts";
 
 export interface AudioFrame {
@@ -19,13 +19,26 @@ export interface Microphone {
   stop(): void;
 }
 
+export interface SttResult {
+  text: string;
+  /** ok | noise (só ruído: ignorar em silêncio) | unclear (mal entendido: pedir para repetir) */
+  verdict?: "ok" | "noise" | "unclear";
+  confidence?: number | null;
+}
+
 export interface SttEngine {
   name: string;
   local: boolean;
+  /** true: um trecho novo pode começar enquanto o anterior ainda é transcrito. */
+  overlap?: boolean;
   begin(onPartial: (text: string) => void): Promise<void>;
   push(pcm16: Int16Array): void;
-  end(): Promise<string>;
+  end(): Promise<SttResult | string>;
   abort(): void;
+}
+
+function asResult(r: SttResult | string): SttResult {
+  return typeof r === "string" ? { text: r, verdict: "ok" } : { verdict: "ok", ...r };
 }
 
 export interface ChatResult {
@@ -93,13 +106,20 @@ export class VoiceSession {
   pendingText = "";
   metrics: VoiceMetrics = {};
   readonly vad: Vad;
+  private meter = new VoiceBandMeter();
   private deps: VoiceDeps;
   private ev: VoiceEvents;
   private opts: VoiceOptions;
   private player: SpeechPlayer | null;
   private preRoll: AudioFrame[] = [];
   private preRollMs: number;
-  private sttReady: Promise<void> | null = null;
+  private sttReady: Promise<boolean> | null = null;
+  /** Transcrições das partes anteriores da mesma frase (a pessoa continuou falando). */
+  private heldParts: Promise<SttResult>[] = [];
+  private endSeq = 0;
+  /** Espera por continuação depois de uma frase que terminou incompleta (conta por quadros). */
+  private holdUntil = 0;
+  private holdDone: (() => void) | null = null;
   private utteranceId = "";
   private sentIds = new Set<string>();
   private turnAbort: AbortController | null = null;
@@ -116,7 +136,7 @@ export class VoiceSession {
     this.ev = events;
     this.opts = opts;
     this.vad = new Vad(opts.vad);
-    this.preRollMs = opts.preRollMs ?? 600;
+    this.preRollMs = opts.preRollMs ?? 900;
     this.player = deps.tts
       ? new SpeechPlayer(deps.tts, {
           onFirstAudio: () => {
@@ -173,6 +193,9 @@ export class VoiceSession {
     this.cancelTurn();
     if (this.sttReady) this.deps.stt.abort();
     this.sttReady = null;
+    this.heldParts = [];
+    this.endSeq++;
+    this.releaseHold();
     this.preRoll = [];
     this.pendingText = "";
     this.setState("idle");
@@ -204,27 +227,40 @@ export class VoiceSession {
   onFrame(f: AudioFrame): void {
     if (this.state === "idle" || this.state === "starting" || this.state === "error") return;
     const playback = this.state === "speaking";
+    const energy = this.meter.rms(f.pcm16); // energia na faixa da voz (detector)
     this.ev.onLevel?.(f.rms, this.vad.threshold(playback));
     this.preRoll.push(f);
     let total = this.preRoll.reduce((a, x) => a + x.durationMs, 0);
     while (total > this.preRollMs && this.preRoll.length > 1) total -= this.preRoll.shift()!.durationMs;
 
     if (this.state === "user_speaking") this.deps.stt.push(f.pcm16);
-    if (this.state === "transcribing" || this.state === "review") return;
+    if (this.holdDone && this.deps.now() >= this.holdUntil) this.releaseHold();
+    // Durante a transcrição continua ouvindo (se o reconhecedor permitir): se a pessoa
+    // voltar a falar, é a continuação da mesma frase, não um áudio a descartar.
+    const listensWhileTranscribing = this.state === "transcribing" && this.deps.stt.overlap === true;
+    if ((this.state === "transcribing" && !listensWhileTranscribing) || this.state === "review") return;
 
-    const event = this.vad.process(f.rms, this.deps.now(), playback);
+    const event = this.vad.process(energy, this.deps.now(), playback);
     if (!event) return;
     if (event.type === "speech_start") this.onSpeechStart(event.atMs);
     else if (this.state === "user_speaking") void this.onSpeechEnd();
   }
 
   private onSpeechStart(atMs: number): void {
+    const continuing = this.state === "transcribing";
     if (this.state === "speaking" || this.state === "thinking") this.bargeIn(atMs);
-    this.utteranceId = this.deps.newId();
+    if (continuing) {
+      this.endSeq++; // a transcrição em andamento não envia: a próxima parte envia tudo junto
+      this.releaseHold();
+    } else {
+      this.heldParts = [];
+      this.utteranceId = this.deps.newId();
+    }
     this.setState("user_speaking");
-    this.sttReady = this.deps.stt.begin((t) => this.ev.onPartial?.(t)).catch(() => {
-      this.sttReady = null;
-    });
+    this.sttReady = this.deps.stt.begin((t) => {
+      this.vad.holdLonger = looksIncomplete(t); // "…e", "…mas": espera mais antes de encerrar
+      this.ev.onPartial?.(t);
+    }).then(() => true, () => false);
     // inclui o áudio de pouco antes da detecção, para não cortar o começo da frase
     for (const f of this.preRoll) this.deps.stt.push(f.pcm16);
   }
@@ -232,22 +268,43 @@ export class VoiceSession {
   private async onSpeechEnd(): Promise<void> {
     this.setState("transcribing");
     const endAt = this.deps.now();
-    let text = "";
-    try {
-      if (this.sttReady) await this.sttReady;
-      if (!this.sttReady) throw new Error("transcrição indisponível");
-      text = (await this.deps.stt.end()).trim();
-    } catch {
-      this.sttReady = null;
+    const token = ++this.endSeq;
+    const ready = this.sttReady;
+    this.sttReady = null;
+    const part = (async () => {
+      if (!ready || !(await ready)) throw new Error("transcrição indisponível");
+      return asResult(await this.deps.stt.end());
+    })();
+    const parts = [...this.heldParts, part];
+    this.heldParts = parts;
+    const settled = await Promise.allSettled(parts);
+    if (token !== this.endSeq) return; // continuou falando (ou encerrou): não envia esta parte sozinha
+    const results = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    if (!results.length) {
       this.ev.onError?.("Falha na transcrição. Tente de novo ou digite a mensagem.");
       this.setState("listening");
       return;
     }
-    this.sttReady = null;
     this.metric({ speechEndToTranscriptMs: this.deps.now() - endAt });
     if (this.state !== "transcribing") return; // sessão encerrada no meio
+    const useful = results.filter((r) => r.verdict !== "noise" && r.text.trim());
+    const text = useful.map((r) => r.text.trim()).join(" ");
     if (!text) {
-      this.ev.onNotice?.("Não entendi. Pode repetir?");
+      // Só ruído reconhecido como "o", "é"…: ignora em silêncio. Nada reconhecido: avisa.
+      if (!results.some((r) => r.text.trim())) this.ev.onNotice?.("Não entendi. Pode repetir?");
+      this.setState("listening");
+      return;
+    }
+    if (looksIncomplete(text) && this.deps.stt.overlap === true) {
+      // Terminou em "e", "mas", "pra"…: provavelmente a pessoa vai continuar. Espera um pouco
+      // ouvindo; se ela voltar a falar, as partes viram uma mensagem só.
+      await this.waitForContinuation(this.vad.config.silenceEndMs * (this.vad.config.incompleteHoldFactor - 1));
+      if (token !== this.endSeq || this.state !== "transcribing") return;
+    }
+    this.heldParts = []; // daqui em diante a mensagem está fechada
+    if (useful.every((r) => r.verdict === "unclear") && !this.opts.confirmBeforeSend) {
+      // Provavelmente mal entendido (ex.: duas pessoas falando): não envia um palpite.
+      this.ev.onNotice?.(`Não entendi bem (ouvi: “${text}”). Pode repetir?`);
       this.setState("listening");
       return;
     }
@@ -257,6 +314,18 @@ export class VoiceSession {
       return;
     }
     void this.sendTurn(text, this.utteranceId);
+  }
+
+  private waitForContinuation(ms: number): Promise<void> {
+    this.releaseHold();
+    this.holdUntil = this.deps.now() + ms;
+    return new Promise((resolve) => { this.holdDone = resolve; });
+  }
+
+  private releaseHold(): void {
+    const done = this.holdDone;
+    this.holdDone = null;
+    done?.();
   }
 
   /** Confirma (talvez editada) a transcrição em revisão. */

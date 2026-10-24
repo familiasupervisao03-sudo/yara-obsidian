@@ -122,7 +122,9 @@ class VoskSTT:
                 log.info("Vosk carregado em %.1fs", time.monotonic() - started)
         from vosk import KaldiRecognizer
 
-        return KaldiRecognizer(self._model, SAMPLE_RATE)
+        rec = KaldiRecognizer(self._model, SAMPLE_RATE)
+        rec.SetWords(True)  # nota de confiança por palavra
+        return rec
 
 
 class PiperTTS:
@@ -235,6 +237,32 @@ class SttSession:
     touched: float = field(default_factory=time.monotonic)
     bytes_received: int = 0
     finals: list[str] = field(default_factory=list)  # segmentos já finalizados pelo Vosk
+    words: list[dict] = field(default_factory=list)  # palavras com nota (SetWords)
+
+
+# Avaliação da transcrição (scripts/voice_eval): a nota do Vosk NÃO separa ruído de fala
+# (música virou "o" com nota 0,99), mas resultados só com palavras vazias são ruído
+# típico, e nota média baixa aparece quando duas pessoas falam ao mesmo tempo.
+FILLER_WORDS = {"o", "a", "os", "as", "e", "é", "um", "uma", "ah", "eh", "hum", "hm", "ã", "ó"}
+UNCLEAR_CONFIDENCE = 0.5
+
+
+@dataclass
+class Transcript:
+    text: str
+    confidence: Optional[float]  # média das notas por palavra (None se indisponível)
+    verdict: str  # ok | noise (ignorar em silêncio) | unclear (pedir para repetir)
+
+
+def judge_transcript(text: str, words: list[dict]) -> Transcript:
+    tokens = text.split()
+    confs = [float(w["conf"]) for w in words if "conf" in w]
+    conf = sum(confs) / len(confs) if confs else None
+    if tokens and len(tokens) <= 2 and all(t.lower() in FILLER_WORDS for t in tokens):
+        return Transcript(text, conf, "noise")
+    if tokens and conf is not None and conf < UNCLEAR_CONFIDENCE:
+        return Transcript(text, conf, "unclear")
+    return Transcript(text, conf, "ok")
 
 
 class SttSessions:
@@ -283,19 +311,23 @@ class SttSessions:
             raise VoiceUnavailable("Fala longa demais para um único turno.")
         s.touched = time.monotonic()
         if s.recognizer.AcceptWaveform(pcm):
-            text = json.loads(s.recognizer.Result()).get("text", "").strip()
+            result = json.loads(s.recognizer.Result())
+            text = result.get("text", "").strip()
             if text:
                 s.finals.append(text)
+                s.words.extend(result.get("result", []))
             return " ".join(s.finals)
         partial = json.loads(s.recognizer.PartialResult()).get("partial", "").strip()
         return " ".join([*s.finals, partial]).strip()
 
-    def finish(self, sid: str, user_id: uuid.UUID) -> str:
+    def finish(self, sid: str, user_id: uuid.UUID) -> Transcript:
         s = self._get(sid, user_id)
         with self._lock:
             self._sessions.pop(sid, None)
-        last = json.loads(s.recognizer.FinalResult()).get("text", "").strip()
-        return " ".join([*s.finals, last]).strip()
+        result = json.loads(s.recognizer.FinalResult())
+        last = result.get("text", "").strip()
+        words = [*s.words, *result.get("result", [])]
+        return judge_transcript(" ".join([*s.finals, last]).strip(), words)
 
     def cancel(self, sid: str, user_id: uuid.UUID) -> None:
         with self._lock:
