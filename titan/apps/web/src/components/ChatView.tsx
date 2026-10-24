@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import type { Conversation, Message } from "@titan/api-contracts";
 import { api, newRequestId } from "../api";
 import { StreamingChat } from "../voice/browser";
+import { Icon } from "./icons";
 
 interface Pending {
   text: string;
@@ -114,10 +115,10 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
     <section className="chat-view">
       <div className="chat-header">
         <button className="ghost small" onClick={() => setShowList((s) => !s)} aria-expanded={showList}>
-          ☰ Conversas
+          <Icon name="list" size={16} /> Conversas
         </button>
         <span className="chat-title" title={title}>{title}</span>
-        <button className="small" onClick={newConversation}>+ Nova</button>
+        <button className="small" onClick={newConversation}><Icon name="plus" size={16} /> Nova</button>
       </div>
       {showList && (
         <ul className="conv-list">
@@ -156,7 +157,7 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
           );
         })()}
         {streaming !== null && (
-          <div className="msg msg-assistant">
+          <div className={`msg msg-assistant ${streaming ? "streaming" : "thinking"}`}>
             <span className="msg-meta">TITAN · {streaming ? "respondendo…" : "pensando…"}</span>
             <p>{streaming || "…"}</p>
           </div>

@@ -29,9 +29,15 @@ for (const [name, viewport] of [["desktop", { width: 1366, height: 860 }], ["mob
   await page.getByLabel("Operador").fill(user);
   await page.getByLabel("Senha").fill(password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await page.getByPlaceholder("Mensagem para o TITAN…").waitFor({ timeout: 10000 });
+  // a primeira tela é o Início (centro de comando); a conversa fica na aba "Conversa"
+  await page.getByRole("heading", { name: /Olá,/ }).waitFor({ timeout: 10000 });
   loggedIn = true;
-  check(true, `${name}: login`);
+  check(true, `${name}: login e tela inicial`);
+  await page.getByText(/Modo (local|híbrido)/).waitFor({ timeout: 10000 });
+  check(true, `${name}: estado real dos serviços no Início`);
+  if (outDir) await page.screenshot({ path: `${outDir}/titan-${name}-inicio.png` });
+  await page.getByRole("button", { name: "Conversa", exact: true }).click();
+  await page.getByPlaceholder("Mensagem para o TITAN…").waitFor({ timeout: 10000 });
 
   // conversa em streaming
   const msg = `teste ${name} ${Date.now()}`;
@@ -47,6 +53,9 @@ for (const [name, viewport] of [["desktop", { width: 1366, height: 860 }], ["mob
   }
   const box = await page.getByPlaceholder("Mensagem para o TITAN…").boundingBox();
   check(box && box.y + box.height <= viewport.height, `${name}: campo de mensagem visível na tela`);
+  const clipped = await page.evaluate(() => [...document.querySelectorAll(".content button, .content .msg, .content textarea")]
+    .filter((e) => e.getBoundingClientRect().right > window.innerWidth + 1).length);
+  check(clipped === 0, `${name}: conversa sem elementos cortados à direita (${clipped})`);
   if (outDir) await page.screenshot({ path: `${outDir}/titan-${name}-conversa.png` });
 
   await page.reload();

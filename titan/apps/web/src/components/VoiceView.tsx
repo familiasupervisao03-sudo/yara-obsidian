@@ -4,6 +4,7 @@ import { api } from "../api";
 import { VoiceSession } from "../voice/session";
 import type { VoiceMetrics, VoiceState } from "../voice/session";
 import type { TtsEngine } from "../voice/player";
+import { Icon } from "./icons";
 import {
   BrowserMicrophone,
   BrowserStt,
@@ -183,12 +184,12 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
 
       <div className="voice-controls">
         {!active ? (
-          <button className="big" onClick={start} disabled={!sttOk}>Iniciar conversa por voz</button>
+          <button onClick={start} disabled={!sttOk}><Icon name="mic" size={18} /> Iniciar conversa por voz</button>
         ) : (
-          <button className="big danger" onClick={stop}>Encerrar</button>
+          <button className="danger" onClick={stop}>Encerrar</button>
         )}
         {(state === "speaking" || state === "thinking") && (
-          <button className="big ghost" onClick={() => sessionRef.current?.interruptSpeaking()}>
+          <button className="ghost" onClick={() => sessionRef.current?.interruptSpeaking()}>
             Interromper
           </button>
         )}
@@ -228,10 +229,10 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
       </div>
 
       <div className="voice-row">
-        <button className="ghost" onClick={() => { const m = !muted; setMuted(m); sessionRef.current?.setMuted(m); }}>
+        <button className="ghost small" onClick={() => { const m = !muted; setMuted(m); sessionRef.current?.setMuted(m); }}>
           {muted ? "🔇 Som desligado" : "🔊 Silenciar"}
         </button>
-        <button className="ghost" onClick={() => { const on = !ttsOn; setTtsOn(on); sessionRef.current?.setTtsEnabled(on); }}>
+        <button className="ghost small" onClick={() => { const on = !ttsOn; setTtsOn(on); sessionRef.current?.setTtsEnabled(on); }}>
           {ttsOn ? "Voz: ligada" : "Voz: desligada (só texto)"}
         </button>
         <label className="volume">

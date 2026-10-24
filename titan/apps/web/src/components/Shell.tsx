@@ -5,14 +5,17 @@ import { ChatView } from "./ChatView";
 import { VoiceView } from "./VoiceView";
 import { TasksView } from "./TasksView";
 import { SystemView } from "./SystemView";
+import { Home } from "./Home";
+import { Icon, type IconName } from "./icons";
 
-export type View = "chat" | "voice" | "tasks" | "system";
+export type View = "home" | "chat" | "voice" | "tasks" | "system";
 
-const TABS: { id: View; label: string; icon: string }[] = [
-  { id: "chat", label: "Conversa", icon: "💬" },
-  { id: "voice", label: "Voz", icon: "🎙" },
-  { id: "tasks", label: "Tarefas", icon: "☑" },
-  { id: "system", label: "Sistema", icon: "⚙" },
+const TABS: { id: View; label: string; icon: IconName }[] = [
+  { id: "home", label: "Início", icon: "home" },
+  { id: "chat", label: "Conversa", icon: "chat" },
+  { id: "voice", label: "Voz", icon: "mic" },
+  { id: "tasks", label: "Tarefas", icon: "tasks" },
+  { id: "system", label: "Sistema", icon: "system" },
 ];
 
 function loadView(): View {
@@ -22,7 +25,7 @@ function loadView(): View {
   } catch {
     /* armazenamento indisponível */
   }
-  return "chat";
+  return "home";
 }
 
 export function Shell({ session, onLogout, onExpired }: {
@@ -84,16 +87,18 @@ export function Shell({ session, onLogout, onExpired }: {
   return (
     <div className="app">
       <header className="topbar">
-        <span className="brand">TITAN</span>
-        <span className={`badge ${hybrid ? "badge-warn" : "badge-ok"}`}>{hybrid ? "HÍBRIDO" : "LOCAL"}</span>
+        <button className="brand" onClick={() => go("home")} aria-label="TITAN — ir para o início">TITAN</button>
+        {status && (
+          <span className={`badge ${hybrid ? "badge-warn" : "badge-ok"}`}>{hybrid ? "HÍBRIDO" : "LOCAL"}</span>
+        )}
         {status && !status.paid_apis_blocked && (
-          <span className="badge badge-warn" title="Gasto do dia com APIs pagas">
+          <span className="badge badge-neutral" title="Gasto do dia com APIs pagas">
             R$ {status.paid_spent_today_brl.toFixed(2)}/{status.paid_budget_brl.toFixed(0)}
           </span>
         )}
         <span className="spacer" />
         <span className="muted small hide-mobile">{session.user.username}</span>
-        <button className="ghost small" onClick={onLogout}>Sair</button>
+        <button className="ghost small" onClick={onLogout}><Icon name="logout" size={16} /> Sair</button>
       </header>
 
       {offline && (
@@ -112,14 +117,19 @@ export function Shell({ session, onLogout, onExpired }: {
         {TABS.map((t) => (
           <button key={t.id} className={`tab ${view === t.id ? "active" : ""}`} onClick={() => go(t.id)}
                   aria-current={view === t.id ? "page" : undefined}>
-            <span aria-hidden className="tab-icon">{t.icon}</span>
+            <span className="tab-icon"><Icon name={t.icon} size={20} /></span>
             <span>{t.label}</span>
             {t.id === "tasks" && pendingApprovals > 0 && <span className="pill">{pendingApprovals}</span>}
           </button>
         ))}
       </nav>
 
-      <main className="content">
+      <main className={`content content-${view}`}>
+        {view === "home" && (
+          <Home username={session.user.username} status={status} offline={offline}
+                pendingApprovals={pendingApprovals} onGo={go} onError={handleError}
+                onOpenConversation={(id) => { setConversationId(id); go("chat"); }} />
+        )}
         {view === "chat" && (
           <ChatView conversationId={conversationId} onConversation={setConversationId}
                     version={chatVersion} onError={handleError} />
