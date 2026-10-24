@@ -116,3 +116,25 @@ entra no texto (a detecção por energia não sabe quem fala — etapa 4); o mod
 pequeno erra palavras ("abre a" → "a bia", "titan" não existe no vocabulário) e
 não reconhece "sim" isolado — etapa 3. Conjunto de amostras pequeno: as regras
 foram ajustadas nele e precisam ser confirmadas com gravações reais.
+
+## Etapa 3 — reconhecimento alternativo (whisper.cpp): não integrado
+
+whisper.cpp v1.9.5 compilado **sem AVX/AVX2/FMA/F16C/SSE4** (`-march=core2`,
+`GGML_NATIVE=OFF`); o binário foi inspecionado com `objdump`: nenhuma instrução
+AVX/VEX nem SSE4.1/4.2 (só SSSE3, que o Core 2/Penryn tem). Modelos quantizados
+q5_1. Medido no ambiente de desenvolvimento (Xeon), **2 threads** como no T4500,
+só o reconhecedor, sobre o arquivo inteiro de cada uma das 13 falas
+(`scripts/voice_eval/compare_whisper.py`):
+
+| Reconhecedor | WER | Tempo ÷ duração do áudio | RAM |
+|---|---|---|---|
+| Vosk small pt (atual) | 48,5% | 0,30 | ~180 MB |
+| whisper tiny | 63,9% | 1,11 | ~200 MB |
+| whisper base | 48,1% | 2,70 | ~200 MB |
+| whisper small | 37,7% | 11,5 | ~345 MB |
+
+O small acerta mais (nomes como "Titan" e "Paraná", e até a fala com duas vozes),
+mas leva ~46 s para uma frase de 4 s **aqui**; no T4500 seria mais lento ainda —
+inviável para conversa. O base empata com o Vosk e é ~9× mais lento. Decisão:
+**manter o Vosk**; nenhum modelo novo no TITAN. Para repetir no notebook, compile
+o whisper.cpp lá com `-DGGML_NATIVE=ON` e rode o script acima.
