@@ -133,3 +133,18 @@ def test_tls_settings(tmp_path):
         make(tls_cert_file=cert)
     with pytest.raises(ValidationError, match="não encontrado"):
         make(tls_cert_file=tmp_path / "nao.pem", tls_key_file=key)
+
+
+def test_online_voice_requires_explicit_authorization():
+    assert make().voice_tts == "piper" and make().allow_external_voice is False
+    for kw, msg in [
+        ({"voice_tts": "edge"}, "faltam autorizações"),
+        ({"voice_tts": "edge", "local_only": False}, "TITAN_ALLOW_EXTERNAL_VOICE=true"),
+        ({"voice_tts": "edge", "allow_external_voice": True}, "LOCAL_ONLY"),
+        ({"voice_tts": "elevenlabs"}, "TITAN_VOICE_TTS"),
+        ({"voice_edge_voice": "pt-BR-Antonio; rm -rf /"}, "TITAN_VOICE_EDGE_VOICE"),
+    ]:
+        with pytest.raises(ValidationError, match=msg):
+            make(**kw)
+    s = make(voice_tts="edge", local_only=False, allow_external_voice=True)
+    assert s.public_view()["voice_tts"] == "edge"

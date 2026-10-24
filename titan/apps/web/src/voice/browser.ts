@@ -203,10 +203,15 @@ export class BrowserStt implements SttEngine {
 
 // ---------- voz local (Piper no notebook) ----------
 
+/** Voz gerada pelo servidor do TITAN: Piper (local) ou a voz natural on-line (externa). */
 export class ServerTts implements TtsEngine {
-  name = "piper";
-  local = true;
+  name: string;
+  local: boolean;
   private ctx: AudioContext | null = null;
+  constructor(name = "piper", local = true) {
+    this.name = name;
+    this.local = local;
+  }
 
   async prepare(text: string, signal: AbortSignal): Promise<Clip> {
     const r = await fetch("/api/v1/voice/speak", {

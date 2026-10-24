@@ -1,4 +1,5 @@
-"""Rotas de voz LOCAL: reconhecimento incremental (Vosk) e síntese (Piper).
+"""Rotas de voz: reconhecimento incremental local (Vosk) e síntese (Piper local ou,
+se autorizada, a voz natural on-line).
 
 O áudio chega como PCM 16 bits mono 16 kHz, é processado em memória e
 descartado. Nada é gravado em disco nem em logs. Uma transcrição é apenas
@@ -60,7 +61,10 @@ def voice_status(_: CurrentUser = Depends(current_user), ctx: AppContext = Depen
         engines=[EngineOut(**e.__dict__) for e in ctx.voice.status()],
         sample_rate=16000,
         notes=[
-            "Vosk e Piper rodam no notebook: áudio e texto não saem do computador.",
+            "O reconhecimento (Vosk) roda no notebook: o áudio da sua fala não sai do computador.",
+            "A voz do TITAN é on-line (Microsoft): o texto das respostas sai do notebook."
+            if ctx.voice.tts.name == "edge" else
+            "A voz do TITAN (Piper) roda no notebook: o texto não sai do computador.",
             "O reconhecimento de voz do navegador (Web Speech) envia o áudio ao "
             "fornecedor do navegador (ex.: Google) e só é usado se você ativar.",
             "No celular, o microfone só funciona em HTTPS (exigência do navegador).",
@@ -112,7 +116,7 @@ def stt_cancel(session_id: str, cu: CurrentUser = Depends(current_user),
     return Response(status_code=204)
 
 
-@router.post("/speak", responses={200: {"content": {"audio/wav": {}}},
+@router.post("/speak", responses={200: {"content": {"audio/wav": {}, "audio/mpeg": {}}},
                                   503: {"model": ErrorResponse}})
 def speak(body: SpeakIn, _: CurrentUser = Depends(current_user),
           ctx: AppContext = Depends(get_ctx)):
@@ -120,4 +124,4 @@ def speak(body: SpeakIn, _: CurrentUser = Depends(current_user),
         audio = ctx.voice.tts.synthesize(body.text)
     except VoiceUnavailable as exc:
         return _err(503, "voice_unavailable", str(exc))
-    return Response(audio, media_type="audio/wav", headers={"Cache-Control": "no-store"})
+    return Response(audio, media_type=ctx.voice.tts.media_type, headers={"Cache-Control": "no-store"})

@@ -22,7 +22,18 @@ printf "Digite 'sim' para instalar: "
 read -r OK
 [ "$OK" = "sim" ] || { echo "Cancelado. Nada foi instalado."; exit 1; }
 
-.venv/bin/python -m pip install --only-binary=:all: -e ".[voice]"
+# O Piper depende do onnxruntime, que exige AVX: em processadores sem AVX ele
+# derruba o processo com "instrução ilegal". Nesses casos instala só o Vosk.
+if grep -qw avx /proc/cpuinfo; then
+  .venv/bin/python -m pip install --only-binary=:all: -e ".[voice]"
+  PIPER=1
+else
+  echo "Este processador não tem AVX: a voz Piper não funciona aqui e NÃO será instalada."
+  echo "Instalando só o reconhecimento de fala (Vosk). Para a voz do TITAN, use a voz"
+  echo "natural on-line (sh scripts/enable_online_voice.sh) ou a voz do aparelho."
+  .venv/bin/python -m pip install --only-binary=:all: "vosk>=0.3.41,<0.4"
+  PIPER=0
+fi
 mkdir -p var/models/piper
 chmod 700 var var/models
 if [ ! -f var/models/vosk-model-small-pt-0.3/final.mdl ]; then
@@ -30,10 +41,12 @@ if [ ! -f var/models/vosk-model-small-pt-0.3/final.mdl ]; then
   .venv/bin/python -c "import zipfile; zipfile.ZipFile('var/models/vosk.zip').extractall('var/models')"
   rm -f var/models/vosk.zip
 fi
-BASE=https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium
-for f in pt_BR-faber-medium.onnx pt_BR-faber-medium.onnx.json; do
-  [ -f "var/models/piper/$f" ] || curl -fL --progress-bar -o "var/models/piper/$f" "$BASE/$f"
-done
+if [ "$PIPER" = 1 ]; then
+  BASE=https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium
+  for f in pt_BR-faber-medium.onnx pt_BR-faber-medium.onnx.json; do
+    [ -f "var/models/piper/$f" ] || curl -fL --progress-bar -o "var/models/piper/$f" "$BASE/$f"
+  done
+fi
 echo
 echo "Voz local instalada. Reinicie o servidor (Ctrl+C e .venv/bin/titan serve)."
 echo "No navegador, abra o modo de voz: os mecanismos devem aparecer como 'local'."

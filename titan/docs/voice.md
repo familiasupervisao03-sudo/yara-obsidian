@@ -30,6 +30,7 @@ microfone (navegador, com cancelamento de eco e redução de ruído)
 | Reconhecimento do navegador (Web Speech) | servidores do fornecedor (ex.: Google) | **o áudio da sua fala** — só com o seu consentimento explícito na tela |
 | Voz "do aparelho" (local) | celular/notebook | nada |
 | Voz on-line do navegador | fornecedor | o texto da resposta — opcional |
+| Voz natural on-line (Microsoft, `edge`) | servidores da Microsoft | o texto da resposta — só depois de `enable-online-voice` com AUTORIZO |
 | Modelo de IA (Anthropic, se ligado) | Anthropic | o texto da conversa (já era assim no chat) |
 
 Áudio não é gravado: é processado em memória e descartado. O microfone é
@@ -47,6 +48,29 @@ sh scripts/install_voice_local.sh     # mostra tamanhos e pede "sim"
 Baixa ~230 MB de bibliotecas (onnxruntime é a maior), ~32 MB do modelo Vosk
 pt e ~63 MB da voz pt_BR "faber". Depois reinicie o servidor e recompile a
 interface (`npm run build`).
+
+**Processadores sem AVX** (ex.: Pentium Dual-Core T4500): o `onnxruntime`,
+usado pelo Piper, encerra o processo com "instrução ilegal". O instalador
+detecta isso e instala só o Vosk. Mesmo que o Piper esteja instalado, o TITAN
+testa cada biblioteca de voz num processo separado antes de usá-la: se ela
+for incompatível, a voz fica indisponível com o motivo, e o servidor continua
+funcionando (`test_library_that_crashes_is_probed_in_a_separate_process`).
+
+## Voz natural on-line (opcional, gratuita, externa)
+
+Para uma voz parecida com a de uma pessoa (Antônio, Francisca ou Thalita), o
+TITAN pode usar as vozes neurais da Microsoft pelo `edge-tts`:
+
+```sh
+sh scripts/enable_online_voice.sh        # instala edge-tts (~5 MB), pede a voz e AUTORIZO
+.venv/bin/titan disable-online-voice     # volta para a voz local
+```
+
+- O **texto** de cada resposta falada vai para a Microsoft; o áudio da sua fala
+  continua local (Vosk).
+- É um serviço gratuito sem garantia: pode mudar ou parar sem aviso. Se falhar,
+  a resposta continua por escrito e o erro aparece na tela.
+- Conexão por IPv4 (como a Anthropic) e limite de 30 s por trecho.
 
 ## Medições reais (ambiente de desenvolvimento, Xeon 2,1 GHz, 4 núcleos)
 

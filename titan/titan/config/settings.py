@@ -8,6 +8,7 @@ corrigida silenciosamente.
 from __future__ import annotations
 
 import ipaddress
+import re
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
@@ -81,6 +82,11 @@ class Settings(BaseSettings):
     voice_vosk_model_dir: Path = Path("./var/models/vosk-model-small-pt-0.3")
     voice_piper_model: Path = Path("./var/models/piper/pt_BR-faber-medium.onnx")
     voice_max_utterance_seconds: int = Field(default=60, ge=5, le=300)
+    # Voz do TITAN: "piper" (local) ou "edge" (voz natural on-line da Microsoft:
+    # o texto das respostas sai do notebook; exige TITAN_ALLOW_EXTERNAL_VOICE=true).
+    voice_tts: str = "piper"
+    voice_edge_voice: str = "pt-BR-AntonioNeural"
+    allow_external_voice: bool = False
 
     backup_dir: Path = Path("./backups")
     backup_keep: int = Field(default=7, ge=1, le=365)
@@ -201,6 +207,23 @@ class Settings(BaseSettings):
         ):
             errors.append("O provedor 'mock' só pode ser usado em TITAN_ENV=test.")
 
+        # Voz on-line: só com autorização explícita (o texto sai do notebook).
+        if self.voice_tts not in {"piper", "edge"}:
+            errors.append("TITAN_VOICE_TTS deve ser 'piper' (local) ou 'edge' (on-line).")
+        if self.local_only and self.allow_external_voice:
+            errors.append("Conflito: TITAN_LOCAL_ONLY=true e TITAN_ALLOW_EXTERNAL_VOICE=true.")
+        if self.voice_tts == "edge":
+            missing = []
+            if self.local_only:
+                missing.append("TITAN_LOCAL_ONLY=false")
+            if not self.allow_external_voice:
+                missing.append("TITAN_ALLOW_EXTERNAL_VOICE=true")
+            if missing:
+                errors.append("A voz on-line envia o texto das respostas à Microsoft; faltam "
+                              "autorizações: " + ", ".join(missing) + ".")
+        if not re.fullmatch(r"[a-z]{2}-[A-Z]{2}-[A-Za-z]+Neural", self.voice_edge_voice):
+            errors.append("TITAN_VOICE_EDGE_VOICE inválida (ex.: pt-BR-AntonioNeural).")
+
         # Sandbox: rede dentro do sandbox exige decisão futura explícita.
         if self.sandbox_network:
             errors.append("TITAN_SANDBOX_NETWORK=true não é permitido nesta versão.")
@@ -284,6 +307,9 @@ class Settings(BaseSettings):
             "lan_enabled": self.lan_enabled,
             "tls_enabled": self.tls_enabled,
             "database_backend": "sqlite" if self.is_sqlite else "postgresql",
+            "voice_tts": self.voice_tts,
+            "voice_edge_voice": self.voice_edge_voice,
+            "allow_external_voice": self.allow_external_voice,
             "sandbox_enabled": self.sandbox_enabled,
             "sandbox_network": self.sandbox_network,
             "max_runtime_seconds": self.max_runtime_seconds,

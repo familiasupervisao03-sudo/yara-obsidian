@@ -167,6 +167,70 @@ def cmd_enable_anthropic(args: argparse.Namespace) -> int:
     return 0
 
 
+ONLINE_VOICE_WARNING = """
+Voz natural on-line do TITAN (Microsoft, gratuita)
+  * O TEXTO de cada resposta falada é enviado à Microsoft para virar áudio.
+    O áudio da SUA fala continua local (Vosk) e não sai do notebook.
+  * Serviço gratuito sem garantia: pode mudar ou parar sem aviso. Se falhar,
+    a resposta continua aparecendo por escrito.
+  * Para desligar depois: .venv/bin/titan disable-online-voice
+"""
+
+ONLINE_VOICES = {"antonio": "pt-BR-AntonioNeural", "francisca": "pt-BR-FranciscaNeural",
+                 "thalita": "pt-BR-ThalitaMultilingualNeural"}
+
+
+def cmd_enable_online_voice(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from titan.envfile import update_env
+    from titan.voice.engines import probe_import
+
+    env_path = Path(args.env_file)
+    if not env_path.exists():
+        print(f"{env_path} não existe. Rode primeiro scripts/setup.sh.", file=sys.stderr)
+        return 1
+    ok, why = probe_import("edge_tts")
+    if not ok:
+        print("Biblioteca 'edge-tts' indisponível. Rode: sh scripts/enable_online_voice.sh"
+              + ("" if why == "not_installed" else f"\nMotivo: {why}"), file=sys.stderr)
+        return 1
+    print(ONLINE_VOICE_WARNING)
+    choice = _ask("Voz: antonio (masculina), francisca ou thalita (femininas)",
+                  args.voice or "antonio").strip().lower()
+    choice = choice.replace("ô", "o")
+    if choice not in ONLINE_VOICES:
+        print(f"Voz '{choice}' não reconhecida. Use antonio, francisca ou thalita. Nada foi alterado.",
+              file=sys.stderr)
+        return 1
+    if _ask("Digite AUTORIZO para confirmar").strip().upper() != "AUTORIZO":
+        print("Não confirmado. Nada foi alterado.")
+        return 1
+    backup = update_env(env_path, {
+        "TITAN_VOICE_TTS": "edge",
+        "TITAN_VOICE_EDGE_VOICE": ONLINE_VOICES[choice],
+        "TITAN_ALLOW_EXTERNAL_VOICE": "true",
+        "TITAN_LOCAL_ONLY": "false",
+    })
+    print(f"\nVoz on-line ligada ({choice}). .env atualizado; cópia anterior: {backup}")
+    print("Reinicie o servidor para aplicar:  .venv/bin/titan serve")
+    return 0
+
+
+def cmd_disable_online_voice(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from titan.envfile import update_env
+
+    env_path = Path(args.env_file)
+    if not env_path.exists():
+        print(f"{env_path} não existe.", file=sys.stderr)
+        return 1
+    update_env(env_path, {"TITAN_VOICE_TTS": "piper", "TITAN_ALLOW_EXTERNAL_VOICE": "false"})
+    print("Voz on-line desligada. Reinicie o servidor para aplicar.")
+    return 0
+
+
 def cmd_disable_external(args: argparse.Namespace) -> int:
     from pathlib import Path
 
@@ -182,6 +246,8 @@ def cmd_disable_external(args: argparse.Namespace) -> int:
         "TITAN_ALLOW_EXTERNAL_MODELS": "false",
         "TITAN_ALLOW_PAID_APIS": "false",
         "TITAN_DAILY_PAID_BUDGET_BRL": "0",
+        "TITAN_VOICE_TTS": "piper",
+        "TITAN_ALLOW_EXTERNAL_VOICE": "false",
     }
     if not args.keep_key:
         updates["ANTHROPIC_API_KEY"] = None  # remove a linha
@@ -377,6 +443,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--budget-brl")
     p.add_argument("--usd-brl")
     p.set_defaults(fn=cmd_enable_anthropic)
+    p = sub.add_parser("enable-online-voice", help="liga a voz natural on-line (o texto sai do notebook)")
+    p.add_argument("--env-file", default=".env")
+    p.add_argument("--voice")
+    p.set_defaults(fn=cmd_enable_online_voice)
+    p = sub.add_parser("disable-online-voice", help="volta para a voz local (Piper)")
+    p.add_argument("--env-file", default=".env")
+    p.set_defaults(fn=cmd_disable_online_voice)
     p = sub.add_parser("disable-external", help="desliga provedores externos (volta ao modo local)")
     p.add_argument("--env-file", default=".env")
     p.add_argument("--keep-key", action="store_true", help="mantém a chave no .env")

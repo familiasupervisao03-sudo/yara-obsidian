@@ -3152,6 +3152,7 @@
               "application/json": {
                 "schema": {}
               },
+              "audio/mpeg": {},
               "audio/wav": {}
             },
             "description": "Successful Response"

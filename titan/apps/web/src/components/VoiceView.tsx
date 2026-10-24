@@ -93,7 +93,8 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
 
   const engines = useMemo(() => {
     const by = Object.fromEntries((status?.engines ?? []).map((e) => [e.name, e]));
-    return { vosk: by.vosk, piper: by.piper };
+    // O servidor oferece um mecanismo de voz: Piper (local) ou "edge" (voz natural on-line).
+    return { vosk: by.vosk, server: by.piper ?? by.edge };
   }, [status]);
   const localVoice = typeof window !== "undefined" ? pickBrowserVoice(false) : null;
   const anyVoice = typeof window !== "undefined" ? pickBrowserVoice(true) : null;
@@ -101,7 +102,7 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
 
   function buildTts(): TtsEngine | null {
     switch (prefs.tts) {
-      case "piper": return engines.piper?.available ? new ServerTts() : null;
+      case "piper": return engines.server?.available ? new ServerTts(engines.server.name, engines.server.local) : null;
       case "browser-local": return localVoice ? new BrowserTts(localVoice) : null;
       case "browser-network": return anyVoice ? new BrowserTts(anyVoice) : null;
       default: return null;
@@ -162,7 +163,9 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
   }
 
   const active = state !== "idle" && state !== "error";
-  const ttsEngineLabel = prefs.tts === "piper" ? "Piper (local)" : prefs.tts === "browser-local"
+  const serverOnline = engines.server?.name === "edge";
+  const ttsEngineLabel = prefs.tts === "piper" ? (serverOnline ? "voz natural on-line (o texto sai do notebook)" : "Piper (local)")
+    : prefs.tts === "browser-local"
     ? `Navegador local${localVoice ? `: ${localVoice.name}` : " (indisponível)"}`
     : prefs.tts === "browser-network" ? "Navegador (pode enviar texto para fora)" : "Sem voz";
 
@@ -263,7 +266,10 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
           <label>
             Voz do TITAN
             <select value={prefs.tts} onChange={(e) => setPrefs({ ...prefs, tts: e.target.value as TtsChoice })}>
-              <option value="piper">Piper no notebook — local {engines.piper?.available ? "" : "(não instalado)"}</option>
+              <option value="piper">
+                {serverOnline ? "Voz natural on-line — o texto sai do notebook" : "Piper no notebook — local"}
+                {engines.server?.available ? "" : " (indisponível)"}
+              </option>
               <option value="browser-local" disabled={!localVoice}>Voz do aparelho — local {localVoice ? "" : "(nenhuma pt-BR local)"}</option>
               <option value="browser-network" disabled={!anyVoice}>Voz do navegador on-line — pode enviar texto para fora</option>
               <option value="none">Sem voz (só texto)</option>

@@ -151,3 +151,131 @@ def test_real_round_trip_piper_to_vosk(make_settings, monkeypatch):
         text = c.post(f"/api/v1/voice/stt/sessions/{sid}/finish", headers=CSRF).json()["text"]
     assert "tarefas" in text
     assert attempts == []
+
+
+# --- biblioteca incompatível com o processador não derruba o servidor -----------
+
+def test_library_that_crashes_is_probed_in_a_separate_process(auth_client, tmp_path, monkeypatch):
+    """Simula o onnxruntime em CPU sem AVX: importar a biblioteca mata o processo (SIGILL)."""
+    import sys
+
+    from titan.voice import engines
+
+    fake = tmp_path / "fakelibs" / "piper"
+    fake.mkdir(parents=True)
+    (fake / "__init__.py").write_text("import os, signal\nos.kill(os.getpid(), signal.SIGILL)\n")
+    monkeypatch.syspath_prepend(str(tmp_path / "fakelibs"))
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path / "fakelibs"))
+    monkeypatch.setattr(engines, "_PROBE_CACHE", {})
+
+    st = auth_client.get("/api/v1/voice/status")
+    assert st.status_code == 200  # este processo (o servidor) continua vivo
+    piper = {e["name"]: e for e in st.json()["engines"]}["piper"]
+    assert piper["available"] is False and "processador" in piper["detail"]
+    r = auth_client.post("/api/v1/voice/speak", json={"text": "oi"}, headers=CSRF)
+    assert r.status_code == 503 and "processador" in r.json()["error"]["message"]
+    assert auth_client.get("/api/v1/system/status").status_code == 200
+
+
+def test_probe_reports_missing_and_working_libraries(monkeypatch):
+    from titan.voice import engines
+
+    monkeypatch.setattr(engines, "_PROBE_CACHE", {})
+    assert engines.probe_import("biblioteca_que_nao_existe_xyz") == (False, engines.NOT_INSTALLED)
+    assert engines.probe_import("json") == (True, "")
+
+
+# --- voz natural on-line (desligada por padrão) ----------------------------------
+
+class _FakeCommunicate:
+    calls: list = []
+
+    def __init__(self, text, voice, *, connector=None, connect_timeout=None, receive_timeout=None):
+        self.text, self.voice, self.connector = text, voice, connector
+        _FakeCommunicate.calls.append(self)
+
+    async def stream(self):
+        yield {"type": "WordBoundary", "offset": 0}
+        yield {"type": "audio", "data": b"ID3fake-"}
+        yield {"type": "audio", "data": b"mp3"}
+
+
+@pytest.fixture
+def online_voice(make_settings, monkeypatch):
+    import sys
+    import types
+
+    from titan.db.migrate import upgrade_head
+    from titan.voice import engines
+
+    mod = types.ModuleType("edge_tts")
+    mod.Communicate = _FakeCommunicate
+    monkeypatch.setitem(sys.modules, "edge_tts", mod)
+    try:  # aiohttp vem com o edge-tts (extra opcional); sem ele, um substituto mínimo
+        import aiohttp  # noqa: F401
+    except ImportError:
+        fake_http = types.ModuleType("aiohttp")
+        fake_http.TCPConnector = lambda family=0: types.SimpleNamespace(_family=family)
+        monkeypatch.setitem(sys.modules, "aiohttp", fake_http)
+    real_probe = engines.probe_import
+    monkeypatch.setattr(engines, "probe_import",
+                        lambda m, timeout=60.0: (True, "") if m == "edge_tts" else real_probe(m, timeout))
+    _FakeCommunicate.calls = []
+    s = make_settings(voice_tts="edge", local_only=False, allow_external_voice=True)
+    upgrade_head(s.database_url)
+    create_user(s)
+    with build_client(s) as c:
+        login(c)
+        yield c
+
+
+def test_online_voice_speaks_mp3_and_is_marked_external(online_voice):
+    c = online_voice
+    st = c.get("/api/v1/voice/status").json()
+    edge = {e["name"]: e for e in st["engines"]}["edge"]
+    assert edge["available"] is True and edge["local"] is False
+    assert "Antônio" in edge["detail"] and "Microsoft" in edge["detail"]
+    assert any("sai do notebook" in n for n in st["notes"])
+    r = c.post("/api/v1/voice/speak", json={"text": "Olá, Luiz."}, headers=CSRF)
+    assert r.status_code == 200 and r.headers["content-type"] == "audio/mpeg"
+    assert r.content == b"ID3fake-mp3"
+    call = _FakeCommunicate.calls[-1]
+    assert call.voice == "pt-BR-AntonioNeural" and call.text == "Olá, Luiz."
+    assert call.connector is not None and call.connector._family == socket.AF_INET  # IPv4 forçado
+
+
+def test_online_voice_failure_is_explicit(online_voice, monkeypatch):
+    async def broken(self):
+        raise OSError("sem internet")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(_FakeCommunicate, "stream", broken)
+    r = online_voice.post("/api/v1/voice/speak", json={"text": "oi"}, headers=CSRF)
+    assert r.status_code == 503 and r.json()["error"]["code"] == "voice_unavailable"
+    assert "não respondeu" in r.json()["error"]["message"]
+
+
+def test_enable_online_voice_command(tmp_path, monkeypatch):
+    import sys
+    import types
+
+    from titan import cli
+    from titan.envfile import read_env
+    from titan.voice import engines
+
+    monkeypatch.setattr(engines, "probe_import", lambda m, timeout=60.0: (True, ""))
+    monkeypatch.setitem(sys.modules, "edge_tts", types.ModuleType("edge_tts"))
+    env = tmp_path / ".env"
+    env.write_text("TITAN_AUTH_SECRET=abc\n")
+    answers = iter(["antônio", "nao"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    assert cli.main(["enable-online-voice", "--env-file", str(env)]) == 1
+    assert env.read_text() == "TITAN_AUTH_SECRET=abc\n"  # sem AUTORIZO nada muda
+    answers = iter(["antônio", "autorizo"])
+    assert cli.main(["enable-online-voice", "--env-file", str(env)]) == 0
+    v = read_env(env)
+    assert (v["TITAN_VOICE_TTS"], v["TITAN_VOICE_EDGE_VOICE"], v["TITAN_ALLOW_EXTERNAL_VOICE"],
+            v["TITAN_LOCAL_ONLY"]) == ("edge", "pt-BR-AntonioNeural", "true", "false")
+    assert cli.main(["disable-online-voice", "--env-file", str(env)]) == 0
+    v = read_env(env)
+    assert (v["TITAN_VOICE_TTS"], v["TITAN_ALLOW_EXTERNAL_VOICE"]) == ("piper", "false")
