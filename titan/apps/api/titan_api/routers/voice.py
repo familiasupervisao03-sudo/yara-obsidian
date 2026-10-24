@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
+from titan.memory import preferences as user_prefs
 from titan.voice.engines import VoiceUnavailable
 from titan_api.deps import AppContext, CurrentUser, current_user, get_ctx
 from titan_api.schemas import ErrorResponse
@@ -53,6 +54,8 @@ class SttTextOut(BaseModel):
     # ou unclear (provavelmente mal entendido: pedir para repetir).
     confidence: Optional[float] = None
     verdict: str = "ok"
+    # Correções do seu dicionário aplicadas ao texto (a tela avisa; nada é trocado sem aviso).
+    corrections: list[str] = []
 
 
 class SpeakIn(BaseModel):
@@ -109,7 +112,11 @@ def stt_finish(session_id: str, cu: CurrentUser = Depends(current_user),
                ctx: AppContext = Depends(get_ctx)):
     try:
         t = ctx.voice.sessions.finish(session_id, cu.user.id)
-        return SttTextOut(text=t.text, final=True, confidence=t.confidence, verdict=t.verdict)
+        with ctx.session_factory() as db:
+            corrections = user_prefs.get(db, cu.user.id)["corrections"]
+        text, applied = user_prefs.apply_corrections(t.text, corrections) if t.verdict != "noise" else (t.text, [])
+        return SttTextOut(text=text, final=True, confidence=t.confidence, verdict=t.verdict,
+                          corrections=applied)
     except KeyError:
         return _err(404, "not_found", "Sessão de reconhecimento expirada ou inexistente.")
 
@@ -123,10 +130,12 @@ def stt_cancel(session_id: str, cu: CurrentUser = Depends(current_user),
 
 @router.post("/speak", responses={200: {"content": {"audio/wav": {}, "audio/mpeg": {}}},
                                   503: {"model": ErrorResponse}})
-def speak(body: SpeakIn, _: CurrentUser = Depends(current_user),
+def speak(body: SpeakIn, cu: CurrentUser = Depends(current_user),
           ctx: AppContext = Depends(get_ctx)):
+    with ctx.session_factory() as db:
+        rate = user_prefs.get(db, cu.user.id)["voice_rate"]
     try:
-        audio = ctx.voice.tts.synthesize(body.text)
+        audio = ctx.voice.tts.synthesize(body.text, rate=rate)
     except VoiceUnavailable as exc:
         return _err(503, "voice_unavailable", str(exc))
     return Response(audio, media_type=ctx.voice.tts.media_type, headers={"Cache-Control": "no-store"})

@@ -258,3 +258,15 @@ def test_stream_budget_blocks_before_opening_stream(make_settings):
         list(p.chat_stream([ChatTurn("user", "oi")]))
     assert client.calls == []
     engine.dispose()
+
+
+def test_style_is_appended_to_the_system_prompt(paid_settings, factory):
+    from titan.models.anthropic_provider import SYSTEM_PROMPT
+    from titan.memory.style import VOICE
+
+    client = FakeClient(response())
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client)
+    p.chat([ChatTurn("user", "oi")])
+    p.chat([ChatTurn("user", "oi")], style=VOICE)
+    assert client.calls[0]["system"] == SYSTEM_PROMPT  # sem estilo: igual a antes
+    assert client.calls[1]["system"] == SYSTEM_PROMPT + "\n\n" + VOICE

@@ -29,9 +29,9 @@ Emit = Callable[[str, dict[str, Any]], None]
 
 def run_reply_stream(session_factory: sessionmaker[DBSession], conversation_id: uuid.UUID,
                      provider: Any, turns: list[ChatTurn], emit: Emit,
-                     cancel: threading.Event) -> None:
+                     cancel: threading.Event, style: str = "") -> None:
     parts: list[str] = []
-    inner = stream_reply(provider, turns)
+    inner = stream_reply(provider, turns, style)
     started = time.monotonic()
     first_delta_ms = None
     try:

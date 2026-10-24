@@ -16,7 +16,9 @@ from sqlalchemy.orm import Session as DBSession
 from titan.audit import log as audit
 from titan.db.models import Message
 from titan.memory import conversations as repo
+from titan.memory import preferences as user_prefs
 from titan.memory.reply_stream import run_reply_stream
+from titan.memory.style import build_style
 from titan.models.providers import ChatTurn, ModelUnavailable, get_provider
 from titan.policies.model_gate import ProviderBlocked
 from titan_api.deps import AppContext, CurrentUser, current_user, get_ctx, get_db
@@ -136,7 +138,7 @@ def post_message(
                          data={"provider": provider.info.name, "paid": provider.info.paid,
                                "messages_sent": len(turns)})
             db.commit()
-        reply = provider.chat(turns)
+        reply = provider.chat(turns, style=build_style(body.mode, user_prefs.get(db, cu.user.id)))
         reply_msg = repo.add_message(
             db, conv, "assistant", reply.content,
             model_provider=reply.provider, model_name=reply.model,
@@ -191,6 +193,7 @@ async def post_message_stream(
     if isinstance(prep, JSONResponse):
         return prep
     user_out, provider, turns, duplicate_reply, model_error, is_duplicate = prep
+    style = await run_in_threadpool(_style_for, ctx, cu, body.mode)
 
     async def stream():
         yield _sse("user_message", {"message": user_out, "duplicate": is_duplicate})
@@ -215,7 +218,7 @@ async def post_message_stream(
         def worker() -> None:
             try:
                 run_reply_stream(ctx.session_factory, conversation_id, provider, turns, emit,
-                                 cancel)
+                                 cancel, style)
             finally:
                 emit("_end", {})
 
@@ -233,6 +236,11 @@ async def post_message_stream(
 
     return StreamingResponse(stream(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
+def _style_for(ctx: AppContext, cu: CurrentUser, mode: str) -> str:
+    with ctx.session_factory() as db:
+        return build_style(mode, user_prefs.get(db, cu.user.id))
 
 
 def _prepare_stream(ctx: AppContext, cu: CurrentUser, conversation_id: uuid.UUID,

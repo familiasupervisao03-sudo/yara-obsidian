@@ -68,12 +68,14 @@ def test_incremental_session_partial_then_final(fake_voice):
     sid = c.post("/api/v1/voice/stt/sessions", headers=CSRF).json()["session_id"]
     r = c.post(f"/api/v1/voice/stt/sessions/{sid}/audio", content=b"\x00" * 32000,
                headers={**CSRF, "Content-Type": "application/octet-stream"})
-    assert r.json() == {"text": "parcial 32000", "final": False, "confidence": None, "verdict": "ok"}
+    assert r.json() == {"text": "parcial 32000", "final": False, "confidence": None, "verdict": "ok",
+                        "corrections": []}
     r = c.post(f"/api/v1/voice/stt/sessions/{sid}/audio", content=b"\x00" * 32000,
                headers={**CSRF, "Content-Type": "application/octet-stream"})
     assert r.json()["text"] == "segmento"
     r = c.post(f"/api/v1/voice/stt/sessions/{sid}/finish", headers=CSRF)
-    assert r.json() == {"text": "segmento final", "final": True, "confidence": None, "verdict": "ok"}
+    assert r.json() == {"text": "segmento final", "final": True, "confidence": None, "verdict": "ok",
+                        "corrections": []}
     # Sessão encerrada: não pode ser reutilizada (evita enviar a mesma fala duas vezes).
     assert c.post(f"/api/v1/voice/stt/sessions/{sid}/finish", headers=CSRF).status_code == 404
 
@@ -190,8 +192,8 @@ def test_probe_reports_missing_and_working_libraries(monkeypatch):
 class _FakeCommunicate:
     calls: list = []
 
-    def __init__(self, text, voice, *, connector=None, connect_timeout=None, receive_timeout=None):
-        self.text, self.voice, self.connector = text, voice, connector
+    def __init__(self, text, voice, *, rate="+0%", connector=None, connect_timeout=None, receive_timeout=None):
+        self.text, self.voice, self.connector, self.rate = text, voice, connector, rate
         _FakeCommunicate.calls.append(self)
 
     async def stream(self):
@@ -311,4 +313,40 @@ def test_finish_reports_verdict_and_confidence(settings, monkeypatch):
         login(c)
         sid = c.post("/api/v1/voice/stt/sessions", headers=CSRF).json()["session_id"]
         r = c.post(f"/api/v1/voice/stt/sessions/{sid}/finish", headers=CSRF).json()
-        assert r == {"text": "o", "final": True, "confidence": 0.99, "verdict": "noise"}
+        assert r == {"text": "o", "final": True, "confidence": 0.99, "verdict": "noise", "corrections": []}
+
+
+def test_online_voice_uses_the_users_speed(online_voice):
+    c = online_voice
+    p = c.get("/api/v1/preferences").json()
+    assert c.put("/api/v1/preferences", json={**p, "voice_rate": 15}, headers=CSRF).status_code == 200
+    assert c.post("/api/v1/voice/speak", json={"text": "oi"}, headers=CSRF).status_code == 200
+    assert _FakeCommunicate.calls[-1].rate == "+15%"
+
+
+class PhraseRecognizer(FakeRecognizer):
+    def FinalResult(self):
+        return json.dumps({"text": "a bia lista de tarefas pro tita",
+                           "result": [{"word": w, "conf": 0.9} for w in "a bia lista de tarefas pro tita".split()]})
+
+
+def test_users_corrections_are_applied_and_reported(settings, monkeypatch):
+    from titan.voice import engines
+
+    monkeypatch.setattr(engines.VoskSTT, "recognizer", lambda self: PhraseRecognizer())
+    create_user(settings, "alice")
+    create_user(settings, "bob")
+    with build_client(settings) as a, build_client(settings) as b:
+        login(a, "alice")
+        login(b, "bob")
+        p = a.get("/api/v1/preferences").json()
+        p["corrections"] = [{"heard": "a bia", "meant": "abre a"}, {"heard": "tita", "meant": "Titan"}]
+        assert a.put("/api/v1/preferences", json=p, headers=CSRF).status_code == 200
+        sid = a.post("/api/v1/voice/stt/sessions", headers=CSRF).json()["session_id"]
+        r = a.post(f"/api/v1/voice/stt/sessions/{sid}/finish", headers=CSRF).json()
+        assert r["text"] == "abre a lista de tarefas pro Titan"
+        assert r["corrections"] == ["a bia → abre a", "tita → Titan"]
+        # o dicionário da alice não vale para o bob
+        sid = b.post("/api/v1/voice/stt/sessions", headers=CSRF).json()["session_id"]
+        r = b.post(f"/api/v1/voice/stt/sessions/{sid}/finish", headers=CSRF).json()
+        assert r["text"] == "a bia lista de tarefas pro tita" and r["corrections"] == []

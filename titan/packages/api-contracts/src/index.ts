@@ -222,3 +222,17 @@ export interface VoiceStatus {
   sample_rate: number;
   notes: string[];
 }
+
+// Preferências explícitas do usuário (GET/PUT/DELETE /api/v1/preferences)
+export interface Correction {
+  heard: string;
+  meant: string;
+}
+
+export interface Preferences {
+  response_length: "curta" | "normal" | "detalhada";
+  formality: "informal" | "neutra" | "formal";
+  examples: "auto" | "sim" | "nao";
+  voice_rate: number; // % da velocidade normal da voz (-30 a 30)
+  corrections: Correction[];
+}

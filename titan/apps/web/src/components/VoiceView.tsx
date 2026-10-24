@@ -3,6 +3,7 @@ import type { VoiceStatus } from "@titan/api-contracts";
 import { api } from "../api";
 import { VoiceSession } from "../voice/session";
 import type { VoiceMetrics, VoiceState } from "../voice/session";
+import type { CorrectionSuggestion } from "../voice/corrections";
 import type { TtsEngine } from "../voice/player";
 import { Icon } from "./icons";
 import {
@@ -71,6 +72,7 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
   const [metrics, setMetrics] = useState<VoiceMetrics>({});
   const [muted, setMuted] = useState(false);
   const [ttsOn, setTtsOn] = useState(true);
+  const [suggestion, setSuggestion] = useState<CorrectionSuggestion | null>(null);
   const sessionRef = useRef<VoiceSession | null>(null);
   const levelRef = useRef<HTMLDivElement>(null);
   const convRef = useRef<string | null>(conversationId);
@@ -122,7 +124,7 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
       onConversation(c.id);
       convRef.current = c.id;
       return c.id;
-    });
+    }, "voice");
     let lastPaint = 0;
     const session = new VoiceSession(
       { mic: new BrowserMicrophone(), stt, tts: buildTts(), chat, now: () => performance.now(),
@@ -139,6 +141,7 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
         onNotice: setNotice,
         onError: setErrorMsg,
         onMetrics: (m) => setMetrics({ ...m }),
+        onCorrectionSuggested: setSuggestion,
         onLevel: (rms) => {
           const now = performance.now();
           if (now - lastPaint < 66 || !levelRef.current) return; // ~15 quadros/s
@@ -153,6 +156,18 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
     session.setMuted(muted);
     sessionRef.current = session;
     await session.start();
+  }
+
+  async function rememberCorrection(s: CorrectionSuggestion) {
+    setSuggestion(null);
+    try {
+      const p = await api.preferences();
+      const corrections = [...p.corrections.filter((c) => c.heard !== s.heard), s];
+      await api.savePreferences({ ...p, corrections });
+      setNotice(`Guardado: “${s.heard}” → “${s.meant}” (dá para remover em Sistema › Preferências).`);
+    } catch (e) {
+      onError(e);
+    }
   }
 
   function stop() {
@@ -211,6 +226,15 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
         </div>
       )}
       {notice && <p className="notice">{notice}</p>}
+      {suggestion && (
+        <div className="card suggestion" role="status">
+          <span>Lembrar: quando eu entender “{suggestion.heard}”, usar “{suggestion.meant}”?</span>
+          <div className="row">
+            <button className="small" onClick={() => void rememberCorrection(suggestion)}>Lembrar</button>
+            <button className="ghost small" onClick={() => setSuggestion(null)}>Agora não</button>
+          </div>
+        </div>
+      )}
 
       {state === "review" && (
         <div className="panel review">

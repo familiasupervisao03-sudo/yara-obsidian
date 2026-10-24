@@ -374,6 +374,30 @@
         "title": "ConversationOut",
         "type": "object"
       },
+      "Correction": {
+        "properties": {
+          "heard": {
+            "description": "o que o reconhecimento entende",
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Heard",
+            "type": "string"
+          },
+          "meant": {
+            "description": "o que você quis dizer",
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Meant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "heard",
+          "meant"
+        ],
+        "title": "Correction",
+        "type": "object"
+      },
       "DecisionIn": {
         "properties": {
           "decision": {
@@ -639,6 +663,15 @@
             "minLength": 1,
             "title": "Content",
             "type": "string"
+          },
+          "mode": {
+            "default": "text",
+            "enum": [
+              "text",
+              "voice"
+            ],
+            "title": "Mode",
+            "type": "string"
           }
         },
         "required": [
@@ -823,6 +856,58 @@
           "created_at"
         ],
         "title": "PlanOut",
+        "type": "object"
+      },
+      "PreferencesIO": {
+        "properties": {
+          "corrections": {
+            "items": {
+              "$ref": "#/components/schemas/Correction"
+            },
+            "maxItems": 50,
+            "title": "Corrections",
+            "type": "array"
+          },
+          "examples": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "sim",
+              "nao"
+            ],
+            "title": "Examples",
+            "type": "string"
+          },
+          "formality": {
+            "default": "neutra",
+            "enum": [
+              "informal",
+              "neutra",
+              "formal"
+            ],
+            "title": "Formality",
+            "type": "string"
+          },
+          "response_length": {
+            "default": "normal",
+            "enum": [
+              "curta",
+              "normal",
+              "detalhada"
+            ],
+            "title": "Response Length",
+            "type": "string"
+          },
+          "voice_rate": {
+            "default": 0,
+            "description": "% da velocidade normal da voz",
+            "maximum": 30.0,
+            "minimum": -30.0,
+            "title": "Voice Rate",
+            "type": "integer"
+          }
+        },
+        "title": "PreferencesIO",
         "type": "object"
       },
       "ReadyOut": {
@@ -1134,6 +1219,14 @@
               }
             ],
             "title": "Confidence"
+          },
+          "corrections": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Corrections",
+            "type": "array"
           },
           "final": {
             "title": "Final",
@@ -2160,6 +2253,108 @@
         "summary": "Record Interruption",
         "tags": [
           "conversations"
+        ]
+      }
+    },
+    "/api/v1/preferences": {
+      "delete": {
+        "operationId": "erase_api_v1_preferences_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Erase",
+        "tags": [
+          "preferences"
+        ]
+      },
+      "get": {
+        "operationId": "read_api_v1_preferences_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesIO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Read",
+        "tags": [
+          "preferences"
+        ]
+      },
+      "put": {
+        "operationId": "update_api_v1_preferences_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferencesIO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesIO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Update",
+        "tags": [
+          "preferences"
         ]
       }
     },

@@ -6,6 +6,8 @@ import { SpeechSegmenter } from "./segmenter.ts";
 import { SpeechPlayer } from "./player.ts";
 import type { TtsEngine } from "./player.ts";
 import { Vad, VoiceBandMeter, looksIncomplete } from "./vad.ts";
+import { suggestCorrection } from "./corrections.ts";
+import type { CorrectionSuggestion } from "./corrections.ts";
 import type { VadConfig } from "./vad.ts";
 
 export interface AudioFrame {
@@ -24,6 +26,8 @@ export interface SttResult {
   /** ok | noise (só ruído: ignorar em silêncio) | unclear (mal entendido: pedir para repetir) */
   verdict?: "ok" | "noise" | "unclear";
   confidence?: number | null;
+  /** Trocas feitas pelo dicionário pessoal do usuário (mostradas na tela). */
+  corrections?: string[];
 }
 
 export interface SttEngine {
@@ -82,6 +86,8 @@ export interface VoiceEvents {
   onError?: (msg: string) => void;
   onMetrics?: (m: VoiceMetrics) => void;
   onLevel?: (rms: number, threshold: number) => void;
+  /** O usuário corrigiu o texto entendido: a tela pode oferecer guardar a troca. */
+  onCorrectionSuggested?: (s: CorrectionSuggestion) => void;
 }
 
 export interface VoiceOptions {
@@ -289,6 +295,8 @@ export class VoiceSession {
     if (this.state !== "transcribing") return; // sessão encerrada no meio
     const useful = results.filter((r) => r.verdict !== "noise" && r.text.trim());
     const text = useful.map((r) => r.text.trim()).join(" ");
+    const fixed = useful.flatMap((r) => r.corrections ?? []);
+    if (fixed.length) this.ev.onNotice?.(`Corrigido pelo seu dicionário: ${fixed.join(", ")}`);
     if (!text) {
       // Só ruído reconhecido como "o", "é"…: ignora em silêncio. Nada reconhecido: avisa.
       if (!results.some((r) => r.text.trim())) this.ev.onNotice?.("Não entendi. Pode repetir?");
@@ -332,6 +340,8 @@ export class VoiceSession {
   confirm(text: string): void {
     if (this.state !== "review") return;
     const t = text.trim();
+    const suggestion = t ? suggestCorrection(this.pendingText, t) : null;
+    if (suggestion) this.ev.onCorrectionSuggested?.(suggestion);
     this.pendingText = "";
     if (!t) {
       this.setState("listening");

@@ -149,7 +149,8 @@ class PiperTTS:
         return EngineStatus(self.name, "tts", True, True,
                             "Voz local (Piper, pt_BR). O texto não sai do notebook.")
 
-    def synthesize(self, text: str) -> bytes:
+    def synthesize(self, text: str, rate: int = 0) -> bytes:
+        """``rate``: % da velocidade normal (-30 a 30), das preferências do usuário."""
         st = self.status()
         if not st.available:
             raise VoiceUnavailable(st.detail)
@@ -163,7 +164,12 @@ class PiperTTS:
         buf = io.BytesIO()
         with self._synth_lock, wave.open(buf, "wb") as wf:
             if hasattr(self._voice, "synthesize_wav"):
-                self._voice.synthesize_wav(text, wf)
+                kwargs = {}
+                if rate:
+                    from piper import SynthesisConfig
+
+                    kwargs["syn_config"] = SynthesisConfig(length_scale=1 / (1 + rate / 100))
+                self._voice.synthesize_wav(text, wf, **kwargs)
             else:  # API antiga do piper-tts
                 self._voice.synthesize(text, wf)
         return buf.getvalue()
@@ -199,7 +205,8 @@ class EdgeTTS:
                             f"Voz natural on-line ({label}, Microsoft). O texto das respostas é "
                             "enviado à Microsoft para virar áudio.")
 
-    def synthesize(self, text: str) -> bytes:
+    def synthesize(self, text: str, rate: int = 0) -> bytes:
+        """``rate``: % da velocidade normal (-30 a 30), das preferências do usuário."""
         st = self.status()
         if not st.available:
             raise VoiceUnavailable(st.detail)
@@ -212,7 +219,7 @@ class EdgeTTS:
         async def run() -> bytes:
             # IPv4 forçado: em redes com IPv6 quebrado a conexão ficaria esperando.
             connector = aiohttp.TCPConnector(family=socket.AF_INET) if self.force_ipv4 else None
-            com = edge_tts.Communicate(text, self.voice, connector=connector,
+            com = edge_tts.Communicate(text, self.voice, rate=f"{rate:+d}%", connector=connector,
                                        connect_timeout=10, receive_timeout=20)
             chunks = [c["data"] async for c in com.stream() if c["type"] == "audio"]
             return b"".join(chunks)

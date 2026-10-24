@@ -92,6 +92,8 @@ class MessageCreate(BaseModel):
     client_request_id: Optional[str] = Field(
         default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_\-]+$"
     )
+    # "voice": a resposta será falada (curta, sem markdown, números por extenso).
+    mode: Literal["text", "voice"] = "text"
 
 
 class ModelStatus(BaseModel):

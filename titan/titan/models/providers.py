@@ -34,16 +34,19 @@ class ModelUnavailable(Exception):
 class ModelProvider(Protocol):
     info: ProviderInfo
 
-    def chat(self, history: list[ChatTurn]) -> ModelReply: ...
+    def chat(self, history: list[ChatTurn], style: str = "") -> ModelReply: ...
 
 
-def stream_reply(provider: ModelProvider, history: list[ChatTurn]):
-    """("delta", texto)... e ("done", ModelReply). Provedores sem streaming entregam tudo de uma vez."""
+def stream_reply(provider: ModelProvider, history: list[ChatTurn], style: str = ""):
+    """("delta", texto)... e ("done", ModelReply). Provedores sem streaming entregam tudo de uma vez.
+
+    ``style``: instruções de estilo (titan/memory/style.py), acrescentadas ao prompt do sistema.
+    """
     streamer = getattr(provider, "chat_stream", None)
     if streamer is not None:
-        yield from streamer(history)
+        yield from streamer(history, style=style)
         return
-    reply = provider.chat(history)
+    reply = provider.chat(history, style=style)
     yield "delta", reply.content
     yield "done", reply
 
@@ -58,15 +61,18 @@ class MockProvider:
 
     # Atraso artificial entre pedaços (somente testes de streaming/interrupção).
     delay = 0.0
+    # Último estilo recebido (somente testes: confere o que chegaria ao modelo).
+    last_style = ""
 
-    def chat(self, history: list[ChatTurn]) -> ModelReply:
+    def chat(self, history: list[ChatTurn], style: str = "") -> ModelReply:
+        MockProvider.last_style = style
         last = history[-1].content if history else ""
         return ModelReply(content=f"[mock] {last}", provider="mock", model=self.model)
 
-    def chat_stream(self, history: list[ChatTurn]):
+    def chat_stream(self, history: list[ChatTurn], style: str = ""):
         import time
 
-        reply = self.chat(history)
+        reply = self.chat(history, style=style)
         for word in reply.content.split(" "):
             if self.delay:
                 time.sleep(self.delay)

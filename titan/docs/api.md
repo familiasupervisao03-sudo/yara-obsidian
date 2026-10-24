@@ -109,3 +109,15 @@ registra até onde a resposta foi falada.
 | `POST /api/v1/voice/stt/sessions/{sid}/finish` | texto final (a sessão é encerrada) |
 | `DELETE /api/v1/voice/stt/sessions/{sid}` | cancela |
 | `POST /api/v1/voice/speak` | `{text}` → `audio/wav` (Piper) |
+
+## Preferências (adaptação)
+
+| Rota | Descrição |
+|---|---|
+| `GET /api/v1/preferences` | preferências do usuário (padrões se nunca salvou) |
+| `PUT /api/v1/preferences` | `{response_length: curta\|normal\|detalhada, formality: informal\|neutra\|formal, examples: auto\|sim\|nao, voice_rate: -30..30, corrections: [{heard, meant}]}` (até 50 correções) |
+| `DELETE /api/v1/preferences` | apaga tudo (204) |
+
+Mensagens (`/messages` e `/messages/stream`) aceitam `mode: "text" | "voice"`.
+O texto final do reconhecimento (`/voice/stt/sessions/{sid}/finish`) traz
+`confidence`, `verdict` (`ok`, `noise`, `unclear`) e `corrections` aplicadas.

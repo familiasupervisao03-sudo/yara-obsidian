@@ -127,7 +127,8 @@ export class ServerStt implements SttEngine {
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const body = await r.json();
-    return { text: body.text as string, verdict: body.verdict ?? "ok", confidence: body.confidence ?? null };
+    return { text: body.text as string, verdict: body.verdict ?? "ok", confidence: body.confidence ?? null,
+             corrections: body.corrections ?? [] };
   }
 
   abort(): void {
@@ -306,8 +307,11 @@ export class BrowserTts implements TtsEngine {
 
 export class StreamingChat implements ChatBackend {
   conversationId: () => Promise<string>;
-  constructor(conversationId: () => Promise<string>) {
+  /** "voice": o servidor pede ao modelo uma resposta para ser falada (curta, sem markdown). */
+  mode: "text" | "voice";
+  constructor(conversationId: () => Promise<string>, mode: "text" | "voice" = "text") {
     this.conversationId = conversationId;
+    this.mode = mode;
   }
 
   async send(text: string, requestId: string, signal: AbortSignal,
@@ -316,7 +320,7 @@ export class StreamingChat implements ChatBackend {
     const r = await fetch(`/api/v1/conversations/${cid}/messages/stream`, {
       method: "POST", signal, credentials: "same-origin",
       headers: { ...CSRF, "Content-Type": "application/json" },
-      body: JSON.stringify({ content: text, client_request_id: requestId }),
+      body: JSON.stringify({ content: text, client_request_id: requestId, mode: this.mode }),
     });
     if (!r.ok || !r.body) {
       const msg = (await r.json().catch(() => null))?.error?.message ?? `HTTP ${r.status}`;

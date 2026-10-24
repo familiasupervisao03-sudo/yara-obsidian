@@ -6,6 +6,7 @@ import { SpeechSegmenter, cleanForSpeech } from "../src/voice/segmenter.ts";
 import { SpeechPlayer, InterruptedError } from "../src/voice/player.ts";
 import type { Clip, TtsEngine } from "../src/voice/player.ts";
 import { VoiceSession } from "../src/voice/session.ts";
+import { suggestCorrection } from "../src/voice/corrections.ts";
 import type { AudioFrame, ChatBackend, ChatResult, SttEngine, SttResult, VoiceState } from "../src/voice/session.ts";
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -551,4 +552,39 @@ test("frase incompleta sem continuação é enviada depois da espera", async () 
   t.frames(0.003, 700); // espera (600 ms) passa sem fala
   await flush();
   assert.deepEqual(t.chat.sends.map((x) => x.text), ["abre a lista e"]);
+});
+
+// ---------- Etapa 6: aprendizado explícito ----------
+
+test("sugere guardar uma correção curta feita pelo usuário", () => {
+  assert.deepEqual(suggestCorrection("a bia lista de tarefas", "abre a lista de tarefas"), { heard: "a bia", meant: "abre a" });
+  assert.deepEqual(suggestCorrection("desligue a luz", "Titan, desligue a luz"), null); // só acrescentou: nada a trocar
+  assert.deepEqual(suggestCorrection("liga o modo de vós", "liga o modo de voz."), { heard: "vós", meant: "voz" });
+  assert.equal(suggestCorrection("abre a lista", "Abre a lista!"), null); // só maiúscula/pontuação
+  assert.equal(suggestCorrection("um dois três quatro cinco seis", "sete oito nove dez onze doze"), null); // reescrita
+});
+
+test("modo revisão: editar o texto sugere a correção, e o dicionário aplicado aparece na tela", async () => {
+  let now = 0;
+  const mic = new FakeMic(), stt = new OverlapStt(), chat = new FakeChat();
+  const notices: string[] = [], suggestions: unknown[] = [];
+  stt.results = [{ text: "a bia lista de tarefas", corrections: [] }, { text: "liga o modo de voz", corrections: ["vós → voz"] }];
+  const s = new VoiceSession(
+    { mic, stt, tts: null, chat, now: () => now, newId: () => `u${now}`, sleep: async () => {} },
+    { onNotice: (x) => notices.push(x), onCorrectionSuggested: (x) => suggestions.push(x) },
+    { confirmBeforeSend: true, ttsEnabled: false, vad: { silenceEndMs: 600 } },
+  );
+  const frames = (rms: number, ms: number) => { for (let t = 0; t < ms; t += 20) { now += 20; mic.onFrame?.({ rms, pcm16: tone(rms), durationMs: 20 }); } };
+  await s.start();
+  frames(0.003, 600); frames(0.3, 600); frames(0.003, 700);
+  await stt.finishNext();
+  await flush();
+  assert.equal(s.state, "review");
+  s.confirm("abre a lista de tarefas");
+  assert.deepEqual(suggestions, [{ heard: "a bia", meant: "abre a" }]);
+  await flush();
+  frames(0.003, 600); frames(0.3, 600); frames(0.003, 700);
+  await stt.finishNext();
+  await flush();
+  assert.ok(notices.some((n) => n.includes("Corrigido pelo seu dicionário: vós → voz")));
 });

@@ -96,21 +96,23 @@ class AnthropicProvider:
             )
         return self._client
 
-    def _prepare(self, history: list[ChatTurn]):
+    def _prepare(self, history: list[ChatTurn], style: str = ""):
         messages = to_api_messages(history)
+        system = SYSTEM_PROMPT + (f"\n\n{style}" if style else "")
         if not messages:
             raise ModelUnavailable("Nenhuma mensagem do usuário para enviar.")
         max_out = self.settings.model_max_output_tokens
         try:
             reservation = self.budget.reserve(
-                "anthropic", self.model, estimate_input_tokens(messages), max_out
+                "anthropic", self.model, estimate_input_tokens(messages) + len(style) // CHARS_PER_TOKEN,
+                max_out
             )
         except BudgetExceeded as exc:
             raise ProviderBlocked(str(exc)) from exc
         params: dict[str, Any] = dict(
             model=self.model,
             max_tokens=max_out,
-            system=SYSTEM_PROMPT,
+            system=system,
             messages=messages,
             output_config={"effort": self.settings.model_effort},
         )
@@ -151,8 +153,8 @@ class AnthropicProvider:
             )
         return ModelReply(content=text, provider="anthropic", model=served_by)
 
-    def chat(self, history: list[ChatTurn]) -> ModelReply:
-        reservation, params = self._prepare(history)
+    def chat(self, history: list[ChatTurn], style: str = "") -> ModelReply:
+        reservation, params = self._prepare(history, style)
         client = self._get_client()
         started = time.monotonic()
         try:
@@ -162,13 +164,13 @@ class AnthropicProvider:
             self._handle_error(exc, reservation)  # registra e levanta ModelUnavailable
         return self._finish(response, reservation, started)
 
-    def chat_stream(self, history: list[ChatTurn]) -> Iterator[tuple[str, Any]]:
+    def chat_stream(self, history: list[ChatTurn], style: str = "") -> Iterator[tuple[str, Any]]:
         """Gera ("delta", texto) à medida que chega e, no fim, ("done", ModelReply).
 
         Se o consumidor fechar o gerador (usuário interrompeu), a conexão com a API é
         encerrada e a reserva do orçamento fica contada como gasto (conservador).
         """
-        reservation, params = self._prepare(history)
+        reservation, params = self._prepare(history, style)
         client = self._get_client()
         started = time.monotonic()
         finished = False

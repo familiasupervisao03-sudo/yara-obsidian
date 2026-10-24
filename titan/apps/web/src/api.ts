@@ -7,6 +7,7 @@ import type {
   ExecutionItem,
   ApprovalItem,
   MessagePostResult,
+  Preferences,
   SessionInfo,
   SettingsView,
   StepInput,
@@ -78,6 +79,10 @@ export const api = {
       content,
       client_request_id: requestId,
     }),
+  // preferências
+  preferences: () => request<Preferences>("GET", "/api/v1/preferences"),
+  savePreferences: (p: Preferences) => request<Preferences>("PUT", "/api/v1/preferences", p),
+  deletePreferences: () => request<void>("DELETE", "/api/v1/preferences"),
   // tarefas
   catalog: () => request<{ actions: ActionInfo[]; criteria_types: string[] }>("GET", "/api/v1/tasks/catalog"),
   tasks: () => request<{ items: TaskSummary[] }>("GET", "/api/v1/tasks"),

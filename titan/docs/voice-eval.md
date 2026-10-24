@@ -160,3 +160,25 @@ só porque outra pessoa pode estar presente. Também não serviria como autentic
 (uma gravação da voz engana). O que mais reduz vozes de fundo é **microfone perto da
 boca** (headset/lapela). Se no futuro houver gravações reais voluntárias do dono,
 dá para medir de novo com o mesmo script antes de decidir.
+
+## Etapas 5 e 6 — voz natural e adaptação (sem chamadas extras)
+
+- **Modo voz** (`mode: "voice"` na mensagem): o servidor acrescenta ao prompt do
+  sistema uma instrução fixa de resposta falada — frases curtas, sem markdown,
+  listas ou links, números e valores por extenso, oferecer detalhes em vez de
+  despejar tudo. Mensagens de texto continuam iguais (testado).
+- **Preferências explícitas** (Sistema › Preferências; `GET/PUT/DELETE
+  /api/v1/preferences`): tamanho das respostas, tom, exemplos e velocidade da voz
+  (-30% a +30%, aplicada na voz on-line e no Piper). São **opções fechadas** que
+  viram frases fixas: nenhum texto livre de preferência chega ao prompt, e nada
+  disso altera permissões, aprovações ou regras. Por usuário; apagar remove tudo;
+  a auditoria registra a mudança sem o conteúdo das correções.
+- **Dicionário de correções da fala**: quando você corrige o texto no modo revisão,
+  o TITAN sugere "Lembrar: quando eu entender X, usar Y?" e só guarda se você
+  aceitar. As trocas valem só para a sua fala, só palavras inteiras, e a tela
+  avisa sempre que uma correção foi aplicada (nada é reescrito em silêncio).
+- Não foram feitas chamadas à Anthropic nem à Microsoft para avaliar se o modelo
+  segue o estilo: os testes verificam que a instrução certa é enviada (e só ela),
+  não a qualidade da resposta. Isso só dá para observar no uso real.
+- Nada é inferido em silêncio (sem perfil psicológico, emoções ou intenções); o
+  "aprendizado" é o que você escolhe ou confirma.

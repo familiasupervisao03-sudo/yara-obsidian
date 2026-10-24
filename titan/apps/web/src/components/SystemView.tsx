@@ -1,4 +1,5 @@
 import type { SettingsView, SystemStatus } from "@titan/api-contracts";
+import { PreferencesPanel } from "./PreferencesPanel";
 
 const STATE_LABEL: Record<string, string> = {
   online: "ONLINE", offline: "OFFLINE", disabled: "DESATIVADO", unavailable: "INDISPONÍVEL", planned: "PLANEJADO",
@@ -45,6 +46,7 @@ export function SystemView({ status, settings, onRefresh }: {
           ))}
         </ul>
       </div>
+      <PreferencesPanel />
     </section>
   );
 }

@@ -241,6 +241,11 @@ button.action:hover:not(:disabled) { background: var(--surface-2); border-color:
 .voice-transcript .msg { max-width: 100%; }
 .partial { color: var(--muted); font-style: italic; margin: 0; }
 
+.suggestion { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap;
+  border-color: var(--accent-line); font-size: 0.9rem; }
+.corrections { list-style: none; margin: 0 0 0.6rem; padding: 0; display: grid; gap: 0.3rem; }
+.corrections li { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.9rem; }
+
 /* Tarefas */
 .task-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
 .list-item { display: grid; justify-items: start; justify-content: stretch; align-content: start; gap: 0.25rem; width: 100%; text-align: left; background: var(--surface); color: var(--text);
