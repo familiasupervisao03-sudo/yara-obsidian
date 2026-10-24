@@ -24,8 +24,10 @@ from titan.tasks.service import (
     create_task,
     current_steps,
     decide_approval,
+    find_by_idempotency_key,
     get_task,
     latest_execution,
+    list_tasks as service_list_tasks,
     request_cancel,
     resume,
     set_plan,
@@ -261,7 +263,11 @@ def create(body: TaskCreateIn, idempotency_key: Optional[str] = Header(
             idempotency_key, ctx.settings.approval_ttl_hours)
     except TaskError as exc:
         db.rollback()
-        return _error(exc)
+        task = (find_by_idempotency_key(db, cu.user.id, idempotency_key)
+                if exc.code == "duplicate" and idempotency_key else None)
+        if task is None:
+            return _error(exc)
+        duplicate = True  # corrida: outro pedido com a mesma chave gravou antes
     detail = _detail(db, task)
     return JSONResponse(detail.model_dump(mode="json"), status_code=200 if duplicate else 201)
 
@@ -269,9 +275,7 @@ def create(body: TaskCreateIn, idempotency_key: Optional[str] = Header(
 @router.get("/tasks", response_model=TaskList)
 def list_tasks(limit: int = Query(50, ge=1, le=200), cu: CurrentUser = Depends(current_user),
                db: DBSession = Depends(get_db)) -> TaskList:
-    rows = db.scalars(select(Task).where(Task.user_id == cu.user.id)
-                      .order_by(Task.updated_at.desc()).limit(limit))
-    return TaskList(items=[_task_out(t) for t in rows])
+    return TaskList(items=[_task_out(t) for t in service_list_tasks(db, cu.user.id, limit)])
 
 
 @router.get("/tasks/{task_id}", response_model=TaskDetail, responses=ERR)

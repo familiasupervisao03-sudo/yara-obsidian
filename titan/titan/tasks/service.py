@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
 
 from titan.audit import log as audit
@@ -25,7 +26,7 @@ from titan.tasks.actions import ACTIONS, PlanValidationError, validate_step
 class TaskError(Exception):
     def __init__(self, message: str, code: str = "conflict") -> None:
         super().__init__(message)
-        self.code = code  # conflict | invalid | not_found | needs_confirmation
+        self.code = code  # conflict | invalid | not_found | needs_confirmation | duplicate
 
 
 def _canonical(obj: Any) -> str:
@@ -75,6 +76,16 @@ def get_task(db: DBSession, user_id: uuid.UUID, task_id: uuid.UUID) -> Task:
     return task
 
 
+def list_tasks(db: DBSession, user_id: uuid.UUID, limit: int = 50) -> list[Task]:
+    """Tarefas do usuário, mais recentes primeiro. Nunca inclui tarefas de outros."""
+    return list(db.scalars(select(Task).where(Task.user_id == user_id)
+                           .order_by(Task.updated_at.desc()).limit(limit)))
+
+
+def find_by_idempotency_key(db: DBSession, user_id: uuid.UUID, key: str) -> Optional[Task]:
+    return db.scalar(select(Task).where(Task.user_id == user_id, Task.idempotency_key == key))
+
+
 def current_steps(db: DBSession, task: Task) -> list[TaskStep]:
     return list(db.scalars(
         select(TaskStep)
@@ -95,15 +106,29 @@ def latest_execution(db: DBSession, step: TaskStep) -> Optional[Execution]:
 def create_task(db: DBSession, user_id: uuid.UUID, title: str, description: str,
                 steps: Optional[list[dict[str, Any]]], idempotency_key: Optional[str],
                 approval_ttl_hours: int) -> tuple[Task, bool]:
+    """Cria a tarefa do usuário. Com ``idempotency_key``, um reenvio devolve a original.
+
+    Se outro pedido com a mesma chave gravar entre a consulta e a inserção
+    (corrida), a restrição ``uq_tasks_idempotency`` dispara e é levantado
+    ``TaskError(code="duplicate")``. Nada desta chamada fica gravado; quem chama
+    desfaz a transação e busca a original com ``find_by_idempotency_key``.
+    (Não se usa savepoint: com o driver SQLite atual, liberar um savepoint
+    efetiva a escrita e quebraria a atomicidade da transação externa.)
+    """
     if idempotency_key:
-        existing = db.scalar(select(Task).where(Task.user_id == user_id,
-                                                Task.idempotency_key == idempotency_key))
+        existing = find_by_idempotency_key(db, user_id, idempotency_key)
         if existing is not None:
             return existing, True
     task = Task(user_id=user_id, title=title, request=description, status=S.RECEIVED,
                 plan_version=0, idempotency_key=idempotency_key)
     db.add(task)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        if not idempotency_key:
+            raise
+        raise TaskError("Já existe uma tarefa com esta chave de idempotência.",
+                        "duplicate") from exc
     audit.record(db, "task.created", actor_type="user", actor_id=user_id, task_id=task.id,
                  entity_type="task", entity_id=str(task.id),
                  data={"title": title, "description_length": len(description)})
