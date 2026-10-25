@@ -1,7 +1,7 @@
 // Ícones próprios em SVG (traço de 1.75px, herdam a cor do texto). Sem bibliotecas externas.
 import type { ReactNode } from "react";
 
-export type IconName = "home" | "chat" | "mic" | "tasks" | "system" | "history" | "plus" | "list" | "logout";
+export type IconName = "home" | "chat" | "mic" | "tasks" | "system" | "history" | "plus" | "list" | "logout" | "globe";
 
 const PATHS: Record<IconName, ReactNode> = {
   home: <><path d="M4 11.5 12 5l8 6.5" /><path d="M6.5 10v8.5h11V10" /></>,
@@ -12,6 +12,7 @@ const PATHS: Record<IconName, ReactNode> = {
   history: <><path d="M5 12a7 7 0 1 0 2.1-5" /><path d="M5 5v3.5h3.5M12 8.5V12l2.5 1.5" /></>,
   plus: <path d="M12 6v12M6 12h12" />,
   list: <path d="M5 7h14M5 12h14M5 17h14" />,
+  globe: <><circle cx="12" cy="12" r="7.5" /><path d="M4.5 12h15M12 4.5c2.2 2.2 3.2 4.7 3.2 7.5s-1 5.3-3.2 7.5c-2.2-2.2-3.2-4.7-3.2-7.5s1-5.3 3.2-7.5z" /></>,
   logout: <><path d="M10 5H6v14h4" /><path d="M14 8.5 17.5 12 14 15.5M17.5 12H9.5" /></>,
 };
 

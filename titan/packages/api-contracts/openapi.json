@@ -672,6 +672,17 @@
             ],
             "title": "Mode",
             "type": "string"
+          },
+          "web": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web"
           }
         },
         "required": [

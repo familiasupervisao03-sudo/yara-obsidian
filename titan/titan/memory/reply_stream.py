@@ -29,7 +29,9 @@ Emit = Callable[[str, dict[str, Any]], None]
 
 def run_reply_stream(session_factory: sessionmaker[DBSession], conversation_id: uuid.UUID,
                      provider: Any, turns: list[ChatTurn], emit: Emit,
-                     cancel: threading.Event, style: str = "") -> None:
+                     cancel: threading.Event, style: str = "", footer: str = "") -> None:
+    """``footer``: texto fixo acrescentado à resposta completa salva (ex.: lista de fontes);
+    não é enviado como pedaço, para não ser falado no modo voz."""
     parts: list[str] = []
     inner = stream_reply(provider, turns, style)
     started = time.monotonic()
@@ -48,10 +50,10 @@ def run_reply_stream(session_factory: sessionmaker[DBSession], conversation_id: 
                 parts.append(payload)
                 emit("delta", {"text": payload})
             elif kind == "done":
-                saved = _save(session_factory, conversation_id, payload.content, provider,
-                              status="complete", model_name=payload.model,
+                saved = _save(session_factory, conversation_id, payload.content.strip() + footer,
+                              provider, status="complete", model_name=payload.model,
                               provider_name=payload.provider)
-                emit("done", {"message": saved, "metrics": {
+                emit("done", {"message": saved, "footer_chars": len(footer), "metrics": {
                     "first_delta_ms": first_delta_ms,
                     "total_ms": int((time.monotonic() - started) * 1000)}})
                 return

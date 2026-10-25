@@ -36,6 +36,7 @@ Início automático (avaliação): [`docs/autostart.md`](docs/autostart.md).
 - [`docs/voice.md`](docs/voice.md) — modo de voz, privacidade e medições
 - [`docs/voice-eval.md`](docs/voice-eval.md) — avaliação reproduzível da voz
 - [`docs/simulacao.md`](docs/simulacao.md) — simulação contínua (`titan simular`) e parada segura
+- [`docs/pesquisa-internet.md`](docs/pesquisa-internet.md) — pesquisa na internet (desligada por padrão), SearXNG local e proteções
 - [`docs/mobile.md`](docs/mobile.md) — acesso pelo celular (HTTPS local)
 - [`docs/backup.md`](docs/backup.md) — backup e recuperação
 - [`docs/sandbox.md`](docs/sandbox.md) — preparação do laboratório isolado

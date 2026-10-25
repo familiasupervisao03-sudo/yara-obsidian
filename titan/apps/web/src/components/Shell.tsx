@@ -82,7 +82,8 @@ export function Shell({ session, onLogout, onExpired }: {
     }
   };
 
-  const hybrid = status?.external_provider_active;
+  const hybrid = status?.external_provider_active
+    || status?.services.some((s) => s.name === "internet" && s.state === "online");
 
   return (
     <div className="app">

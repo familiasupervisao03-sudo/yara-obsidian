@@ -12,6 +12,7 @@ from sqlalchemy import Engine
 from titan.audit.log import ChainMonitor
 from titan.auth.service import AuthService
 from titan.tasks.runner import TaskRunner
+from titan.tools.web.research import WebResearcher
 from titan.voice.engines import VoiceService
 from titan.config.settings import Settings
 from titan.db.models import Session, User
@@ -28,6 +29,7 @@ class AppContext:
     runner: "TaskRunner"
     voice: "VoiceService"
     audit_monitor: ChainMonitor = field(default_factory=ChainMonitor)
+    web: "WebResearcher | None" = None
 
 
 def get_ctx(request: Request) -> AppContext:

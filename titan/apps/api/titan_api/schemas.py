@@ -94,6 +94,9 @@ class MessageCreate(BaseModel):
     )
     # "voice": a resposta será falada (curta, sem markdown, números por extenso).
     mode: Literal["text", "voice"] = "text"
+    # Pesquisa na internet: true = pesquisar; false = nunca; ausente = só se o texto pedir
+    # explicitamente ("pesquisa na internet ..."). Só funciona com TITAN_WEB_ENABLED=true.
+    web: Optional[bool] = None
 
 
 class ModelStatus(BaseModel):

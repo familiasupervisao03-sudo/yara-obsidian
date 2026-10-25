@@ -231,6 +231,81 @@ def cmd_disable_online_voice(args: argparse.Namespace) -> int:
     return 0
 
 
+WEB_WARNING = """
+Pesquisa na internet do TITAN (gratuita)
+  * Quando você pedir ("pesquisa na internet ..." ou o botão Internet no chat),
+    o TEXTO da pesquisa sai do notebook para a fonte de busca (Wikipédia ou o seu
+    SearXNG local) e o TITAN baixa as páginas encontradas. Nada é pesquisado sem
+    o seu pedido. Senhas, cookies e chaves nunca são enviados aos sites.
+  * O conteúdo das páginas vai para a IA junto com a sua pergunta (com a Anthropic
+    ligada, isso usa mais tokens do seu orçamento diário, que continua valendo).
+  * Páginas da internet podem conter erros ou tentativas de enganar a IA: o TITAN
+    as trata como conteúdo não confiável e mostra as fontes para você conferir.
+  * Para desligar depois: .venv/bin/titan disable-web
+"""
+
+
+def cmd_enable_web(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from titan.envfile import update_env
+
+    env_path = Path(args.env_file)
+    if not env_path.exists():
+        print(f"{env_path} não existe. Rode primeiro scripts/setup.sh.", file=sys.stderr)
+        return 1
+    print(WEB_WARNING)
+    searx = (args.searxng or "").strip()
+    print("Fonte de busca: " + (f"SearXNG local em {searx}" if searx else
+                                "Wikipédia em português (para busca geral, instale o SearXNG: "
+                                "docs/pesquisa-internet.md)"))
+    if _ask("Digite AUTORIZO para confirmar").strip().upper() != "AUTORIZO":
+        print("Não confirmado. Nada foi alterado.")
+        return 1
+    updates = {"TITAN_WEB_ENABLED": "true", "TITAN_LOCAL_ONLY": "false"}
+    if args.searxng is not None:
+        updates["TITAN_WEB_SEARXNG_URL"] = searx
+    backup = update_env(env_path, updates)
+    print(f"\nPesquisa na internet ligada. .env atualizado; cópia anterior: {backup}")
+    print("Teste no terminal:  .venv/bin/titan pesquisar \"Curitiba\"")
+    print("Reinicie o servidor para aplicar:  .venv/bin/titan serve")
+    return 0
+
+
+def cmd_disable_web(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from titan.envfile import update_env
+
+    env_path = Path(args.env_file)
+    if not env_path.exists():
+        print(f"{env_path} não existe.", file=sys.stderr)
+        return 1
+    update_env(env_path, {"TITAN_WEB_ENABLED": "false"})
+    print("Pesquisa na internet desligada. Reinicie o servidor para aplicar.")
+    return 0
+
+
+def cmd_web_search(args: argparse.Namespace) -> int:
+    from titan.tools.web.research import RateLimited, WebDisabled, WebResearcher
+
+    try:
+        res = WebResearcher(_settings()).research(" ".join(args.texto))
+    except (WebDisabled, RateLimited) as exc:
+        print(f"{exc}\nPara ligar: .venv/bin/titan enable-web", file=sys.stderr)
+        return 1
+    print(f"Pesquisa: {res.query}  (fonte: {res.provider}, {res.elapsed_ms} ms)")
+    for n in res.notes:
+        print(f"  aviso: {n}")
+    if not res.sources:
+        print("Nenhuma fonte encontrada.")
+        return 1
+    for src in res.sources:
+        preview = " ".join(src.text.split())[:240]
+        print(f"\n[{src.n}] {src.title}\n    {src.url}\n    {preview}…")
+    return 0
+
+
 def cmd_simulate(args: argparse.Namespace) -> int:
     from titan.sim.runner import Runner
 
@@ -281,6 +356,7 @@ def cmd_disable_external(args: argparse.Namespace) -> int:
         "TITAN_DAILY_PAID_BUDGET_BRL": "0",
         "TITAN_VOICE_TTS": "piper",
         "TITAN_ALLOW_EXTERNAL_VOICE": "false",
+        "TITAN_WEB_ENABLED": "false",
     }
     if not args.keep_key:
         updates["ANTHROPIC_API_KEY"] = None  # remove a linha
@@ -483,6 +559,16 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("disable-online-voice", help="volta para a voz local (Piper)")
     p.add_argument("--env-file", default=".env")
     p.set_defaults(fn=cmd_disable_online_voice)
+    p = sub.add_parser("enable-web", help="liga a pesquisa na internet (a pergunta sai do notebook)")
+    p.add_argument("--env-file", default=".env")
+    p.add_argument("--searxng", help="endereço do SearXNG local, ex.: http://127.0.0.1:8888")
+    p.set_defaults(fn=cmd_enable_web)
+    p = sub.add_parser("disable-web", help="desliga a pesquisa na internet")
+    p.add_argument("--env-file", default=".env")
+    p.set_defaults(fn=cmd_disable_web)
+    p = sub.add_parser("pesquisar", help="testa a pesquisa na internet no terminal")
+    p.add_argument("texto", nargs="+")
+    p.set_defaults(fn=cmd_web_search)
     p = sub.add_parser("simular", help="simulação contínua numa cópia isolada (pare com Ctrl+C ou parar-simulacao)")
     p.add_argument("--minutos", type=float, default=3, help="duração da rodada de uso prolongado")
     p.add_argument("--pausa", type=float, default=10, help="segundos entre rodadas")

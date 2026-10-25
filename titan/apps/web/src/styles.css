@@ -208,6 +208,15 @@ button.action:hover:not(:disabled) { background: var(--surface-2); border-color:
   background: var(--bg); padding-bottom: max(0.55rem, env(safe-area-inset-bottom)); }
 .composer textarea { min-height: var(--tap); max-height: 30dvh; resize: none; border-radius: 12px; padding: 0.5rem 0.8rem; }
 .composer button { border-radius: 12px; }
+.web-toggle { display: inline-flex; align-items: center; gap: 0.35rem; }
+.web-toggle.on { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+@media (max-width: 480px) { .web-label { display: none; } }
+.research { margin: 0.2rem 0 0; color: var(--muted); font-family: var(--mono); }
+.research.warn { color: var(--warn); }
+.sources { margin: 0.5rem 0 0; padding: 0.45rem 0 0; border-top: 1px solid var(--line); list-style: none;
+  display: grid; gap: 0.2rem; font-size: 0.85rem; }
+.sources a { color: var(--accent); overflow-wrap: anywhere; }
+.src-n, .src-site { color: var(--muted); font-family: var(--mono); font-size: 0.78rem; }
 @media (min-width: 900px) {
   .chat-view { margin: -20px -28px; }
   .chat-header, .composer { padding-left: 28px; padding-right: 28px; }

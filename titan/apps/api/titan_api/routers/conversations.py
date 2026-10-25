@@ -21,6 +21,7 @@ from titan.memory.reply_stream import run_reply_stream
 from titan.memory.style import build_style
 from titan.models.providers import ChatTurn, ModelUnavailable, get_provider
 from titan.policies.model_gate import ProviderBlocked
+from titan.tools.web import research as web
 from titan_api.deps import AppContext, CurrentUser, current_user, get_ctx, get_db
 from titan_api.schemas import (
     ConversationCreate,
@@ -138,9 +139,11 @@ def post_message(
                          data={"provider": provider.info.name, "paid": provider.info.paid,
                                "messages_sent": len(turns)})
             db.commit()
-        reply = provider.chat(turns, style=build_style(body.mode, user_prefs.get(db, cu.user.id)))
+        style = build_style(body.mode, user_prefs.get(db, cu.user.id))
+        turns, style, footer = with_research(ctx, cu, body, turns, style, lambda *_: None)
+        reply = provider.chat(turns, style=style)
         reply_msg = repo.add_message(
-            db, conv, "assistant", reply.content,
+            db, conv, "assistant", reply.content.strip() + footer,
             model_provider=reply.provider, model_name=reply.model,
         )
         audit.record(db, "model.reply", actor_type="model", entity_type="message",
@@ -217,8 +220,11 @@ async def post_message_stream(
 
         def worker() -> None:
             try:
-                run_reply_stream(ctx.session_factory, conversation_id, provider, turns, emit,
-                                 cancel, style)
+                t, st, footer = with_research(ctx, cu, body, turns, style, emit)
+                if cancel.is_set():
+                    return
+                run_reply_stream(ctx.session_factory, conversation_id, provider, t, emit,
+                                 cancel, st, footer)
             finally:
                 emit("_end", {})
 
@@ -236,6 +242,49 @@ async def post_message_stream(
 
     return StreamingResponse(stream(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
+def with_research(ctx: AppContext, cu: CurrentUser, body: MessageCreate, turns: list[ChatTurn],
+                  style: str, emit) -> tuple[list[ChatTurn], str, str]:
+    """Pesquisa na internet, se pedida: devolve (turnos, estilo, rodapé com as fontes).
+
+    As fontes entram na ÚLTIMA mensagem do usuário (dados não confiáveis), nunca no
+    prompt do sistema; o estilo recebe só instruções fixas do TITAN.
+    """
+    wanted = body.web is True or (body.web is None and web.wants_web(body.content))
+    if not wanted or not turns or turns[-1].role != "user":
+        return turns, style, ""
+    sep = "\n\n" if style else ""
+    if not ctx.settings.web_enabled or ctx.web is None:
+        emit("research", {"status": "disabled"})
+        return turns, style + sep + (
+            "O usuário pediu uma pesquisa na internet, mas ela está desligada nas configurações "
+            "do TITAN (ligar com: titan enable-web). Diga isso e não finja ter pesquisado."), ""
+    emit("research", {"status": "searching", "query": web.make_query(body.content)})
+    try:
+        res = ctx.web.research(body.content, str(cu.user.id))
+    except web.RateLimited as exc:
+        emit("research", {"status": "limited", "detail": str(exc)})
+        return turns, style + sep + (
+            f"O usuário pediu uma pesquisa na internet, mas ela foi recusada: {exc} "
+            "Diga isso e não finja ter pesquisado."), ""
+    except Exception:
+        log.exception("Falha inesperada na pesquisa na internet")
+        emit("research", {"status": "failed"})
+        return turns, style + sep + (
+            "O usuário pediu uma pesquisa na internet, mas ela falhou por um erro interno. "
+            "Diga isso e não finja ter pesquisado."), ""
+    emit("research", {"status": "done", **res.public()})
+    with ctx.session_factory.begin() as db:
+        # Sem a pergunta nem o conteúdo das páginas: só o necessário para auditoria.
+        audit.record(db, "web.search", actor_type="user", actor_id=cu.user.id,
+                     entity_type="conversation", data={
+                         "provider": res.provider, "query_chars": len(res.query),
+                         "sources": len(res.sources), "sites": sorted({s.site for s in res.sources}),
+                         "cached": res.cached, "elapsed_ms": res.elapsed_ms})
+    last = turns[-1]
+    turns = turns[:-1] + [ChatTurn("user", last.content + web.sources_block(res))]
+    return turns, style + sep + web.style_for(res, body.mode == "voice"), web.sources_footer(res)
 
 
 def _style_for(ctx: AppContext, cu: CurrentUser, mode: str) -> str:

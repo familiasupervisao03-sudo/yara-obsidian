@@ -305,13 +305,28 @@ export class BrowserTts implements TtsEngine {
 
 // ---------- chat (streaming SSE via fetch) ----------
 
+/** Andamento da pesquisa na internet (evento "research" do servidor). */
+export interface ResearchEvent {
+  status: "searching" | "done" | "disabled" | "limited" | "failed";
+  query?: string;
+  detail?: string;
+  notes?: string[];
+  sources?: { n: number; title: string; url: string; site: string }[];
+}
+
 export class StreamingChat implements ChatBackend {
   conversationId: () => Promise<string>;
   /** "voice": o servidor pede ao modelo uma resposta para ser falada (curta, sem markdown). */
   mode: "text" | "voice";
-  constructor(conversationId: () => Promise<string>, mode: "text" | "voice" = "text") {
+  /** true: pesquisar na internet; undefined: só se o texto pedir ("pesquisa na internet ..."). */
+  web?: boolean;
+  onResearch?: (e: ResearchEvent) => void;
+  constructor(conversationId: () => Promise<string>, mode: "text" | "voice" = "text",
+              opts: { web?: boolean; onResearch?: (e: ResearchEvent) => void } = {}) {
     this.conversationId = conversationId;
     this.mode = mode;
+    this.web = opts.web;
+    this.onResearch = opts.onResearch;
   }
 
   async send(text: string, requestId: string, signal: AbortSignal,
@@ -320,7 +335,8 @@ export class StreamingChat implements ChatBackend {
     const r = await fetch(`/api/v1/conversations/${cid}/messages/stream`, {
       method: "POST", signal, credentials: "same-origin",
       headers: { ...CSRF, "Content-Type": "application/json" },
-      body: JSON.stringify({ content: text, client_request_id: requestId, mode: this.mode }),
+      body: JSON.stringify({ content: text, client_request_id: requestId, mode: this.mode,
+                             ...(this.web === undefined ? {} : { web: this.web }) }),
     });
     if (!r.ok || !r.body) {
       const msg = (await r.json().catch(() => null))?.error?.message ?? `HTTP ${r.status}`;
@@ -344,8 +360,13 @@ export class StreamingChat implements ChatBackend {
         if (event === "delta") {
           content += payload.text;
           onDelta(payload.text);
+        } else if (event === "research") {
+          this.onResearch?.(payload as ResearchEvent);
         } else if (event === "done") {
-          return { messageId: payload.message?.id ?? null, content: payload.message?.content ?? content };
+          // A lista de fontes no fim da mensagem salva não é parte da fala.
+          const full: string = payload.message?.content ?? content;
+          const cut = Number(payload.footer_chars) || 0;
+          return { messageId: payload.message?.id ?? null, content: cut ? full.slice(0, full.length - cut) : full };
         } else if (event === "error") {
           throw Object.assign(new Error(payload.detail), { fatal: true });
         } else if (event === "interrupted") {

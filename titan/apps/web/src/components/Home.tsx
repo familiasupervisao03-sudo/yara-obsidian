@@ -29,9 +29,12 @@ export function Home({ username, status, offline, pendingApprovals, onGo, onOpen
     api.conversations().then((l) => setRecent(l.items.slice(0, 4))).catch(onError);
   }, [onError]);
 
+  const web = status?.services.some((s) => s.name === "internet" && s.state === "online");
   const mode = status?.external_provider_active
     ? "Modo híbrido · as conversas são enviadas ao provedor de IA configurado"
-    : "Modo local · tudo fica no notebook";
+      + (web ? "; pesquisas que você pedir vão à internet" : "")
+    : web ? "Modo híbrido · só as pesquisas que você pedir vão à internet"
+      : "Modo local · tudo fica no notebook";
 
   return (
     <section className="home" aria-labelledby="home-title">

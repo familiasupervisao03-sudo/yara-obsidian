@@ -88,6 +88,18 @@ class Settings(BaseSettings):
     voice_edge_voice: str = "pt-BR-AntonioNeural"
     allow_external_voice: bool = False
 
+    # Pesquisa na internet (opcional; ver docs/pesquisa-internet.md). Desligada por padrão:
+    # a pergunta pesquisada sai do notebook para a fonte de busca e para os sites lidos.
+    web_enabled: bool = False
+    # SearXNG local (ex.: http://127.0.0.1:8888). Vazio: usa a API pública da Wikipédia.
+    web_searxng_url: str = ""
+    web_timeout_seconds: int = Field(default=10, ge=2, le=60)
+    web_max_page_bytes: int = Field(default=2_000_000, ge=50_000, le=10_000_000)
+    web_max_results: int = Field(default=5, ge=1, le=10)
+    web_max_pages: int = Field(default=3, ge=0, le=5)
+    web_max_searches_per_minute: int = Field(default=6, ge=1, le=60)
+    web_max_searches_per_day: int = Field(default=150, ge=1, le=5000)
+
     backup_dir: Path = Path("./backups")
     backup_keep: int = Field(default=7, ge=1, le=365)
     approval_ttl_hours: int = Field(default=24, ge=1, le=24 * 30)
@@ -224,6 +236,23 @@ class Settings(BaseSettings):
         if not re.fullmatch(r"[a-z]{2}-[A-Z]{2}-[A-Za-z]+Neural", self.voice_edge_voice):
             errors.append("TITAN_VOICE_EDGE_VOICE inválida (ex.: pt-BR-AntonioNeural).")
 
+        # Internet: só com autorização explícita (a pergunta sai do notebook).
+        if self.web_enabled and self.local_only:
+            errors.append("TITAN_WEB_ENABLED=true exige TITAN_LOCAL_ONLY=false "
+                          "(a pesquisa envia a pergunta à internet).")
+        if self.web_searxng_url:
+            from urllib.parse import urlsplit
+
+            u = urlsplit(self.web_searxng_url)
+            try:
+                loopback = ipaddress.ip_address(u.hostname or "").is_loopback
+            except ValueError:
+                loopback = u.hostname == "localhost"
+            if u.scheme not in ("http", "https") or not loopback or u.path not in ("", "/") \
+                    or u.query or u.username:
+                errors.append("TITAN_WEB_SEARXNG_URL deve ser o SearXNG no próprio notebook, "
+                              "ex.: http://127.0.0.1:8888")
+
         # Sandbox: rede dentro do sandbox exige decisão futura explícita.
         if self.sandbox_network:
             errors.append("TITAN_SANDBOX_NETWORK=true não é permitido nesta versão.")
@@ -310,6 +339,8 @@ class Settings(BaseSettings):
             "voice_tts": self.voice_tts,
             "voice_edge_voice": self.voice_edge_voice,
             "allow_external_voice": self.allow_external_voice,
+            "web_enabled": self.web_enabled,
+            "web_provider": ("searxng" if self.web_searxng_url else "wikipedia") if self.web_enabled else "none",
             "sandbox_enabled": self.sandbox_enabled,
             "sandbox_network": self.sandbox_network,
             "max_runtime_seconds": self.max_runtime_seconds,

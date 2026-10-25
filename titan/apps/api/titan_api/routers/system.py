@@ -70,6 +70,13 @@ def system_status(
             "TITAN_SANDBOX_ENABLED=true, mas o executor ainda não existe; execução bloqueada.",
         )
     )
+    if s.web_enabled:
+        services.append(ServiceStatus(name="internet", state="online", detail=(
+            "Pesquisa sob pedido via " + ("SearXNG local" if s.web_searxng_url else "Wikipédia")
+            + "; páginas tratadas como conteúdo não confiável.")))
+    else:
+        services.append(ServiceStatus(name="internet", state="disabled",
+                                      detail="Pesquisa na internet desligada (titan enable-web)."))
     services.append(ServiceStatus(name="orchestrator", state="online",
                                   detail="Tarefas, planos versionados e aprovações (Fase 2)."))
     chain_ok, _bad = ctx.audit_monitor.check(db)
