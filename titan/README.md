@@ -34,6 +34,8 @@ Início automático (avaliação): [`docs/autostart.md`](docs/autostart.md).
 - [`docs/api.md`](docs/api.md) — contratos da API e erros
 - [`docs/environment-audit.md`](docs/environment-audit.md) — Fase Zero
 - [`docs/voice.md`](docs/voice.md) — modo de voz, privacidade e medições
+- [`docs/voice-eval.md`](docs/voice-eval.md) — avaliação reproduzível da voz
+- [`docs/simulacao.md`](docs/simulacao.md) — simulação contínua (`titan simular`) e parada segura
 - [`docs/mobile.md`](docs/mobile.md) — acesso pelo celular (HTTPS local)
 - [`docs/backup.md`](docs/backup.md) — backup e recuperação
 - [`docs/sandbox.md`](docs/sandbox.md) — preparação do laboratório isolado

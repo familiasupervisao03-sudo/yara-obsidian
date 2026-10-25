@@ -231,6 +231,39 @@ def cmd_disable_online_voice(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_simulate(args: argparse.Namespace) -> int:
+    from titan.sim.runner import Runner
+
+    if args.repetir:
+        import tempfile
+        from pathlib import Path
+
+        from titan.sim.runner import NAMES
+
+        kind, _, seed = args.repetir.partition(":")
+        if kind not in NAMES or not seed.isdigit():
+            print(f"Use --repetir TIPO:SEMENTE (tipos: {', '.join(NAMES)}).", file=sys.stderr)
+            return 1
+        runner = Runner(minutes=args.minutos, quick=args.rapido)
+        with tempfile.TemporaryDirectory(prefix="titan-repetir-") as tmp:
+            runner.tmp = Path(tmp)
+            res = runner.run_one(kind, int(seed), Path(tmp))
+            if runner.server is not None:
+                runner.server.stop()
+        print(runner._entry(0, res))
+        return 0 if res.ok else 2
+    kinds = [k.strip() for k in args.tipos.split(",")] if args.tipos else None
+    return Runner(minutes=args.minutos, pause=args.pausa, max_rounds=args.max_rodadas, kinds=kinds,
+                  quick=args.rapido).run()
+
+
+def cmd_stop_simulation(_: argparse.Namespace) -> int:
+    from titan.sim.runner import request_stop
+
+    print(request_stop())
+    return 0
+
+
 def cmd_disable_external(args: argparse.Namespace) -> int:
     from pathlib import Path
 
@@ -450,6 +483,15 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("disable-online-voice", help="volta para a voz local (Piper)")
     p.add_argument("--env-file", default=".env")
     p.set_defaults(fn=cmd_disable_online_voice)
+    p = sub.add_parser("simular", help="simulação contínua numa cópia isolada (pare com Ctrl+C ou parar-simulacao)")
+    p.add_argument("--minutos", type=float, default=3, help="duração da rodada de uso prolongado")
+    p.add_argument("--pausa", type=float, default=10, help="segundos entre rodadas")
+    p.add_argument("--max-rodadas", type=int)
+    p.add_argument("--tipos", help="ex.: orcamento,uso,seguranca,falhas,voz")
+    p.add_argument("--rapido", action="store_true", help="rodadas curtas (teste)")
+    p.add_argument("--repetir", help="TIPO:SEMENTE — repete uma rodada do diário")
+    p.set_defaults(fn=cmd_simulate)
+    sub.add_parser("parar-simulacao", help="para a simulação depois da rodada atual").set_defaults(fn=cmd_stop_simulation)
     p = sub.add_parser("disable-external", help="desliga provedores externos (volta ao modo local)")
     p.add_argument("--env-file", default=".env")
     p.add_argument("--keep-key", action="store_true", help="mantém a chave no .env")

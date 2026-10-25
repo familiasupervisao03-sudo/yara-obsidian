@@ -139,7 +139,9 @@ def run(args: argparse.Namespace) -> dict:
 
     cmd = ["node", "--experimental-strip-types", "--no-warnings", str(HERE / "simulate.ts"),
            str(args.samples), str(out), str(args.transcribe_ms)] + ([str(args.vad)] if args.vad else [])
-    subprocess.run(cmd, check=True, cwd=ROOT)
+    # Sessão própria: um Ctrl+C no terminal não mata o simulador no meio (o modo
+    # contínuo termina a rodada antes de parar).
+    subprocess.run(cmd, check=True, cwd=ROOT, start_new_session=True)
     sim = json.loads((out / "simulation.json").read_text())
     labels = {s["file"].removesuffix(".wav"): s for s in labels_all}
     sessions = SttSessions(engine, 120)
