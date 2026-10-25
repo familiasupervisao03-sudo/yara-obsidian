@@ -90,7 +90,28 @@ Passaram em todas as rodadas: segurança (34 rotas, centenas de requisições
 malformadas, isolamento entre usuários, bloqueio por senha errada), falhas e
 recuperação (queda abrupta, banco travado, backup morto no meio) e voz.
 
-Correções propostas (precisam de aprovação, mexem no núcleo): garantir a trava de
-escrita do SQLite antes da trava da auditoria; gravar `last_seen_at` no máximo uma
-vez por minuto; verificar a auditoria de forma incremental (só os eventos novos).
-Depois, medir de novo com `titan simular --tipos uso`.
+### Correções aplicadas (25/10/2026) e nova medição
+
+1. `audit.record` pega a trava de escrita do SQLite **antes** da trava da cadeia
+   (sempre a mesma ordem) — `test_audit_lock_order_does_not_deadlock` reproduzia o
+   travamento de 15 s antes e passa em 0,7 s depois.
+2. `last_seen_at` é gravado no máximo **uma vez por minuto** (leituras deixam de
+   ser escritas) — `test_last_seen_is_written_at_most_once_per_minute`.
+3. A tela de estado confere a auditoria de forma **incremental** (só eventos novos,
+   mais o último já conferido; a cadeia inteira a cada 10 min) e a verificação
+   completa lê só as colunas, em blocos — `test_chain_monitor_checks_only_new_events_and_still_catches_tampering`.
+   `titan audit-verify` continua conferindo tudo.
+
+Mesmas 4 rodadas seguidas de uso prolongado, com voz em uso nos dois casos:
+
+| | Antes | Depois |
+|---|---|---|
+| Ações que falharam | 6–9 por rodada | 0 |
+| Erros no log do servidor | dezenas (`database is locked`) | 0 |
+| Streaming p95 | até 14.785 ms | 62–73 ms |
+| Memória do servidor (~9 min) | 233 → 587 → 639 → 706 → 744 MB | 242 → 442 → 504 → 525 → 531 MB |
+
+Com voz, a memória agora estabiliza (+200, +54, +10, +3,5 MB por rodada); os
+~180 MB iniciais são o modelo Vosk. **Sem voz, ainda sobe devagar** (102 → 170 MB em
+8 min, ~20 MB por rodada) — pode ser só o crescimento dos dados (conversas mais
+longas), não confirmado. Uma sessão longa no notebook mostra a tendência no resumo.

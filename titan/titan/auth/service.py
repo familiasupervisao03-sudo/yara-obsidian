@@ -22,6 +22,8 @@ from titan.auth.passwords import (
 )
 from titan.db.models import Session, User, utcnow
 
+LAST_SEEN_EVERY = timedelta(minutes=1)
+
 
 class AuthError(Exception):
     pass
@@ -140,7 +142,10 @@ class AuthService:
         user = db.get(User, session.user_id)
         if user is None or not user.is_active:
             return None
-        session.last_seen_at = now
+        # No máximo uma gravação por minuto: antes, TODA requisição (até leituras) gravava
+        # aqui e disputava a trava do banco sob uso simultâneo (simulação contínua).
+        if session.last_seen_at is None or now - session.last_seen_at >= LAST_SEEN_EVERY:
+            session.last_seen_at = now
         return session, user
 
     @staticmethod

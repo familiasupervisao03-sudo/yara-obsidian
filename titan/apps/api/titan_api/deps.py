@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session as DBSession, sessionmaker
 from sqlalchemy import Engine
 
+from titan.audit.log import ChainMonitor
 from titan.auth.service import AuthService
 from titan.tasks.runner import TaskRunner
 from titan.voice.engines import VoiceService
@@ -26,6 +27,7 @@ class AppContext:
     auth: AuthService
     runner: "TaskRunner"
     voice: "VoiceService"
+    audit_monitor: ChainMonitor = field(default_factory=ChainMonitor)
 
 
 def get_ctx(request: Request) -> AppContext:

@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session as DBSession
 
 from titan import PHASE, __version__
-from titan.audit.log import verify_chain
 from titan.config.settings import EXTERNAL_PAID_PROVIDERS
 from titan.policies.budget import BudgetGuard
 from titan.db.engine import ping
@@ -73,7 +72,7 @@ def system_status(
     )
     services.append(ServiceStatus(name="orchestrator", state="online",
                                   detail="Tarefas, planos versionados e aprovações (Fase 2)."))
-    chain_ok, _bad = verify_chain(db)
+    chain_ok, _bad = ctx.audit_monitor.check(db)
     return SystemStatusOut(
         version=__version__,
         phase=PHASE,
