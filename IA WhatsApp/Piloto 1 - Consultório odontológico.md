@@ -1,4 +1,4 @@
-# TITAN — Piloto no consultório da mãe
+# IA WhatsApp — Piloto 1: consultório odontológico (mãe)
 
 Criado em 25/10/2026. Status: **regras principais decididas em 25/10; faltam detalhes (ver "Perguntas da rodada 2").**
 

@@ -1,4 +1,4 @@
-# TITAN — Plano: atendente de WhatsApp para pequenos negócios
+# IA WhatsApp — Plano de negócio
 
 Criado em 25/10/2026. Status: **antes de programar — fase de entrevistas.**
 
