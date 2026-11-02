@@ -3,6 +3,7 @@
 Criado em 27/10/2026. Marque [x] conforme for fazendo. "Eu" = Claude; "Você" = Luiz.
 
 ## Parte 1 — Ficha real do consultório (você + sua mãe) · grátis · ~1 h
+**Questionário para preencher pelo celular:** https://claude.ai/artifact/B1fKVai9KsD4otH33JEQgs (compartilhar com a sua mãe pelo menu Compartilhar; salva sozinho).
 - [ ] Preço de cada procedimento (ou "depende da avaliação")
 - [ ] Duração de: primeira consulta, retorno, manutenção de aparelho
 - [ ] Nome da doutora e nome do consultório
@@ -46,6 +47,10 @@ Criado em 27/10/2026. Marque [x] conforme for fazendo. "Eu" = Claude; "Você" = 
 - [ ] Conectar o número do consultório (se for WhatsApp Business, dá para manter o app no celular junto — a confirmar no Brasil)
 - [ ] Criar a senha da agenda da sua mãe
 - [ ] Piloto de 2 semanas: a doutora aprova tudo; vocês me contam os problemas
+
+## Teste de carga (feito em 02/11/2026)
+- 200 pacientes ao mesmo tempo, ~620 mensagens: 0 erros, 0 horários duplicados, 0 vazamentos, 0 falhas perigosas.
+- ~10 ms por mensagem sozinha; com 200 no mesmo segundo, fila de 1–4 s.
 
 ## Parte 7 — Treino contínuo (toda semana, ~15 min)
 - [ ] Rodar `colher` (conversas da semana, sem nome e telefone)
