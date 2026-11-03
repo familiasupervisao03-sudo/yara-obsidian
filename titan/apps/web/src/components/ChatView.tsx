@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import type { Conversation, Message } from "@titan/api-contracts";
+import type { Conversation, Lesson, Message } from "@titan/api-contracts";
 import { api, newRequestId } from "../api";
 import { StreamingChat, type ResearchEvent } from "../voice/browser";
 import { Icon } from "./icons";
+import { LessonPlayer } from "./LessonPlayer";
+
+const LESSON_MARKER = "▶ Vídeo-aula: ";
+// Mesmo critério do servidor (titan/lessons/script.py): pedido explícito de vídeo-aula.
+const LESSON_REQUEST = new RegExp(
+  "(?:^|[^\\p{L}])(?:v[íi]deo[\\s-]?aula|aula\\s+(?:animada|em\\s+v[íi]deo)|" +
+  "(?:explic|ensin|mostr)\\p{L}*(?:\\s+\\S+){0,6}?\\s+em\\s+(?:um\\s+)?v[íi]deo|" +
+  "(?:fa[zç]|cri|mont|gera)\\p{L}*\\s+(?:uma?\\s+)?(?:v[íi]deo|aula)(?:\\s+explicativ[oa])?\\s+(?:sobre|de|explicando))",
+  "iu");
+export const wantsLesson = (text: string) => LESSON_REQUEST.test(text);
 
 interface Pending {
   text: string;
@@ -26,6 +36,8 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
   const [webEnabled, setWebEnabled] = useState(false);
   const [webOn, setWebOn] = useState(false);
   const [research, setResearch] = useState<ResearchEvent | null>(null);
+  const [lesson, setLesson] = useState<{ lesson: Lesson; conversationId: string } | null>(null);
+  const [preparing, setPreparing] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -99,12 +111,40 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
     }
   }
 
-  function submit(e: FormEvent) {
+  async function sendLesson(text: string) {
+    setNotice(null);
+    setPreparing(true);
+    try {
+      const cid = await ensureConversation(text);
+      const r = await api.createLesson(cid, text, newRequestId(), webOn ? true : undefined);
+      if (r.lesson) setLesson({ lesson: r.lesson, conversationId: cid });
+      else setNotice(r.model.detail);
+      const c = await api.conversation(cid).catch(() => null);
+      if (c) setMessages(c.messages);
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setPreparing(false);
+    }
+  }
+
+  async function openLesson(messageId: string) {
+    if (!conversationId) return;
+    try {
+      const r = await api.lesson(messageId);
+      setLesson({ lesson: r.lesson, conversationId });
+    } catch (e) {
+      onError(e);
+    }
+  }
+
+  function submit(e: FormEvent, asLesson = false) {
     e.preventDefault();
     const text = draft.trim();
-    if (!text || streaming !== null) return;
+    if (!text || streaming !== null || preparing) return;
     setDraft("");
-    void send({ text, requestId: newRequestId() });
+    if (asLesson || wantsLesson(text)) void sendLesson(text);
+    else void send({ text, requestId: newRequestId() });
   }
 
   async function newConversation() {
@@ -144,7 +184,7 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
         {messages.length === 0 && streaming === null && !pending && (
           <p className="muted empty-chat">Escreva uma mensagem para começar.</p>
         )}
-        {messages.map((m) => <Bubble key={m.id} m={m} />)}
+        {messages.map((m) => <Bubble key={m.id} m={m} onWatch={openLesson} />)}
         {pending && (() => {
           const last = [...messages].reverse().find((m) => m.role === "user");
           const saved = Boolean(pending.error && last && last.content === pending.text);
@@ -173,6 +213,12 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
             <p>{streaming || "…"}</p>
           </div>
         )}
+        {preparing && (
+          <div className="msg msg-assistant thinking">
+            <span className="msg-meta">TITAN · preparando a vídeo-aula…</span>
+            <p>Montando o roteiro e as cenas. Leva uns segundos.</p>
+          </div>
+        )}
         {notice && <p className="notice">Sem resposta da IA: {notice}</p>}
         <div ref={endRef} />
       </div>
@@ -199,12 +245,24 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
             <Icon name="globe" size={18} /><span className="web-label">Internet</span>
           </button>
         )}
+        <button type="button" className="ghost lesson-btn" disabled={!draft.trim() || streaming !== null || preparing}
+                title="Explicar em vídeo-aula (ou escreva: explica em vídeo …)"
+                onClick={(e) => submit(e as unknown as FormEvent, true)}>
+          <Icon name="play" size={18} /><span className="web-label">Aula</span>
+        </button>
         {streaming !== null ? (
           <button type="button" className="ghost" onClick={() => abortRef.current?.abort()}>Parar</button>
         ) : (
-          <button type="submit" disabled={!draft.trim()}>Enviar</button>
+          <button type="submit" disabled={!draft.trim() || preparing}>Enviar</button>
         )}
       </form>
+      {lesson && (
+        <LessonPlayer lesson={lesson.lesson} conversationId={lesson.conversationId}
+                      onClose={() => {
+                        setLesson(null);
+                        if (conversationId) api.conversation(conversationId).then((c) => setMessages(c.messages)).catch(() => {});
+                      }} />
+      )}
     </section>
   );
 }
@@ -232,7 +290,7 @@ function splitSources(content: string): { body: string; sources: { n: string; ti
   return { body: content.slice(0, at), sources };
 }
 
-function Bubble({ m }: { m: Message }) {
+function Bubble({ m, onWatch }: { m: Message; onWatch: (id: string) => void }) {
   const who = m.role === "user" ? "VOCÊ" : m.role === "assistant" ? `TITAN · ${m.model_name ?? "?"}` : "SISTEMA";
   const interrupted = m.status === "interrupted";
   return (
@@ -241,7 +299,13 @@ function Bubble({ m }: { m: Message }) {
         {who} · {new Date(m.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
         {interrupted && " · interrompida"}
       </span>
-      {(() => {
+      {m.role === "assistant" && m.content.startsWith(LESSON_MARKER) ? (
+        <div className="lesson-card">
+          <p><Icon name="play" size={18} /> <b>{m.content.slice(LESSON_MARKER.length).split("\n")[0]}</b></p>
+          <button className="small" onClick={() => onWatch(m.id)}>▶ Assistir a aula</button>
+          <details><summary className="small muted">Ver o texto da aula</summary><p>{m.content.split("\n").slice(2).join("\n")}</p></details>
+        </div>
+      ) : (() => {
         const { body, sources } = m.role === "assistant" ? splitSources(m.content) : { body: m.content, sources: [] };
         return (
           <>

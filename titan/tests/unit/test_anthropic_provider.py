@@ -270,3 +270,30 @@ def test_style_is_appended_to_the_system_prompt(paid_settings, factory):
     p.chat([ChatTurn("user", "oi")], style=VOICE)
     assert client.calls[0]["system"] == SYSTEM_PROMPT  # sem estilo: igual a antes
     assert client.calls[1]["system"] == SYSTEM_PROMPT + "\n\n" + VOICE
+
+
+def test_chat_json_uses_structured_output_and_budget(paid_settings, factory):
+    import json
+
+    from titan.lessons.script import SCHEMA
+
+    fake = FakeClient(response(text=json.dumps({"titulo": "T", "cenas": []}), model="claude-opus-5-5"))
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=fake)
+    data, reply = p.chat_json([ChatTurn("user", "aula")], style="x", schema=SCHEMA, max_tokens=3000)
+    assert data == {"titulo": "T", "cenas": []}
+    kw = fake.calls[0]
+    assert kw["output_config"]["format"] == {"type": "json_schema", "schema": SCHEMA}
+    assert kw["output_config"]["effort"] == paid_settings.model_effort and kw["max_tokens"] == 3000
+    [row] = rows(factory)
+    assert row.status == "FINAL" and row.cost_brl == cost_brl(paid_settings, "claude-opus-5-5", 100, 50)
+
+
+@pytest.mark.parametrize("text,stop,msg", [("{", "end_turn", "formato inválido"),
+                                           ('{"a"', "max_tokens", "longo demais"),
+                                           ("[1]", "end_turn", "formato inválido")])
+def test_chat_json_bad_output_is_reported_and_still_billed(paid_settings, factory, text, stop, msg):
+    fake = FakeClient(response(text=text, stop=stop))
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=fake)
+    with pytest.raises(ModelUnavailable, match=msg):
+        p.chat_json([ChatTurn("user", "aula")], schema={"type": "object"})
+    assert [r.status for r in rows(factory)] == ["FINAL"]  # a chamada foi cobrada e registrada

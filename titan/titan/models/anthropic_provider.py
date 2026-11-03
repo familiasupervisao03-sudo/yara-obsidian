@@ -96,15 +96,16 @@ class AnthropicProvider:
             )
         return self._client
 
-    def _prepare(self, history: list[ChatTurn], style: str = ""):
+    def _prepare(self, history: list[ChatTurn], style: str = "", max_out: Optional[int] = None,
+                 extra_input_chars: int = 0):
         messages = to_api_messages(history)
         system = SYSTEM_PROMPT + (f"\n\n{style}" if style else "")
         if not messages:
             raise ModelUnavailable("Nenhuma mensagem do usuário para enviar.")
-        max_out = self.settings.model_max_output_tokens
+        max_out = max_out or self.settings.model_max_output_tokens
         try:
             reservation = self.budget.reserve(
-                "anthropic", self.model, estimate_input_tokens(messages) + len(style) // CHARS_PER_TOKEN,
+                "anthropic", self.model, estimate_input_tokens(messages) + (len(style) + extra_input_chars) // CHARS_PER_TOKEN,
                 max_out
             )
         except BudgetExceeded as exc:
@@ -163,6 +164,37 @@ class AnthropicProvider:
         except Exception as exc:
             self._handle_error(exc, reservation)  # registra e levanta ModelUnavailable
         return self._finish(response, reservation, started)
+
+    def chat_json(self, history: list[ChatTurn], style: str = "", schema: Optional[dict] = None,
+                  max_tokens: int = 4096) -> tuple[dict, ModelReply]:
+        """Resposta no formato JSON ``schema`` (saída estruturada da API)."""
+        import json
+
+        # O formato JSON também conta como entrada: entra na reserva do orçamento.
+        reservation, params = self._prepare(history, style, max_out=max_tokens,
+                                            extra_input_chars=len(json.dumps(schema or {})))
+        params["output_config"] = {**params["output_config"],
+                                   "format": {"type": "json_schema", "schema": schema}}
+        client = self._get_client()
+        started = time.monotonic()
+        try:
+            api = client.beta.messages if "betas" in params else client.messages
+            response = api.create(**params)
+        except Exception as exc:
+            self._handle_error(exc, reservation)
+        reply = self._finish(response, reservation, started)  # registra o custo real
+        if response.stop_reason == "refusal":
+            raise ModelUnavailable(reply.content)
+        if response.stop_reason == "max_tokens":
+            raise ModelUnavailable("O conteúdo ficou longo demais e foi cortado. Peça um assunto menor.")
+        text = next((b.text for b in response.content if getattr(b, "type", "") == "text"), "")
+        try:
+            data = json.loads(text)
+        except ValueError as exc:
+            raise ModelUnavailable("A IA respondeu num formato inválido. Tente de novo.") from exc
+        if not isinstance(data, dict):
+            raise ModelUnavailable("A IA respondeu num formato inválido. Tente de novo.")
+        return data, reply
 
     def chat_stream(self, history: list[ChatTurn], style: str = "") -> Iterator[tuple[str, Any]]:
         """Gera ("delta", texto) à medida que chega e, no fim, ("done", ModelReply).

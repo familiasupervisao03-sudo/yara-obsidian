@@ -236,3 +236,32 @@ export interface Preferences {
   voice_rate: number; // % da velocidade normal da voz (-30 a 30)
   corrections: Correction[];
 }
+
+// Vídeo-aulas (POST /api/v1/conversations/{id}/lessons, GET /api/v1/lessons/{message_id})
+export type LessonSceneType =
+  | "topicos" | "passos" | "comparacao" | "linha_do_tempo" | "formula" | "grafico" | "diagrama" | "pergunta";
+
+export interface LessonScene {
+  tipo: LessonSceneType;
+  titulo: string;
+  narracao: string;
+  itens: string[];
+  comparacao?: { a_titulo: string; a_itens: string[]; b_titulo: string; b_itens: string[] };
+  grafico?: { forma: "barras" | "pizza"; unidade: string; dados: { rotulo: string; valor: number }[] };
+  diagrama_forma?: "fluxo" | "ciclo";
+  pergunta?: { enunciado: string; opcoes: string[]; correta: number; explicacao: string };
+}
+
+export interface Lesson {
+  titulo: string;
+  cenas: LessonScene[];
+  fontes: { n: number; title: string; url: string; site: string }[];
+}
+
+export interface LessonPostResult {
+  user_message: Message;
+  reply: Message | null;
+  lesson: Lesson | null;
+  model: ModelStatus;
+  duplicate: boolean;
+}

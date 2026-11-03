@@ -24,7 +24,7 @@ from titan.tasks.runner import TaskRunner
 from titan.tasks.service import recover_on_startup
 from titan.tools.web.research import WebResearcher
 from titan.voice.engines import VoiceService
-from titan_api.routers import auth, conversations, health, preferences, system, tasks, voice
+from titan_api.routers import auth, conversations, health, lessons, preferences, system, tasks, voice
 from titan_api.security import (
     CSRFMiddleware,
     NetworkAllowlistMiddleware,
@@ -110,6 +110,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(tasks.router)
     app.include_router(voice.router)
     app.include_router(preferences.router)
+    app.include_router(lessons.router)
 
     if settings.serve_web:
         _mount_web(app, settings.web_dist_dir)

@@ -5,6 +5,8 @@ import type {
   ConversationDetail,
   ConversationList,
   ExecutionItem,
+  Lesson,
+  LessonPostResult,
   ApprovalItem,
   MessagePostResult,
   Preferences,
@@ -79,6 +81,12 @@ export const api = {
       content,
       client_request_id: requestId,
     }),
+  // vídeo-aulas
+  createLesson: (conversationId: string, content: string, requestId: string, web?: boolean) =>
+    request<LessonPostResult>("POST", `/api/v1/conversations/${conversationId}/lessons`, {
+      content, client_request_id: requestId, ...(web === undefined ? {} : { web }),
+    }),
+  lesson: (messageId: string) => request<{ message_id: string; lesson: Lesson }>("GET", `/api/v1/lessons/${messageId}`),
   // preferências
   preferences: () => request<Preferences>("GET", "/api/v1/preferences"),
   savePreferences: (p: Preferences) => request<Preferences>("PUT", "/api/v1/preferences", p),

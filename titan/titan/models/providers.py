@@ -51,6 +51,15 @@ def stream_reply(provider: ModelProvider, history: list[ChatTurn], style: str = 
     yield "done", reply
 
 
+def generate_json(provider: ModelProvider, history: list[ChatTurn], style: str, schema: dict,
+                  max_tokens: int = 4096) -> tuple[dict, ModelReply]:
+    """Resposta em JSON validado pelo formato ``schema`` (ex.: roteiro de vídeo-aula)."""
+    gen = getattr(provider, "chat_json", None)
+    if gen is None:
+        raise ModelUnavailable(f"O provedor '{provider.info.name}' não gera conteúdo estruturado.")
+    return gen(history, style=style, schema=schema, max_tokens=max_tokens)
+
+
 class MockProvider:
     """Provedor determinístico para testes automatizados. Bloqueado fora de TITAN_ENV=test."""
 
@@ -68,6 +77,25 @@ class MockProvider:
         MockProvider.last_style = style
         last = history[-1].content if history else ""
         return ModelReply(content=f"[mock] {last}", provider="mock", model=self.model)
+
+    # Resposta JSON fixa (somente testes); None = um roteiro mínimo sobre a última mensagem.
+    json_reply: dict | None = None
+
+    def chat_json(self, history: list[ChatTurn], style: str = "", schema: dict | None = None,
+                  max_tokens: int = 4096) -> tuple[dict, ModelReply]:
+        MockProvider.last_style = style
+        last = history[-1].content if history else ""
+        data = MockProvider.json_reply or {
+            "titulo": f"Aula: {last[:60]}",
+            "cenas": [{"tipo": "topicos", "titulo": "Introdução", "narracao": f"[mock] {last[:200]}",
+                       "itens": ["primeiro ponto", "segundo ponto"],
+                       "comparacao": {"a_titulo": "", "a_itens": [], "b_titulo": "", "b_itens": []},
+                       "grafico": {"forma": "", "unidade": "", "dados": []}, "diagrama_forma": "",
+                       "pergunta": {"enunciado": "", "opcoes": [], "correta": 0, "explicacao": ""}}],
+        }
+        import json as _json
+        return data, ModelReply(content=_json.dumps(data, ensure_ascii=False), provider="mock",
+                                model=self.model)
 
     def chat_stream(self, history: list[ChatTurn], style: str = ""):
         import time
