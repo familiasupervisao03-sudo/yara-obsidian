@@ -244,6 +244,9 @@ class BufferClip implements Clip {
     this.gain = ctx.createGain();
     this.gain.connect(ctx.destination);
   }
+  get duration(): number {
+    return this.buffer.duration;
+  }
   play(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.reject = reject;

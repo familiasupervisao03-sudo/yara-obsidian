@@ -80,7 +80,7 @@ def test_create_play_and_isolation(chat):
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["model"]["available"] and len(body["lesson"]["cenas"]) == 4
-    assert script.STYLE in MockProvider.last_style  # a instrução da aula foi ao modelo
+    assert script.build_style() in MockProvider.last_style  # a instrução da aula foi ao modelo
     reply = body["reply"]
     assert reply["content"].startswith(script.MARKER + "Fotossíntese")
     assert "(resposta: luz)" in reply["content"]
@@ -105,3 +105,66 @@ def test_no_valid_scene_and_no_model(chat, make_settings):
     MockProvider.json_reply = {"titulo": "vazio", "cenas": [{"tipo": "pergunta", "pergunta": {}}]}
     body = c.post(f"/api/v1/conversations/{cid}/lessons", json={"content": "aula"}, headers=CSRF).json()
     assert body["reply"] is None and not body["model"]["available"] and "nenhuma cena" in body["model"]["detail"]
+
+
+def test_new_scene_types_are_validated():
+    raw = {"titulo": "T", "assunto": "inventado", "cenas": [
+        {"tipo": "capa", "titulo": "Aula", "itens": ["a", "b"], "icone": "folha", "icones_itens": ["sol", "xyz"]},
+        {"tipo": "destaque", "titulo": "Dado", "destaque": {"valor": "21%", "rotulo": "do ar", "percentual": 250}},
+        {"tipo": "destaque", "titulo": "Sem valor", "narracao": "n", "destaque": {"valor": ""}},
+        {"tipo": "mapa_mental", "titulo": "Mapa", "centro": "", "itens": ["x", "y", "z"]},
+        {"tipo": "erro_comum", "titulo": "Erro", "erro_comum": {"errado": "A planta come terra", "certo": "Ela fabrica"}},
+        {"tipo": "tabela", "titulo": "Tab", "tabela": {"colunas": ["a", "b"], "linhas": [["1"], ["2", "3", "4"], 5]}},
+        {"tipo": "teoria", "titulo": "Sua ideia", "teoria": {"ideia": "A lua faz a planta crescer",
+                                                           "veredito": "talvez", "certo": [], "errado": ["não"]}},
+        {"tipo": "pergunta", "pergunta": {"enunciado": "?", "opcoes": ["a", "b"], "correta": 1, "revisar_cena": 1}},
+        {"tipo": "pergunta", "pergunta": {"enunciado": "?", "opcoes": ["a", "b"], "correta": 0, "revisar_cena": 7}},
+    ]}
+    out = script.sanitize(raw)
+    c = out["cenas"]
+    assert out["assunto"] == "outro"
+    assert c[0]["icone"] == "folha" and c[0]["icones_itens"] == ["sol", "nenhum"]
+    assert c[1]["destaque"]["percentual"] == -1  # fora de 0–100 não vira porcentagem
+    assert c[2]["tipo"] == "topicos"  # destaque sem valor
+    assert c[3]["centro"] == "Mapa"
+    assert c[5]["tabela"]["linhas"] == [["1", ""], ["2", "3"]]
+    assert c[6]["teoria"]["veredito"] == "não dá para saber"
+    assert c[7]["pergunta"]["revisar_cena"] == 1 and c[8]["pergunta"]["revisar_cena"] == -1  # não aponta p/ pergunta
+    assert all(x["tipo"] != "capa" for x in script.sanitize(raw, continuation=True)["cenas"])
+
+
+def test_style_by_level_length_and_continuation():
+    quick = script.build_style("crianca", "rapida")
+    assert "criança" in quick and "de 4 a 6 cenas" in quick and "1 cena(s) \"pergunta\"" in quick
+    full = script.build_style("avancado", "completa")
+    assert "de 11 a 16 cenas" in full and "3 cena(s)" in full
+    parent = {"titulo": "Fotossíntese", "cenas": [{"titulo": "Ciclo", "narracao": "luz e água"}]}
+    cont = script.build_style("basico", "normal", parent, focus=0)
+    assert "CONTINUAÇÃO" in cont and "\"Ciclo\"" in cont and "teoria" in cont and "SEM \"capa\"" in cont
+    assert "MAIS SIMPLES" in script.build_style(parent=parent, focus=0, simpler=True)
+    assert script.max_tokens("completa", False) > script.max_tokens("rapida", False)
+
+
+def test_continuation_flow_and_ownership(chat):
+    c, cid, s = chat
+    MockProvider.json_reply = GOOD
+    first = c.post(f"/api/v1/conversations/{cid}/lessons", json={"content": "explica em vídeo a fotossíntese"},
+                   headers=CSRF).json()
+    parent_id = first["reply"]["id"]
+    MockProvider.json_reply = {"titulo": "Sua pergunta", "assunto": "ciencia", "cenas": [
+        dict(GOOD["cenas"][0], tipo="capa"), dict(GOOD["cenas"][0], titulo="Resposta")]}
+    r = c.post(f"/api/v1/conversations/{cid}/lessons", json={
+        "content": "e se a planta ficar no escuro?", "continues": parent_id, "focus_scene": 1,
+        "level": "crianca"}, headers=CSRF).json()
+    assert r["lesson"]["continua"] == parent_id and r["lesson"]["nivel"] == "crianca"
+    assert [x["tipo"] for x in r["lesson"]["cenas"]] == ["topicos"]  # sem capa na continuação
+    assert "CONTINUAÇÃO" in MockProvider.last_style and "\"Ciclo\"" in MockProvider.last_style
+    # continuar aula de outra conversa ou inexistente: 404
+    other = c.post("/api/v1/conversations", json={}, headers=CSRF).json()["id"]
+    assert c.post(f"/api/v1/conversations/{other}/lessons", json={"content": "x", "continues": parent_id},
+                  headers=CSRF).status_code == 404
+    c.post("/api/v1/auth/logout", headers=CSRF)
+    login(c, "outro")
+    mine = c.post("/api/v1/conversations", json={}, headers=CSRF).json()["id"]
+    assert c.post(f"/api/v1/conversations/{mine}/lessons", json={"content": "x", "continues": parent_id},
+                  headers=CSRF).status_code == 404

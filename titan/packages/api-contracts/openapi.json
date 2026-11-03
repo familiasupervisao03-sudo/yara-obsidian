@@ -643,6 +643,56 @@
             "title": "Content",
             "type": "string"
           },
+          "continues": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continues"
+          },
+          "focus_scene": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focus Scene"
+          },
+          "length": {
+            "default": "normal",
+            "enum": [
+              "rapida",
+              "normal",
+              "completa"
+            ],
+            "title": "Length",
+            "type": "string"
+          },
+          "level": {
+            "default": "basico",
+            "enum": [
+              "crianca",
+              "basico",
+              "avancado"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "simpler": {
+            "default": false,
+            "title": "Simpler",
+            "type": "boolean"
+          },
           "web": {
             "anyOf": [
               {

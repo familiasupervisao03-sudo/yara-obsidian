@@ -6,6 +6,7 @@ import type {
   ConversationList,
   ExecutionItem,
   Lesson,
+  LessonOptions,
   LessonPostResult,
   ApprovalItem,
   MessagePostResult,
@@ -82,9 +83,9 @@ export const api = {
       client_request_id: requestId,
     }),
   // vídeo-aulas
-  createLesson: (conversationId: string, content: string, requestId: string, web?: boolean) =>
+  createLesson: (conversationId: string, content: string, requestId: string, opts: LessonOptions = {}) =>
     request<LessonPostResult>("POST", `/api/v1/conversations/${conversationId}/lessons`, {
-      content, client_request_id: requestId, ...(web === undefined ? {} : { web }),
+      content, client_request_id: requestId, ...opts,
     }),
   lesson: (messageId: string) => request<{ message_id: string; lesson: Lesson }>("GET", `/api/v1/lessons/${messageId}`),
   // preferências

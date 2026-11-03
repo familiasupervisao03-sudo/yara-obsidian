@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import type { Conversation, Lesson, Message } from "@titan/api-contracts";
+import type { Conversation, Lesson, LessonLength, LessonLevel, LessonOptions, Message } from "@titan/api-contracts";
 import { api, newRequestId } from "../api";
 import { StreamingChat, type ResearchEvent } from "../voice/browser";
 import { Icon } from "./icons";
@@ -13,6 +13,16 @@ const LESSON_REQUEST = new RegExp(
   "(?:fa[zç]|cri|mont|gera)\\p{L}*\\s+(?:uma?\\s+)?(?:v[íi]deo|aula)(?:\\s+explicativ[oa])?\\s+(?:sobre|de|explicando))",
   "iu");
 export const wantsLesson = (text: string) => LESSON_REQUEST.test(text);
+
+interface LessonPrefs { level: LessonLevel; length: LessonLength }
+function loadLessonPrefs(): LessonPrefs {
+  try {
+    const v = JSON.parse(localStorage.getItem("titan.lesson") ?? "{}");
+    return { level: v.level ?? "basico", length: v.length ?? "normal" };
+  } catch {
+    return { level: "basico", length: "normal" };
+  }
+}
 
 interface Pending {
   text: string;
@@ -36,8 +46,14 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
   const [webEnabled, setWebEnabled] = useState(false);
   const [webOn, setWebOn] = useState(false);
   const [research, setResearch] = useState<ResearchEvent | null>(null);
-  const [lesson, setLesson] = useState<{ lesson: Lesson; conversationId: string } | null>(null);
+  const [lesson, setLesson] = useState<{ lesson: Lesson; conversationId: string; messageId: string } | null>(null);
   const [preparing, setPreparing] = useState(false);
+  const [lessonPrefs, setLessonPrefs] = useState<LessonPrefs>(loadLessonPrefs);
+  const [lessonPanel, setLessonPanel] = useState(false);
+  const [videoReply, setVideoReply] = useState(true);
+  // Logo depois de uma aula, a próxima pergunta ou teoria continua em vídeo (dá para desligar).
+  const lastMsg = messages[messages.length - 1];
+  const lastLesson = lastMsg && lastMsg.role === "assistant" && lastMsg.content.startsWith(LESSON_MARKER) ? lastMsg : null;
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -49,6 +65,10 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
   }, [conversationId, onConversation, onError]);
 
   useEffect(loadList, [loadList]);
+  useEffect(() => {
+    try { localStorage.setItem("titan.lesson", JSON.stringify(lessonPrefs)); } catch { /* ignora */ }
+  }, [lessonPrefs]);
+  useEffect(() => setVideoReply(true), [lastLesson?.id]);
   useEffect(() => {
     api.settings().then((v) => setWebEnabled(v.config.web_enabled === true)).catch(() => {});
   }, []);
@@ -111,13 +131,16 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
     }
   }
 
-  async function sendLesson(text: string) {
+  async function sendLesson(text: string, extra: LessonOptions = {}) {
     setNotice(null);
     setPreparing(true);
+    setLessonPanel(false);
     try {
       const cid = await ensureConversation(text);
-      const r = await api.createLesson(cid, text, newRequestId(), webOn ? true : undefined);
-      if (r.lesson) setLesson({ lesson: r.lesson, conversationId: cid });
+      const r = await api.createLesson(cid, text, newRequestId(), {
+        level: lessonPrefs.level, length: lessonPrefs.length, ...(webOn ? { web: true } : {}), ...extra,
+      });
+      if (r.lesson && r.reply) setLesson({ lesson: r.lesson, conversationId: cid, messageId: r.reply.id });
       else setNotice(r.model.detail);
       const c = await api.conversation(cid).catch(() => null);
       if (c) setMessages(c.messages);
@@ -132,7 +155,7 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
     if (!conversationId) return;
     try {
       const r = await api.lesson(messageId);
-      setLesson({ lesson: r.lesson, conversationId });
+      setLesson({ lesson: r.lesson, conversationId, messageId });
     } catch (e) {
       onError(e);
     }
@@ -143,7 +166,8 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
     const text = draft.trim();
     if (!text || streaming !== null || preparing) return;
     setDraft("");
-    if (asLesson || wantsLesson(text)) void sendLesson(text);
+    if (lastLesson && videoReply && !asLesson) void sendLesson(text, { continues: lastLesson.id });
+    else if (asLesson || wantsLesson(text)) void sendLesson(text);
     else void send({ text, requestId: newRequestId() });
   }
 
@@ -216,12 +240,42 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
         {preparing && (
           <div className="msg msg-assistant thinking">
             <span className="msg-meta">TITAN · preparando a vídeo-aula…</span>
-            <p>Montando o roteiro e as cenas. Leva uns segundos.</p>
+            <p>Montando o roteiro e as cenas{lessonPrefs.length === "completa" ? " (aula completa: pode levar até um minuto)" : ". Leva uns segundos"}.</p>
           </div>
         )}
         {notice && <p className="notice">Sem resposta da IA: {notice}</p>}
         <div ref={endRef} />
       </div>
+      {lastLesson && streaming === null && !preparing && (
+        <div className="lesson-followup">
+          <button type="button" className={`ghost small ${videoReply ? "on" : ""}`} aria-pressed={videoReply}
+                  onClick={() => setVideoReply((v) => !v)}>
+            <Icon name="play" size={16} /> {videoReply ? "Responder em vídeo: ligado" : "Responder em vídeo: desligado"}
+          </button>
+          <span className="small muted">
+            {videoReply ? "Sua próxima pergunta ou teoria continua a aula em vídeo." : "A próxima mensagem será respondida em texto."}
+          </span>
+        </div>
+      )}
+      {lessonPanel && (
+        <div className="lesson-panel">
+          <label>Nível
+            <select value={lessonPrefs.level} onChange={(e) => setLessonPrefs({ ...lessonPrefs, level: e.target.value as LessonLevel })}>
+              <option value="crianca">Para criança</option><option value="basico">Básico</option><option value="avancado">Avançado</option>
+            </select>
+          </label>
+          <label>Duração
+            <select value={lessonPrefs.length} onChange={(e) => setLessonPrefs({ ...lessonPrefs, length: e.target.value as LessonLength })}>
+              <option value="rapida">Rápida (~2 min)</option><option value="normal">Normal (~5 min)</option><option value="completa">Completa (~10 min)</option>
+            </select>
+          </label>
+          <button type="button" className="small" disabled={!draft.trim() || streaming !== null || preparing}
+                  onClick={(e) => submit(e as unknown as FormEvent, true)}>
+            <Icon name="play" size={16} /> Criar aula
+          </button>
+          <span className="small muted">{draft.trim() ? "Sobre o que está escrito na caixa." : "Escreva o assunto na caixa abaixo."}</span>
+        </div>
+      )}
       <form className="composer" onSubmit={submit}>
         <textarea
           value={draft}
@@ -245,9 +299,9 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
             <Icon name="globe" size={18} /><span className="web-label">Internet</span>
           </button>
         )}
-        <button type="button" className="ghost lesson-btn" disabled={!draft.trim() || streaming !== null || preparing}
-                title="Explicar em vídeo-aula (ou escreva: explica em vídeo …)"
-                onClick={(e) => submit(e as unknown as FormEvent, true)}>
+        <button type="button" className={`ghost lesson-btn ${lessonPanel ? "on" : ""}`} disabled={streaming !== null || preparing}
+                aria-expanded={lessonPanel} title="Vídeo-aula (ou escreva: explica em vídeo …)"
+                onClick={() => setLessonPanel((v) => !v)}>
           <Icon name="play" size={18} /><span className="web-label">Aula</span>
         </button>
         {streaming !== null ? (
@@ -257,7 +311,8 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
         )}
       </form>
       {lesson && (
-        <LessonPlayer lesson={lesson.lesson} conversationId={lesson.conversationId}
+        <LessonPlayer lesson={lesson.lesson} conversationId={lesson.conversationId} messageId={lesson.messageId}
+                      onChanged={() => { if (conversationId) api.conversation(conversationId).then((c) => setMessages(c.messages)).catch(() => {}); }}
                       onClose={() => {
                         setLesson(null);
                         if (conversationId) api.conversation(conversationId).then((c) => setMessages(c.messages)).catch(() => {});

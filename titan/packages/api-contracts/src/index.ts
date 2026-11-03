@@ -239,21 +239,37 @@ export interface Preferences {
 
 // Vídeo-aulas (POST /api/v1/conversations/{id}/lessons, GET /api/v1/lessons/{message_id})
 export type LessonSceneType =
-  | "topicos" | "passos" | "comparacao" | "linha_do_tempo" | "formula" | "grafico" | "diagrama" | "pergunta";
+  | "capa" | "topicos" | "passos" | "comparacao" | "linha_do_tempo" | "formula" | "grafico" | "diagrama"
+  | "mapa_mental" | "destaque" | "curiosidade" | "erro_comum" | "exemplo" | "tabela" | "teoria" | "pergunta";
 
 export interface LessonScene {
   tipo: LessonSceneType;
   titulo: string;
   narracao: string;
+  icone?: string;
   itens: string[];
+  icones_itens?: string[];
+  centro?: string;
   comparacao?: { a_titulo: string; a_itens: string[]; b_titulo: string; b_itens: string[] };
   grafico?: { forma: "barras" | "pizza"; unidade: string; dados: { rotulo: string; valor: number }[] };
   diagrama_forma?: "fluxo" | "ciclo";
-  pergunta?: { enunciado: string; opcoes: string[]; correta: number; explicacao: string };
+  destaque?: { valor: string; rotulo: string; percentual: number };
+  erro_comum?: { errado: string; certo: string };
+  tabela?: { colunas: string[]; linhas: string[][] };
+  teoria?: { ideia: string; veredito: "correta" | "parcialmente correta" | "incorreta" | "não dá para saber"; certo: string[]; errado: string[] };
+  pergunta?: { enunciado: string; opcoes: string[]; correta: number; explicacao: string; revisar_cena?: number };
 }
+
+export type LessonLevel = "crianca" | "basico" | "avancado";
+export type LessonLength = "rapida" | "normal" | "completa";
 
 export interface Lesson {
   titulo: string;
+  assunto?: string;
+  nivel?: LessonLevel;
+  duracao?: LessonLength;
+  continua?: string | null;
+  pedido?: string;
   cenas: LessonScene[];
   fontes: { n: number; title: string; url: string; site: string }[];
 }
@@ -264,4 +280,13 @@ export interface LessonPostResult {
   lesson: Lesson | null;
   model: ModelStatus;
   duplicate: boolean;
+}
+
+export interface LessonOptions {
+  web?: boolean;
+  level?: LessonLevel;
+  length?: LessonLength;
+  continues?: string;
+  focus_scene?: number;
+  simpler?: boolean;
 }

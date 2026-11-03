@@ -6,6 +6,8 @@ import type { Segment } from "./segmenter.ts";
 
 export interface Clip {
   play(): Promise<void>; // resolve quando termina; rejeita se interrompido
+  /** Duração em segundos, quando conhecida (usada para sincronizar a legenda da vídeo-aula). */
+  duration?: number;
   stop(): void;
   setVolume(v: number): void;
 }
