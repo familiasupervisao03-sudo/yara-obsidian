@@ -33,6 +33,7 @@ from titan_api.security import (
 
 log = logging.getLogger("titan.api")
 mimetypes.add_type("application/manifest+json", ".webmanifest")
+mimetypes.add_type("application/vnd.android.package-archive", ".apk")
 
 _STATUS_CODES = {
     400: "bad_request",

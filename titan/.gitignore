@@ -20,3 +20,10 @@ build/
 node_modules/
 apps/web/dist/
 *.tsbuildinfo
+
+# App Android: saídas de compilação e caminho local do SDK
+apps/android/.gradle/
+apps/android/app/build/
+apps/android/build/
+apps/android/local.properties
+*.jks

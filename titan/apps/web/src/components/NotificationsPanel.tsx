@@ -1,10 +1,12 @@
 // Sistema → Avisos: liga os avisos do próprio aparelho (aprovação, aula pronta, resposta pronta).
 import { useState } from "react";
-import { enableNotifications, notificationsSupported } from "../notify";
+import { androidApp, enableNotifications, notificationsSupported } from "../notify";
 
 export function NotificationsPanel() {
   const supported = notificationsSupported();
-  const [perm, setPerm] = useState<string>(supported ? Notification.permission : "unsupported");
+  const app = androidApp();
+  const [perm, setPerm] = useState<string>(app ? (app.canNotify() ? "granted" : "default")
+    : supported ? Notification.permission : "unsupported");
   return (
     <div className="panel">
       <h3 className="panel-title">Avisos</h3>

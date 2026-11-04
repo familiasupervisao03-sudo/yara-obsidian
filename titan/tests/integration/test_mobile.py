@@ -105,3 +105,24 @@ def test_qr_code_when_segno_installed():
     pytest.importorskip("segno")
     qr = mobile.qr_text("http://192.168.0.10:8001/instalar")
     assert qr and len(qr.splitlines()) > 10
+
+
+def test_install_page_offers_the_app_when_built(tmp_path, monkeypatch):
+    apk = tmp_path / "titan.apk"
+    apk.write_bytes(b"PK\x03\x04 apk falso")
+    monkeypatch.setattr(mobile, "APK_FILE", apk)
+    ca, _crt, _key = mobile.make_certificates(["192.168.0.10"], tmp_path / "tls")
+    srv = mobile.make_install_server(ca, "https://192.168.0.10:8000", ["127.0.0.1/32"], port=0, host="127.0.0.1")
+    stop = threading.Event()
+    t = threading.Thread(target=mobile.serve_install_page, args=(srv, 1, stop), daemon=True)
+    t.start()
+    try:
+        base = f"http://127.0.0.1:{srv.server_address[1]}"
+        assert "BAIXAR O APP (APK)" in _get(base + "/instalar")[2].decode()
+        code, ctype, body = _get(base + "/titan.apk")
+        assert code == 200 and ctype == "application/vnd.android.package-archive" and body == apk.read_bytes()
+    finally:
+        stop.set()
+        t.join(5)
+    monkeypatch.setattr(mobile, "APK_FILE", tmp_path / "nao-existe.apk")
+    assert "BAIXAR O APP" not in mobile.install_page("https://x", "titan-ca.crt", has_apk=False)

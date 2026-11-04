@@ -6,6 +6,7 @@ import type { VoiceMetrics, VoiceState } from "../voice/session";
 import type { CorrectionSuggestion } from "../voice/corrections";
 import type { TtsEngine } from "../voice/player";
 import { Icon } from "./icons";
+import { androidApp } from "../notify";
 import {
   BrowserMicrophone,
   BrowserStt,
@@ -77,6 +78,11 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
   // Celular: a tela não apaga durante a conversa por voz e vibra quando começa a ouvir.
   const awake = state !== "idle" && state !== "error";
   useEffect(() => {
+    const app = androidApp();
+    if (app) { // app Android do TITAN: a tela fica acesa pelo próprio sistema
+      app.keepAwake(awake);
+      return () => app.keepAwake(false);
+    }
     if (!awake || !("wakeLock" in navigator)) return;
     let lock: WakeLockSentinel | null = null;
     let cancelled = false;

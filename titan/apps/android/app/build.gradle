@@ -1,0 +1,36 @@
+plugins { id "com.android.application" }
+
+// Assinatura: chave fora do repositório (ver apps/android/README.md).
+def ks = System.getenv("TITAN_KEYSTORE")
+
+android {
+    namespace "br.titan.app"
+    compileSdk 34
+    defaultConfig {
+        applicationId "br.titan.app"
+        minSdk 24          // Android 7+ (o Galaxy A20 tem Android 9–11)
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+    signingConfigs {
+        if (ks) {
+            release {
+                storeFile file(ks)
+                storePassword System.getenv("TITAN_KEYSTORE_PASS")
+                keyAlias "titan"
+                keyPassword System.getenv("TITAN_KEYSTORE_PASS")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (ks) signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
