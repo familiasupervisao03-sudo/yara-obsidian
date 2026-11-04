@@ -228,31 +228,40 @@ def cmd_disable_online_voice(args: argparse.Namespace) -> int:
         return 1
     from titan.envfile import read_env
 
-    groq_on = read_env(env_path).get("TITAN_VOICE_STT") == "groq"
+    groq_on = read_env(env_path).get("TITAN_VOICE_STT") in ("groq", "xai")
     update_env(env_path, {"TITAN_VOICE_TTS": "piper",
                           "TITAN_ALLOW_EXTERNAL_VOICE": "true" if groq_on else "false"})
     print("Voz on-line desligada. Reinicie o servidor para aplicar.")
     return 0
 
 
-GROQ_WARNING = """
-Reconhecimento de voz on-line do TITAN (Groq, Whisper)
-  * O ÁUDIO de cada fala sua é enviado à Groq (EUA) quando você termina de falar,
+CLOUD_STT_WARNING = """
+Reconhecimento de voz on-line do TITAN ({company})
+  * O ÁUDIO de cada fala sua é enviado à {company} (EUA) quando você termina de falar,
     para virar texto. Silêncio não é enviado. Nada é gravado no notebook.
   * O Vosk continua no notebook: mostra o texto enquanto você fala e assume sozinho
-    se a Groq falhar, ficar sem internet ou chegar ao limite.
-  * Conta grátis da Groq (sem cartão): sem custo; ao passar do limite deles, o Vosk
-    assume. Com cartão cadastrado: ~US$ 0,04 por hora de fala (mínimo de 10 s por fala).
-  * Teto do TITAN: {minutos} minutos de áudio por dia (TITAN_VOICE_GROQ_MAX_MINUTES_DAY).
-  * Para desligar depois: .venv/bin/titan disable-groq-stt
+    se a {company} falhar, ficar sem internet ou chegar ao limite.
+  * Custo: {custo}
+  * Teto do TITAN: {minutos} minutos de áudio por dia (TITAN_VOICE_CLOUD_MAX_MINUTES_DAY).
+  * Para desligar depois: .venv/bin/titan {off}
 """
 
+CLOUD_STT = {
+    "groq": dict(company="Groq", key="GROQ_API_KEY", prefix="gsk_", off="disable-groq-stt",
+                 custo="conta grátis (sem cartão) não cobra; ao passar do limite deles o Vosk assume. "
+                       "Com cartão: ~US$ 0,04 por hora de fala (mínimo de 10 s por fala)."),
+    "xai": dict(company="xAI", key="XAI_API_KEY", prefix="xai-", off="disable-xai-stt",
+                custo="pago pelos créditos da sua conta xAI: ~US$ 0,10 por hora de fala "
+                      "(~R$ 0,01 por minuto). Sem créditos, o Vosk assume."),
+}
 
-def cmd_enable_groq_stt(args: argparse.Namespace) -> int:
+
+def _enable_cloud_stt(args: argparse.Namespace, provider: str) -> int:
     from pathlib import Path
 
     from titan.envfile import read_env, update_env
 
+    info = CLOUD_STT[provider]
     env_path = Path(args.env_file)
     if not env_path.exists():
         print(f"{env_path} não existe. Rode primeiro scripts/setup.sh.", file=sys.stderr)
@@ -262,51 +271,70 @@ def cmd_enable_groq_stt(args: argparse.Namespace) -> int:
     except ImportError:
         print("Biblioteca 'httpx' não instalada. Rode: .venv/bin/pip install -e '.[groq]'", file=sys.stderr)
         return 1
-    minutes = int(_ask_float("Teto de minutos de fala por dia enviados à Groq",
-                             args.minutos or read_env(env_path).get("TITAN_VOICE_GROQ_MAX_MINUTES_DAY") or "60",
-                             1, 1440))
-    print(GROQ_WARNING.format(minutos=minutes))
-    key = getpass.getpass("Cole a chave da API da Groq (começa com gsk_; não aparece na tela): ").strip()
+    env = read_env(env_path)
+    minutes = int(_ask_float("Teto de minutos de fala por dia enviados para fora",
+                             args.minutos or env.get("TITAN_VOICE_CLOUD_MAX_MINUTES_DAY") or "60", 1, 1440))
+    print(CLOUD_STT_WARNING.format(minutos=minutes, **info))
+    key = getpass.getpass(f"Cole a chave da API da {info['company']} (não aparece na tela): ").strip()
     if not key:
         print("Nenhuma chave informada. Nada foi alterado.", file=sys.stderr)
         return 1
-    if not key.startswith("gsk_"):
-        print("Aviso: a chave não começa com 'gsk_'. Confira se é uma chave da Groq.")
+    if not key.startswith(info["prefix"]):
+        print(f"Aviso: a chave não começa com '{info['prefix']}'. Confira se é uma chave da {info['company']}.")
     if _ask("Digite AUTORIZO para confirmar").strip().upper() != "AUTORIZO":
         print("Não confirmado. Nada foi alterado.")
         return 1
     backup = update_env(env_path, {
-        "TITAN_VOICE_STT": "groq",
-        "GROQ_API_KEY": key,
-        "TITAN_VOICE_GROQ_MAX_MINUTES_DAY": str(minutes),
+        "TITAN_VOICE_STT": provider,
+        info["key"]: key,
+        "TITAN_VOICE_CLOUD_MAX_MINUTES_DAY": str(minutes),
         "TITAN_ALLOW_EXTERNAL_VOICE": "true",
         "TITAN_LOCAL_ONLY": "false",
     })
-    print(f"\nReconhecimento pela Groq ligado. .env atualizado (permissão 600); cópia anterior: {backup}")
+    print(f"\nReconhecimento pela {info['company']} ligado. .env atualizado (permissão 600); cópia anterior: {backup}")
     print("Nenhuma chamada de teste foi feita. Reinicie o TITAN para valer:  .venv/bin/titan ligar")
     return 0
 
 
-def cmd_disable_groq_stt(args: argparse.Namespace) -> int:
+def _disable_cloud_stt(args: argparse.Namespace, provider: str) -> int:
     from pathlib import Path
 
     from titan.envfile import read_env, update_env
 
+    info = CLOUD_STT[provider]
     env_path = Path(args.env_file)
     if not env_path.exists():
         print(f"{env_path} não existe.", file=sys.stderr)
         return 1
-    edge_on = read_env(env_path).get("TITAN_VOICE_TTS") == "edge"
-    updates: dict[str, str | None] = {"TITAN_VOICE_STT": "vosk",
-                                      "TITAN_ALLOW_EXTERNAL_VOICE": "true" if edge_on else "false"}
+    env = read_env(env_path)
+    updates: dict[str, str | None] = {}
+    if env.get("TITAN_VOICE_STT") == provider:
+        updates["TITAN_VOICE_STT"] = "vosk"
+        updates["TITAN_ALLOW_EXTERNAL_VOICE"] = "true" if env.get("TITAN_VOICE_TTS") == "edge" else "false"
     if not args.keep_key:
-        updates["GROQ_API_KEY"] = None
+        updates[info["key"]] = None
     backup = update_env(env_path, updates)
-    print("Reconhecimento pela Groq desligado: o áudio volta a ficar só no notebook (Vosk).")
+    print(f"Reconhecimento pela {info['company']} desligado: o áudio volta a ficar só no notebook (Vosk).")
     if not args.keep_key:
         print(f"A chave foi removida do .env. A cópia {backup} ainda a contém; apague com: rm {backup}")
     print("Reinicie o servidor para aplicar.")
     return 0
+
+
+def cmd_enable_groq_stt(args: argparse.Namespace) -> int:
+    return _enable_cloud_stt(args, "groq")
+
+
+def cmd_disable_groq_stt(args: argparse.Namespace) -> int:
+    return _disable_cloud_stt(args, "groq")
+
+
+def cmd_enable_xai_stt(args: argparse.Namespace) -> int:
+    return _enable_cloud_stt(args, "xai")
+
+
+def cmd_disable_xai_stt(args: argparse.Namespace) -> int:
+    return _disable_cloud_stt(args, "xai")
 
 
 WEB_WARNING = """
@@ -635,10 +663,11 @@ def cmd_disable_external(args: argparse.Namespace) -> int:
     if not args.keep_key:
         updates["ANTHROPIC_API_KEY"] = None  # remove a linha
         updates["GROQ_API_KEY"] = None
+        updates["XAI_API_KEY"] = None
     backup = update_env(env_path, updates)
     print("Provedores externos desligados; modo 100% local restaurado.")
     if not args.keep_key:
-        print("As chaves da Anthropic e da Groq foram removidas do .env.")
+        print("As chaves da Anthropic, Groq e xAI foram removidas do .env.")
         print(f"ATENÇÃO: a cópia de segurança {backup} ainda contém a chave; apague-a se quiser:")
         print(f"  rm {backup}")
     print("Reinicie o servidor para aplicar.")
@@ -842,6 +871,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--env-file", default=".env")
     p.add_argument("--keep-key", action="store_true", help="mantém a chave no .env")
     p.set_defaults(fn=cmd_disable_groq_stt)
+    p = sub.add_parser("enable-xai-stt", help="liga o reconhecimento de voz on-line da xAI/Grok (o áudio sai do notebook)")
+    p.add_argument("--env-file", default=".env")
+    p.add_argument("--minutos", help="teto de minutos de fala por dia")
+    p.set_defaults(fn=cmd_enable_xai_stt)
+    p = sub.add_parser("disable-xai-stt", help="volta ao reconhecimento local (Vosk)")
+    p.add_argument("--env-file", default=".env")
+    p.add_argument("--keep-key", action="store_true", help="mantém a chave no .env")
+    p.set_defaults(fn=cmd_disable_xai_stt)
     p = sub.add_parser("enable-web", help="liga a pesquisa na internet (a pergunta sai do notebook)")
     p.add_argument("--env-file", default=".env")
     p.add_argument("--searxng", help="endereço do SearXNG local, ex.: http://127.0.0.1:8888")

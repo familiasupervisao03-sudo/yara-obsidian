@@ -122,8 +122,8 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
   const engines = useMemo(() => {
     const by = Object.fromEntries((status?.engines ?? []).map((e) => [e.name, e]));
     // O servidor oferece um mecanismo de voz: Piper (local) ou "edge" (voz natural on-line).
-    // Reconhecimento no servidor: Groq (on-line, com o Vosk de reserva) ou Vosk (local).
-    return { vosk: by.groq ?? by.vosk, server: by.piper ?? by.edge };
+    // Reconhecimento no servidor: Groq/xAI (on-line, com o Vosk de reserva) ou Vosk (local).
+    return { vosk: by.groq ?? by.xai ?? by.vosk, server: by.piper ?? by.edge };
   }, [status]);
   const localVoice = typeof window !== "undefined" ? pickBrowserVoice(false) : null;
   const anyVoice = typeof window !== "undefined" ? pickBrowserVoice(true) : null;
@@ -306,8 +306,8 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
             Reconhecimento de fala
             <select value={prefs.stt} onChange={(e) => setPrefs({ ...prefs, stt: e.target.value as SttChoice })}>
               <option value="vosk">
-                {engines.vosk?.name === "groq"
-                  ? "Groq (Whisper) pelo notebook — on-line, o áudio sai do notebook"
+                {engines.vosk && engines.vosk.name !== "vosk"
+                  ? `${engines.vosk.name === "xai" ? "Grok (xAI)" : "Groq (Whisper)"} pelo notebook — on-line, o áudio sai do notebook`
                   : `Vosk no notebook — local ${engines.vosk?.available ? "" : "(não instalado)"}`}
               </option>
               <option value="browser" disabled={!browserSttSupported()}>Navegador — EXTERNO (envia áudio ao fornecedor)</option>

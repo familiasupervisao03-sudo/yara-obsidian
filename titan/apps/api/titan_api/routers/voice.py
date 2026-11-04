@@ -68,8 +68,8 @@ def voice_status(_: CurrentUser = Depends(current_user), ctx: AppContext = Depen
         engines=[EngineOut(**e.__dict__) for e in ctx.voice.status()],
         sample_rate=16000,
         notes=[
-            "O reconhecimento é on-line (Whisper, Groq): o áudio de cada fala sai do notebook. "
-            "Se a Groq falhar, o Vosk local assume."
+            f"O reconhecimento é on-line ({ctx.voice.cloud_stt.label}): o áudio de cada fala sai do "
+            f"notebook. Se a {ctx.voice.cloud_stt.company} falhar, o Vosk local assume."
             if ctx.voice.cloud_stt is not None else
             "O reconhecimento (Vosk) roda no notebook: o áudio da sua fala não sai do computador.",
             "A voz do TITAN é on-line (Microsoft): o texto das respostas sai do notebook."

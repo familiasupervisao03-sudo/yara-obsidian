@@ -87,13 +87,16 @@ class Settings(BaseSettings):
     voice_tts: str = "piper"
     voice_edge_voice: str = "pt-BR-AntonioNeural"
     allow_external_voice: bool = False
-    # Reconhecimento da fala: "vosk" (local) ou "groq" (Whisper on-line da Groq: o ÁUDIO
-    # da sua fala sai do notebook; exige TITAN_ALLOW_EXTERNAL_VOICE=true e GROQ_API_KEY).
+    # Reconhecimento da fala: "vosk" (local), "groq" (Whisper on-line da Groq) ou "xai"
+    # (Grok, da xAI). Nos on-line o ÁUDIO da sua fala sai do notebook; exigem
+    # TITAN_ALLOW_EXTERNAL_VOICE=true e a chave (GROQ_API_KEY ou XAI_API_KEY).
     voice_stt: str = "vosk"
     groq_api_key: SecretStr = Field(default=SecretStr(""), validation_alias="GROQ_API_KEY")
     voice_groq_model: str = "whisper-large-v3-turbo"
-    # Teto de minutos de áudio enviados à Groq por dia (protege o limite grátis/custo).
-    voice_groq_max_minutes_day: int = Field(default=60, ge=1, le=1440)
+    xai_api_key: SecretStr = Field(default=SecretStr(""), validation_alias="XAI_API_KEY")
+    voice_xai_model: str = "grok-voice-transcribe-2.0"
+    # Teto de minutos de áudio enviados por dia ao reconhecimento on-line (protege o custo).
+    voice_cloud_max_minutes_day: int = Field(default=60, ge=1, le=1440)
 
     # Pesquisa na internet (opcional; ver docs/pesquisa-internet.md). Desligada por padrão:
     # a pergunta pesquisada sai do notebook para a fonte de busca e para os sites lidos.
@@ -240,21 +243,25 @@ class Settings(BaseSettings):
             if missing:
                 errors.append("A voz on-line envia o texto das respostas à Microsoft; faltam "
                               "autorizações: " + ", ".join(missing) + ".")
-        if self.voice_stt not in {"vosk", "groq"}:
-            errors.append("TITAN_VOICE_STT deve ser 'vosk' (local) ou 'groq' (on-line).")
-        if self.voice_stt == "groq":
+        if self.voice_stt not in {"vosk", "groq", "xai"}:
+            errors.append("TITAN_VOICE_STT deve ser 'vosk' (local), 'groq' ou 'xai' (on-line).")
+        if self.voice_stt in {"groq", "xai"}:
+            company, key_name, key = (("Groq", "GROQ_API_KEY", self.groq_api_key) if self.voice_stt == "groq"
+                                      else ("xAI", "XAI_API_KEY", self.xai_api_key))
             missing = []
             if self.local_only:
                 missing.append("TITAN_LOCAL_ONLY=false")
             if not self.allow_external_voice:
                 missing.append("TITAN_ALLOW_EXTERNAL_VOICE=true")
-            if not self.groq_api_key.get_secret_value().strip():
-                missing.append("GROQ_API_KEY")
+            if not key.get_secret_value().strip():
+                missing.append(key_name)
             if missing:
-                errors.append("O reconhecimento on-line envia o áudio da sua fala à Groq; faltam: "
+                errors.append(f"O reconhecimento on-line envia o áudio da sua fala à {company}; faltam: "
                               + ", ".join(missing) + ".")
-        if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{2,60}", self.voice_groq_model):
-            errors.append("TITAN_VOICE_GROQ_MODEL inválido (ex.: whisper-large-v3-turbo).")
+        for name, model in (("TITAN_VOICE_GROQ_MODEL", self.voice_groq_model),
+                            ("TITAN_VOICE_XAI_MODEL", self.voice_xai_model)):
+            if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{2,60}", model):
+                errors.append(f"{name} inválido.")
         if not re.fullmatch(r"[a-z]{2}-[A-Z]{2}-[A-Za-z]+Neural", self.voice_edge_voice):
             errors.append("TITAN_VOICE_EDGE_VOICE inválida (ex.: pt-BR-AntonioNeural).")
 
@@ -361,6 +368,7 @@ class Settings(BaseSettings):
             "voice_tts": self.voice_tts,
             "voice_stt": self.voice_stt,
             "groq_api_key_configured": bool(self.groq_api_key.get_secret_value()),
+            "xai_api_key_configured": bool(self.xai_api_key.get_secret_value()),
             "voice_edge_voice": self.voice_edge_voice,
             "allow_external_voice": self.allow_external_voice,
             "web_enabled": self.web_enabled,

@@ -90,11 +90,24 @@ Como funciona:
 * Ao terminar a fala, o áudio dela (WAV em memória) vai **uma vez** para a Groq; o
   texto da Groq substitui o do Vosk. Silêncio e falas curtíssimas não são enviados.
 * Se a Groq falhar (sem internet, chave recusada, limite deles ou o teto diário do
-  TITAN em `TITAN_VOICE_GROQ_MAX_MINUTES_DAY`), o texto do **Vosk** é usado.
+  TITAN em `TITAN_VOICE_CLOUD_MAX_MINUTES_DAY`), o texto do **Vosk** é usado.
 * Frases que o Whisper inventa com ruído ("Legendas pela comunidade Amara.org"…) são ignoradas.
 * Custo: no plano grátis, zero (ao passar do limite deles, o Vosk assume). Com cartão
   cadastrado, ~US$ 0,04 por hora de fala, com mínimo de 10 s por fala.
 * Desligar: `.venv/bin/titan disable-groq-stt` (remove a chave do `.env`).
+
+### Alternativa: xAI (Grok Speech to Text)
+
+Se você já tem créditos na xAI (console.x.ai), dá para usar o reconhecimento do Grok
+no lugar da Groq. Funciona do mesmo jeito (Vosk de reserva, silêncio não é enviado),
+mas é pago pelos créditos: ~US$ 0,10 por hora de fala (~R$ 0,01 por minuto).
+
+```sh
+.venv/bin/pip install -e ".[groq]"   # mesma biblioteca (httpx)
+.venv/bin/titan enable-xai-stt       # chave começa com xai-; pede AUTORIZO
+.venv/bin/titan ligar
+```
+Desligar: `.venv/bin/titan disable-xai-stt`.
 
 ## Medições reais (ambiente de desenvolvimento, Xeon 2,1 GHz, 4 núcleos)
 

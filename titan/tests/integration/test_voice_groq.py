@@ -98,7 +98,7 @@ def test_falls_back_to_vosk_when_groq_fails(make_settings, monkeypatch):
 
 
 def test_daily_cap_falls_back_to_vosk(make_settings, monkeypatch):
-    svc = make(make_settings, monkeypatch, lambda wav: groq_reply(), voice_groq_max_minutes_day=1)
+    svc = make(make_settings, monkeypatch, lambda wav: groq_reply(), voice_cloud_max_minutes_day=1)
     engines_used = [run(svc, speech())[1].engine for _ in range(8)]
     assert engines_used[:6] == ["groq"] * 6 and engines_used[6:] == ["vosk", "vosk"]
 
@@ -153,3 +153,62 @@ def test_cli_enable_and_disable(tmp_path, monkeypatch):
     text = env.read_text()
     assert "TITAN_VOICE_STT=vosk" in text and "GROQ_API_KEY" not in text
     assert "TITAN_ALLOW_EXTERNAL_VOICE=true" in text  # a voz on-line (edge) continua autorizada
+
+
+XAI = dict(voice_stt="xai", local_only=False, allow_external_voice=True, xai_api_key="xai-teste")
+
+
+def test_xai_requires_its_own_key(make_settings):
+    from titan.config.settings import ConfigurationError
+
+    with pytest.raises((ConfigurationError, ValueError)) as e:
+        make_settings(voice_stt="xai", local_only=False, allow_external_voice=True, groq_api_key="gsk_x")
+    assert "XAI_API_KEY" in str(e.value)
+    assert make_settings(**XAI).public_view()["xai_api_key_configured"] is True
+
+
+def test_xai_request_shape_and_fallback(make_settings, monkeypatch):
+    httpx = pytest.importorskip("httpx")
+    seen = {}
+    status = {"code": 200}
+
+    def handler(request):
+        seen["url"] = str(request.url)
+        seen["auth"] = request.headers["authorization"]
+        seen["body"] = request.read()
+        return httpx.Response(status["code"], json={"text": "Abre a aula de física", "language": "pt",
+                                                    "duration": 1.5, "words": []})
+
+    real_client = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda **kw: real_client(transport=httpx.MockTransport(handler)))
+    s = make_settings(**XAI, network_force_ipv4=False)
+    monkeypatch.setattr(engines.VoskSTT, "recognizer", lambda self: FakeRec())
+    svc = engines.VoiceService(s)
+    assert svc.status()[0].name == "xai"
+    t = run(svc, speech())[1]
+    assert t.engine == "xai" and t.text == "Abre a aula de física"
+    assert seen["url"] == "https://api.x.ai/v1/stt" and seen["auth"] == "Bearer xai-teste"
+    body = seen["body"]
+    assert b"grok-voice-transcribe-2.0" in body and b'name="language"' in body
+    assert body.index(b'name="file"') > body.index(b'name="model"')  # arquivo por último
+    status["code"] = 401
+    t = run(svc, speech())[1]
+    assert t.engine == "vosk" and t.text == "texto do vosk"
+
+
+def test_cli_enable_and_disable_xai(tmp_path, monkeypatch):
+    from titan import cli
+
+    env = tmp_path / ".env"
+    env.write_text("TITAN_LOCAL_ONLY=true\n")
+    answers = iter(["30", "AUTORIZO"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    monkeypatch.setattr(cli.getpass, "getpass", lambda *_: "xai-abc")
+    assert cli.main(["enable-xai-stt", "--env-file", str(env)]) == 0
+    text = env.read_text()
+    assert "TITAN_VOICE_STT=xai" in text and "XAI_API_KEY=xai-abc" in text
+    assert "TITAN_VOICE_CLOUD_MAX_MINUTES_DAY=30" in text
+    assert cli.main(["disable-xai-stt", "--env-file", str(env)]) == 0
+    text = env.read_text()
+    assert "TITAN_VOICE_STT=vosk" in text and "XAI_API_KEY" not in text
+    assert "TITAN_ALLOW_EXTERNAL_VOICE=false" in text
