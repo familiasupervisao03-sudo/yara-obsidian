@@ -317,7 +317,13 @@ class GroqSTT:
         if r.status_code in (401, 403):
             raise VoiceUnavailable(f"A {self.company} recusou a chave; usando o Vosk.")
         if r.status_code != 200:
-            raise VoiceUnavailable(f"A {self.company} respondeu {r.status_code}; usando o Vosk.")
+            detail = ""
+            try:
+                detail = str(r.json().get("error", {}).get("message", ""))[:160]
+            except Exception:
+                pass
+            raise VoiceUnavailable(f"A {self.company} respondeu {r.status_code}"
+                                   + (f" ({detail})" if detail else "") + "; usando o Vosk.")
         return r.json()
 
     def transcribe(self, pcm: bytes, hint: str = "") -> Transcript:
@@ -334,7 +340,7 @@ class GroqSTT:
         except VoiceUnavailable:
             raise
         except Exception as exc:  # rede, tempo esgotado, resposta inesperada
-            log.warning("%s falhou: %s", self.company, type(exc).__name__)
+            log.warning("%s falhou: %s: %s", self.company, type(exc).__name__, str(exc)[:200])
             raise VoiceUnavailable(f"A {self.company} não respondeu (sem internet?); usando o Vosk.") from exc
         raw, no_speech, conf = self._parse(data if isinstance(data, dict) else {})
         text = " ".join(raw.split())
@@ -408,6 +414,7 @@ class Transcript:
     confidence: Optional[float]  # média das notas por palavra (None se indisponível)
     verdict: str  # ok | noise (ignorar em silêncio) | unclear (pedir para repetir)
     engine: str = "vosk"
+    note: str = ""  # aviso para a tela (ex.: a Groq falhou e o Vosk assumiu)
 
 
 def judge_transcript(text: str, words: list[dict]) -> Transcript:
@@ -505,9 +512,10 @@ class SttSessions:
             try:
                 return self.cloud.transcribe(pcm)
             except VoiceUnavailable as exc:
-                log.info("Reconhecimento on-line indisponível: %s", exc)
+                log.warning("Reconhecimento on-line falhou, usando o Vosk: %s", exc)
                 if local is None:
                     raise
+                local.note = str(exc)
         return local if local is not None else Transcript("", None, "noise")
 
     def cancel(self, sid: str, user_id: uuid.UUID) -> None:

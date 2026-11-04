@@ -69,13 +69,13 @@ def test_incremental_session_partial_then_final(fake_voice):
     r = c.post(f"/api/v1/voice/stt/sessions/{sid}/audio", content=b"\x00" * 32000,
                headers={**CSRF, "Content-Type": "application/octet-stream"})
     assert r.json() == {"text": "parcial 32000", "final": False, "confidence": None, "verdict": "ok",
-                        "corrections": []}
+                        "corrections": [], "engine": None, "note": ""}
     r = c.post(f"/api/v1/voice/stt/sessions/{sid}/audio", content=b"\x00" * 32000,
                headers={**CSRF, "Content-Type": "application/octet-stream"})
     assert r.json()["text"] == "segmento"
     r = c.post(f"/api/v1/voice/stt/sessions/{sid}/finish", headers=CSRF)
     assert r.json() == {"text": "segmento final", "final": True, "confidence": None, "verdict": "ok",
-                        "corrections": []}
+                        "corrections": [], "engine": "vosk", "note": ""}
     # Sessão encerrada: não pode ser reutilizada (evita enviar a mesma fala duas vezes).
     assert c.post(f"/api/v1/voice/stt/sessions/{sid}/finish", headers=CSRF).status_code == 404
 
@@ -313,7 +313,8 @@ def test_finish_reports_verdict_and_confidence(settings, monkeypatch):
         login(c)
         sid = c.post("/api/v1/voice/stt/sessions", headers=CSRF).json()["session_id"]
         r = c.post(f"/api/v1/voice/stt/sessions/{sid}/finish", headers=CSRF).json()
-        assert r == {"text": "o", "final": True, "confidence": 0.99, "verdict": "noise", "corrections": []}
+        assert r == {"text": "o", "final": True, "confidence": 0.99, "verdict": "noise", "corrections": [],
+                     "engine": "vosk", "note": ""}
 
 
 def test_online_voice_uses_the_users_speed(online_voice):

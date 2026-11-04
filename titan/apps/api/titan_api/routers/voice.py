@@ -56,6 +56,9 @@ class SttTextOut(BaseModel):
     verdict: str = "ok"
     # Correções do seu dicionário aplicadas ao texto (a tela avisa; nada é trocado sem aviso).
     corrections: list[str] = []
+    # Quem ouviu (groq, xai ou vosk) e um aviso quando o on-line falhou e o Vosk assumiu.
+    engine: Optional[str] = None
+    note: str = ""
 
 
 class SpeakIn(BaseModel):
@@ -126,7 +129,7 @@ async def stt_finish(session_id: str, cu: CurrentUser = Depends(current_user),
         corrections = user_prefs.get(db, cu.user.id)["corrections"]
     text, applied = user_prefs.apply_corrections(t.text, corrections) if t.verdict != "noise" else (t.text, [])
     return SttTextOut(text=text, final=True, confidence=t.confidence, verdict=t.verdict,
-                      corrections=applied)
+                      corrections=applied, engine=t.engine, note=t.note)
 
 
 @router.delete("/stt/sessions/{session_id}", status_code=204)

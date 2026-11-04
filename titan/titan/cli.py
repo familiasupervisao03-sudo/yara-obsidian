@@ -321,6 +321,97 @@ def _disable_cloud_stt(args: argparse.Namespace, provider: str) -> int:
     return 0
 
 
+def _read_wav_16k(path) -> bytes:
+    """Lê um WAV e devolve PCM 16 bits mono 16 kHz (converte com interpolação simples)."""
+    import sys as _sys
+    import wave
+    from array import array
+
+    with wave.open(str(path), "rb") as w:
+        rate, ch, width = w.getframerate(), w.getnchannels(), w.getsampwidth()
+        raw = w.readframes(w.getnframes())
+    if width != 2:
+        raise ValueError("o WAV precisa ser 16 bits (ex.: arecord -f S16_LE)")
+    a = array("h")
+    a.frombytes(raw)
+    if _sys.byteorder == "big":
+        a.byteswap()
+    if ch > 1:
+        a = array("h", (sum(a[i:i + ch]) // ch for i in range(0, len(a) - ch + 1, ch)))
+    if rate != 16000:
+        n = int(len(a) * 16000 / rate)
+        step = rate / 16000
+        a = array("h", (a[min(int(i * step), len(a) - 1)] for i in range(n)))
+    if _sys.byteorder == "big":
+        a.byteswap()
+    return a.tobytes()
+
+
+def cmd_test_voice(args: argparse.Namespace) -> int:
+    """Grava (ou lê) uma fala e mostra o que o Vosk e o reconhecimento on-line entenderam."""
+    import shutil
+    import subprocess
+    import tempfile
+    import time
+    from pathlib import Path
+
+    from titan.voice import engines
+
+    s = _settings()
+    if args.arquivo:
+        wav = Path(args.arquivo)
+    else:
+        if not shutil.which("arecord"):
+            print("Programa 'arecord' não encontrado (sudo apt install alsa-utils) ou use --arquivo fala.wav",
+                  file=sys.stderr)
+            return 1
+        wav = Path(tempfile.mkdtemp()) / "fala.wav"
+        input(f"Aperte Enter e fale por {args.segundos} segundos (ex.: 'TITAN, qual é a capital da Austrália?')...")
+        print("Gravando... fale agora.")
+        res = subprocess.run(["arecord", "-q", "-f", "S16_LE", "-r", "16000", "-c", "1",
+                              "-d", str(args.segundos), str(wav)], capture_output=True, text=True)
+        if res.returncode != 0:
+            print(f"Não consegui gravar: {res.stderr.strip()[:200]}", file=sys.stderr)
+            return 1
+    try:
+        pcm = _read_wav_16k(wav)
+    except Exception as exc:  # arquivo inválido
+        print(f"Não consegui ler o áudio: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        if not args.arquivo:
+            shutil.rmtree(wav.parent, ignore_errors=True)
+    print(f"Áudio: {len(pcm) / 32000:.1f} s, volume médio {engines.speech_level(pcm):.0f} "
+          f"(abaixo de {engines.MIN_SPEECH_LEVEL:.0f} conta como silêncio)")
+
+    vosk = engines.VoskSTT(s)
+    st = vosk.status()
+    if st.available:
+        rec = vosk.recognizer()
+        rec.AcceptWaveform(pcm)
+        import json
+
+        print(f"\nVosk (local):   {json.loads(rec.FinalResult()).get('text', '') or '(nada)'}")
+    else:
+        print(f"\nVosk (local):   indisponível — {st.detail}")
+
+    cloud = {"groq": engines.GroqSTT, "xai": engines.XaiSTT}.get(s.voice_stt)
+    if cloud is None:
+        print("On-line:        desligado (TITAN_VOICE_STT=vosk). Ligue com: .venv/bin/titan enable-groq-stt")
+        return 0
+    eng = cloud(s)
+    t0 = time.monotonic()
+    try:
+        t = eng.transcribe(pcm)
+    except engines.VoiceUnavailable as exc:
+        print(f"{eng.company + ':':15} FALHOU — {exc}")
+        return 1
+    print(f"{eng.company + ':':15} {t.text or '(nada)'}   [{t.verdict}, {time.monotonic() - t0:.1f} s]")
+    if t.verdict == "noise":
+        print("  (o reconhecimento achou que era ruído/silêncio: fale mais perto do microfone)")
+    return 0
+
+
 def cmd_enable_groq_stt(args: argparse.Namespace) -> int:
     return _enable_cloud_stt(args, "groq")
 
@@ -871,6 +962,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--env-file", default=".env")
     p.add_argument("--keep-key", action="store_true", help="mantém a chave no .env")
     p.set_defaults(fn=cmd_disable_groq_stt)
+    p = sub.add_parser("testar-voz", help="grava uma fala e mostra o que o Vosk e a Groq/xAI entenderam")
+    p.add_argument("--arquivo", help="usar um WAV em vez de gravar")
+    p.add_argument("--segundos", type=int, default=5)
+    p.set_defaults(fn=cmd_test_voice)
     p = sub.add_parser("enable-xai-stt", help="liga o reconhecimento de voz on-line da xAI/Grok (o áudio sai do notebook)")
     p.add_argument("--env-file", default=".env")
     p.add_argument("--minutos", help="teto de minutos de fala por dia")

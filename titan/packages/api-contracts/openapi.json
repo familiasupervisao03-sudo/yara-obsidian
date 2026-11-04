@@ -1395,9 +1395,25 @@
             "title": "Corrections",
             "type": "array"
           },
+          "engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine"
+          },
           "final": {
             "title": "Final",
             "type": "boolean"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
           },
           "text": {
             "title": "Text",

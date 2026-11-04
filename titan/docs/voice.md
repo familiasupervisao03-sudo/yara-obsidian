@@ -96,6 +96,14 @@ Como funciona:
   cadastrado, ~US$ 0,04 por hora de fala, com mínimo de 10 s por fala.
 * Desligar: `.venv/bin/titan disable-groq-stt` (remove a chave do `.env`).
 
+### Está errando? Teste o microfone
+
+```sh
+.venv/bin/titan testar-voz      # grava 5 s e mostra o que o Vosk e a Groq/xAI entenderam
+```
+Mostra também o volume (muito baixo = fale mais perto ou aumente o microfone em
+Configurações → Som). Na tela de voz, se a Groq falhar o TITAN avisa o motivo.
+
 ### Alternativa: xAI (Grok Speech to Text)
 
 Se você já tem créditos na xAI (console.x.ai), dá para usar o reconhecimento do Grok

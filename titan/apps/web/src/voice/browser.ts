@@ -128,7 +128,7 @@ export class ServerStt implements SttEngine {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const body = await r.json();
     return { text: body.text as string, verdict: body.verdict ?? "ok", confidence: body.confidence ?? null,
-             corrections: body.corrections ?? [] };
+             corrections: body.corrections ?? [], engine: body.engine ?? null, note: body.note ?? "" };
   }
 
   abort(): void {

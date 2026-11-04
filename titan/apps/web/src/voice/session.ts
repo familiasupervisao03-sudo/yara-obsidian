@@ -28,6 +28,9 @@ export interface SttResult {
   confidence?: number | null;
   /** Trocas feitas pelo dicionário pessoal do usuário (mostradas na tela). */
   corrections?: string[];
+  /** Quem ouviu (groq, xai, vosk) e aviso quando o reconhecimento on-line falhou. */
+  engine?: string | null;
+  note?: string;
 }
 
 export interface SttEngine {
@@ -295,6 +298,8 @@ export class VoiceSession {
     if (this.state !== "transcribing") return; // sessão encerrada no meio
     const useful = results.filter((r) => r.verdict !== "noise" && r.text.trim());
     const text = useful.map((r) => r.text.trim()).join(" ");
+    const failed = results.map((r) => r.note).find((n) => n);
+    if (failed) this.ev.onNotice?.(failed);
     const fixed = useful.flatMap((r) => r.corrections ?? []);
     if (fixed.length) this.ev.onNotice?.(`Corrigido pelo seu dicionário: ${fixed.join(", ")}`);
     if (!text) {

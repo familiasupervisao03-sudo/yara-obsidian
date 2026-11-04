@@ -212,3 +212,45 @@ def test_cli_enable_and_disable_xai(tmp_path, monkeypatch):
     text = env.read_text()
     assert "TITAN_VOICE_STT=vosk" in text and "XAI_API_KEY" not in text
     assert "TITAN_ALLOW_EXTERNAL_VOICE=false" in text
+
+
+def test_fallback_explains_itself(make_settings, monkeypatch):
+    def boom(wav):
+        raise engines.VoiceUnavailable("A Groq respondeu 400 (formato inválido); usando o Vosk.")
+
+    svc = make(make_settings, monkeypatch, boom)
+    t = run(svc, speech())[1]
+    assert t.engine == "vosk" and "400" in t.note
+
+
+def test_cli_testar_voz_with_file(tmp_path, monkeypatch, capsys):
+    import wave
+
+    from titan import cli
+    from titan.config.settings import get_settings
+
+    wav = tmp_path / "fala.wav"
+    with wave.open(str(wav), "wb") as w:  # 44,1 kHz estéreo: o comando converte
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(44100)
+        mono = speech(seconds=1.0)
+        n = len(mono) // 2
+        samples = struct.unpack(f"<{n}h", mono)
+        w.writeframes(struct.pack(f"<{n * 2}h", *(x for v in samples for x in (v, v))))
+    for k, v in {"TITAN_ENV": "test", "TITAN_VOICE_STT": "groq", "TITAN_LOCAL_ONLY": "false",
+                 "TITAN_ALLOW_EXTERNAL_VOICE": "true", "GROQ_API_KEY": "gsk_t",
+                 "TITAN_AUTH_SECRET": "x" * 64}.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.chdir(tmp_path)
+    get_settings.cache_clear()
+    sent = []
+    monkeypatch.setattr(engines.GroqSTT, "_send", lambda self, data: sent.append(data) or groq_reply("Capital da Austrália"))
+    try:
+        assert cli.main(["testar-voz", "--arquivo", str(wav)]) == 0
+    finally:
+        get_settings.cache_clear()
+    out = capsys.readouterr().out
+    assert "Groq:" in out and "Capital da Austrália" in out
+    with wave.open(__import__("io").BytesIO(sent[0])) as w:
+        assert w.getframerate() == 16000 and w.getnchannels() == 1 and abs(w.getnframes() - 16000 * 16000 // 44100) <= 2
