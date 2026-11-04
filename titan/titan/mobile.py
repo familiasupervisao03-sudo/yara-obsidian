@@ -113,6 +113,37 @@ def make_certificates(ips: list[str], tls_dir: Path = TLS_DIR, host_label: str =
     return ca_crt, crt, key
 
 
+def cert_ips(crt: Path) -> set[str]:
+    """IPs cobertos pelo certificado do servidor (vazio se não der para ler)."""
+    try:
+        res = subprocess.run(["openssl", "x509", "-in", str(crt), "-noout", "-ext", "subjectAltName"],
+                             capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return set()
+    return {part.strip()[len("IP Address:"):] for part in res.stdout.replace("\n", ",").split(",")
+            if part.strip().startswith("IP Address:")}
+
+
+def trust_on_notebook(ca_crt: Path, run: Callable = subprocess.run) -> Optional[str]:
+    """Faz o Chrome/Chromium deste usuário confiar na CA local (banco NSS em ~/.pki/nssdb).
+
+    Devolve None se deu certo, ou a explicação do que fazer à mão.
+    """
+    if not shutil.which("certutil"):
+        return "instale com: sudo apt install libnss3-tools  (e rode de novo)"
+    db = Path.home() / ".pki" / "nssdb"
+    try:
+        if not db.exists():
+            db.mkdir(parents=True, mode=0o700)
+            run(["certutil", "-N", "-d", f"sql:{db}", "--empty-password"], capture_output=True, timeout=20)
+        run(["certutil", "-D", "-d", f"sql:{db}", "-n", "TITAN CA local"], capture_output=True, timeout=20)
+        res = run(["certutil", "-A", "-d", f"sql:{db}", "-n", "TITAN CA local", "-t", "C,,", "-i", str(ca_crt)],
+                  capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"certutil falhou: {exc}"
+    return None if res.returncode == 0 else f"certutil falhou: {(res.stderr or '').strip()[:200]}"
+
+
 def env_updates(ip: str, crt: Path, key: Path, tailscale: bool) -> dict[str, str]:
     nets = ["127.0.0.1/32", "::1/128", lan_network(ip)] + ([TAILSCALE_NET] if tailscale else [])
     return {"TITAN_HOST": "0.0.0.0", "TITAN_ALLOWED_NETWORKS": ",".join(nets),

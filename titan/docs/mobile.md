@@ -1,6 +1,20 @@
 # Acesso pelo celular (Android) — DESLIGADO por padrão
 
-## Jeito fácil (recomendado): um comando
+## Um comando só: notebook + celular no mesmo servidor
+
+```sh
+.venv/bin/titan ligar                  # na 1ª vez pede AUTORIZO; depois só liga
+```
+
+Liga o servidor **uma vez** para os dois: no notebook abre sozinho
+`https://localhost:8000` e mostra o endereço do celular (`https://IP:8000`) e um
+QR code da página de instalação (cadeado + app APK) por 15 minutos. Na primeira
+vez também faz o Chrome/Chromium do notebook confiar no cadeado (precisa de
+`sudo apt install libnss3-tools`). Se o notebook mudar de IP, o cadeado do
+servidor é renovado sozinho — o celular não precisa reinstalar nada.
+Opções: `--tailscale`, `--sem-navegador`, `--sem-pagina`.
+
+## Só preparar o celular (sem ligar o servidor)
 
 ```sh
 .venv/bin/pip install segno            # opcional: mostra o QR code no terminal

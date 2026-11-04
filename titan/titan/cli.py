@@ -379,6 +379,107 @@ def cmd_mobile_on(args: argparse.Namespace) -> int:
     return 0
 
 
+LIGAR_WARNING = """
+Primeira vez: ligar o TITAN para o notebook E o celular (um comando só)
+  * O TITAN passa a aceitar conexões da sua Wi-Fi, sempre com cadeado (HTTPS) e login.
+  * Nada é aberto para a internet: sem portas no roteador, sem túnel público.
+  * O navegador deste notebook (Chrome/Chromium) passa a confiar no cadeado do TITAN.
+  * Para desfazer: .venv/bin/titan desligar-celular
+"""
+
+
+def _prepare_both(env_path, tailscale: bool, ask: bool = True):
+    """Deixa o .env e o cadeado prontos para notebook + celular. Devolve (ip, ts, ca, nets) ou None."""
+    from pathlib import Path
+
+    from titan import mobile
+    from titan.envfile import read_env, update_env
+
+    env = read_env(env_path)
+    ip = mobile.lan_ip()
+    ts = mobile.tailscale_ip() if tailscale else None
+    crt = Path(env.get("TITAN_TLS_CERT_FILE", "")) if env.get("TITAN_TLS_CERT_FILE") else None
+    ca = mobile.TLS_DIR / "titan-ca.crt"
+    first = not (crt and crt.is_file() and ca.is_file() and env.get("TITAN_HOST") == "0.0.0.0")
+    if first:
+        print(LIGAR_WARNING)
+        print(f"Notebook na Wi-Fi: {ip}" + (f" · Tailscale: {ts}" if ts else ""))
+        if ask and _ask("Digite AUTORIZO para confirmar").strip().upper() != "AUTORIZO":
+            print("Não confirmado. Nada foi alterado.")
+            return None
+    wanted = [ip] + ([ts] if ts else [])
+    if first or not set(wanted) <= mobile.cert_ips(crt):
+        if not first:
+            print(f"O notebook mudou de endereço ({ip}): renovando o cadeado (o celular continua valendo).")
+        ca, crt, key = mobile.make_certificates(wanted)
+    else:
+        key = Path(env.get("TITAN_TLS_KEY_FILE", str(mobile.TLS_DIR / "server.key")))
+    updates = mobile.env_updates(ip, crt, key, tailscale=bool(ts) or mobile.TAILSCALE_NET in env.get("TITAN_ALLOWED_NETWORKS", ""))
+    if any(env.get(k) != v for k, v in updates.items()):
+        update_env(env_path, updates)
+    if first:
+        problem = mobile.trust_on_notebook(ca)
+        print("✓ Chrome/Chromium do notebook confia no cadeado do TITAN" if problem is None else
+              f"! O navegador do notebook ainda não confia no cadeado: {problem}")
+    return ip, ts, ca, updates["TITAN_ALLOWED_NETWORKS"].split(",")
+
+
+def cmd_ligar(args: argparse.Namespace) -> int:
+    """Um comando só: liga o servidor e deixa notebook e celular prontos."""
+    import shutil
+    import subprocess
+    import threading
+    from pathlib import Path
+
+    from titan import mobile
+    from titan.config.settings import get_settings
+    from titan.envfile import read_env
+
+    env_path = Path(args.env_file)
+    if not env_path.exists():
+        print(f"{env_path} não existe. Rode primeiro scripts/setup.sh.", file=sys.stderr)
+        return 1
+    try:
+        ready = _prepare_both(env_path, args.tailscale)
+    except mobile.MobileError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+    if ready is None:
+        return 1
+    ip, ts, ca, nets = ready
+    port = read_env(env_path).get("TITAN_PORT", "8000")
+    app_url = f"https://{ip}:{port}"
+    print("\n" + "=" * 60)
+    print(f"  NOTEBOOK:  https://localhost:{port}")
+    print(f"  CELULAR:   {app_url}   (app TITAN ou Chrome, na mesma Wi-Fi)")
+    if ts:
+        print(f"  FORA DE CASA (Tailscale): https://{ts}:{port}")
+    print("=" * 60)
+
+    if not args.sem_pagina:
+        try:
+            server = mobile.make_install_server(ca, app_url, nets, args.porta)
+        except OSError as exc:
+            print(f"(Página de instalação não abriu na porta {args.porta}: {exc})")
+        else:
+            install_url = f"http://{ip}:{args.porta}/instalar"
+            print(f"\nCelular novo? Aponte a câmera para o QR (ou abra {install_url}):")
+            qr = mobile.qr_text(install_url)
+            print(qr if qr else "(Para ver o QR code aqui: .venv/bin/pip install segno)")
+            print(f"Lá estão o cadeado e o app (APK). A página fecha sozinha em {mobile.INSTALL_MINUTES} minutos.")
+            threading.Thread(target=mobile.serve_install_page, args=(server,), daemon=True).start()
+
+    if not args.sem_navegador and shutil.which("xdg-open"):
+        def _open() -> None:
+            subprocess.Popen(["xdg-open", f"https://localhost:{port}"],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        threading.Timer(4, _open).start()
+
+    print("\nLigando o servidor... (Ctrl+C desliga tudo)\n")
+    get_settings.cache_clear()
+    return cmd_serve(argparse.Namespace(no_migrate=False))
+
+
 def cmd_mobile_off(args: argparse.Namespace) -> int:
     import shutil
     from pathlib import Path
@@ -669,6 +770,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--porta", type=int, default=8001, help="porta da página de instalação temporária")
     p.add_argument("--sem-pagina", action="store_true", help="não abre a página de instalação")
     p.set_defaults(fn=cmd_mobile_on)
+    p = sub.add_parser("ligar", help="UM COMANDO SÓ: liga o servidor para o notebook e o celular")
+    p.add_argument("--env-file", default=".env")
+    p.add_argument("--tailscale", action="store_true", help="também permite usar fora de casa pelo Tailscale")
+    p.add_argument("--porta", type=int, default=8001, help="porta da página de instalação temporária")
+    p.add_argument("--sem-pagina", action="store_true", help="não abre a página de instalação/QR")
+    p.add_argument("--sem-navegador", action="store_true", help="não abre o navegador do notebook")
+    p.set_defaults(fn=cmd_ligar)
     p = sub.add_parser("desligar-celular", help="desliga o acesso pelo celular (volta a só este notebook)")
     p.add_argument("--env-file", default=".env")
     p.add_argument("--apagar-certificados", action="store_true")

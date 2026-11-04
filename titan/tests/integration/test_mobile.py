@@ -126,3 +126,50 @@ def test_install_page_offers_the_app_when_built(tmp_path, monkeypatch):
         t.join(5)
     monkeypatch.setattr(mobile, "APK_FILE", tmp_path / "nao-existe.apk")
     assert "BAIXAR O APP" not in mobile.install_page("https://x", "titan-ca.crt", has_apk=False)
+
+
+def test_ligar_one_command_prepares_both_and_starts_server(tmp_path, monkeypatch, capsys):
+    from titan import cli
+
+    monkeypatch.chdir(tmp_path)
+    env = tmp_path / ".env"
+    env.write_text("TITAN_LOCAL_ONLY=true\nTITAN_PORT=8000\n")
+    ip = {"v": "192.168.1.20"}
+    monkeypatch.setattr(mobile, "lan_ip", lambda: ip["v"])
+    monkeypatch.setattr(mobile, "trust_on_notebook", lambda ca: None)
+    served = []
+    monkeypatch.setattr(cli, "cmd_serve", lambda a: served.append(a) or 0)
+    monkeypatch.setattr("builtins.input", lambda *_: "AUTORIZO")
+    args = ["ligar", "--env-file", str(env), "--sem-pagina", "--sem-navegador"]
+    assert cli.main(args) == 0 and len(served) == 1
+    out = capsys.readouterr().out
+    assert "https://localhost:8000" in out and "https://192.168.1.20:8000" in out
+    assert "TITAN_TLS_CERT_FILE=var/tls/server.crt" in env.read_text()
+    crt = tmp_path / "var/tls/server.crt"
+    assert "192.168.1.20" in mobile.cert_ips(crt)
+
+    # Segunda vez: não pergunta nada, não mexe no .env nem no cadeado.
+    monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("não deveria perguntar"))
+    before, mtime = env.read_text(), crt.stat().st_mtime_ns
+    assert cli.main(args) == 0 and len(served) == 2
+    assert env.read_text() == before and crt.stat().st_mtime_ns == mtime
+
+    # Mudou de IP: renova só o certificado do servidor (a CA do celular continua).
+    ca_before = (tmp_path / "var/tls/titan-ca.crt").read_bytes()
+    ip["v"] = "10.0.0.7"
+    assert cli.main(args) == 0
+    assert "10.0.0.7" in mobile.cert_ips(crt) and "10.0.0.0/24" in env.read_text()
+    assert (tmp_path / "var/tls/titan-ca.crt").read_bytes() == ca_before
+
+
+def test_ligar_refused_changes_nothing(tmp_path, monkeypatch):
+    from titan import cli
+
+    monkeypatch.chdir(tmp_path)
+    env = tmp_path / ".env"
+    env.write_text("TITAN_LOCAL_ONLY=true\n")
+    monkeypatch.setattr(mobile, "lan_ip", lambda: "192.168.1.20")
+    monkeypatch.setattr(cli, "cmd_serve", lambda a: pytest.fail("não deveria ligar"))
+    monkeypatch.setattr("builtins.input", lambda *_: "nao")
+    assert cli.main(["ligar", "--env-file", str(env), "--sem-pagina", "--sem-navegador"]) == 1
+    assert env.read_text() == "TITAN_LOCAL_ONLY=true\n"

@@ -20,7 +20,8 @@ sh scripts/audit_host.sh          # 1. audite o notebook (somente leitura)
 sh scripts/setup.sh               # 2. venv, dependências, .env com segredo, migrações
 npm install && npm run build      # 3. interface (precisa de Node 20.19+, só para compilar)
 .venv/bin/titan create-user seu_nome
-.venv/bin/titan serve             # http://127.0.0.1:8000
+.venv/bin/titan serve             # http://127.0.0.1:8000 (só o notebook)
+.venv/bin/titan ligar             # OU: um comando só para notebook + celular
 ```
 
 **Instalação no notebook, passo a passo:** [`docs/notebook-install.md`](docs/notebook-install.md).
