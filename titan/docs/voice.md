@@ -72,6 +72,30 @@ sh scripts/enable_online_voice.sh        # instala edge-tts (~5 MB), pede a voz 
   a resposta continua por escrito e o erro aparece na tela.
 - Conexão por IPv4 (como a Anthropic) e limite de 30 s por trecho.
 
+## Reconhecimento on-line pela Groq (opcional, externo, grátis no plano gratuito)
+
+O Vosk pequeno erra bastante em português. O Whisper da Groq entende muito melhor.
+
+1. Crie uma conta em <https://console.groq.com> (o plano grátis não pede cartão) e
+   gere uma chave em **API Keys** (começa com `gsk_`).
+2. No notebook:
+   ```sh
+   .venv/bin/pip install -e ".[groq]"
+   .venv/bin/titan enable-groq-stt      # pede o teto diário, a chave (oculta) e AUTORIZO
+   .venv/bin/titan ligar
+   ```
+
+Como funciona:
+* Enquanto você fala, o **Vosk** mostra o texto parcial (nada sai do notebook).
+* Ao terminar a fala, o áudio dela (WAV em memória) vai **uma vez** para a Groq; o
+  texto da Groq substitui o do Vosk. Silêncio e falas curtíssimas não são enviados.
+* Se a Groq falhar (sem internet, chave recusada, limite deles ou o teto diário do
+  TITAN em `TITAN_VOICE_GROQ_MAX_MINUTES_DAY`), o texto do **Vosk** é usado.
+* Frases que o Whisper inventa com ruído ("Legendas pela comunidade Amara.org"…) são ignoradas.
+* Custo: no plano grátis, zero (ao passar do limite deles, o Vosk assume). Com cartão
+  cadastrado, ~US$ 0,04 por hora de fala, com mínimo de 10 s por fala.
+* Desligar: `.venv/bin/titan disable-groq-stt` (remove a chave do `.env`).
+
 ## Medições reais (ambiente de desenvolvimento, Xeon 2,1 GHz, 4 núcleos)
 
 | Medida | Valor |

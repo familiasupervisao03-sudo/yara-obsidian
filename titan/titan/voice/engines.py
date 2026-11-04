@@ -1,6 +1,9 @@
 """Mecanismos de voz opcionais.
 
-* Reconhecimento de fala: Vosk (local, modelo pequeno de português, ~52 MB).
+* Reconhecimento de fala: Vosk (local, modelo pequeno de português, ~52 MB) ou, se o
+  usuário autorizar, o Whisper on-line da Groq — nesse caso o ÁUDIO da fala sai do
+  notebook (só ao terminar cada fala; o Vosk continua mostrando o texto parcial e
+  assume sozinho se a Groq falhar).
 * Síntese de voz: Piper (local, voz pt_BR, ~63 MB) ou, se o usuário autorizar,
   a voz natural on-line da Microsoft (edge-tts) — nesse caso o TEXTO das
   respostas sai do notebook.
@@ -235,16 +238,132 @@ class EdgeTTS:
         return audio
 
 
+class GroqSTT:
+    """Reconhecimento ON-LINE (Whisper na Groq). O áudio da fala sai do notebook.
+
+    Só é usado com TITAN_VOICE_STT=groq, TITAN_ALLOW_EXTERNAL_VOICE=true e GROQ_API_KEY.
+    Cada fala é enviada uma vez, ao terminar, como WAV em memória (nada vai para o disco).
+    """
+
+    name = "groq"
+    URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+    TIMEOUT_SECONDS = 20
+    MIN_BILLED_SECONDS = 10  # a Groq cobra no mínimo 10 s por pedido
+    # Frases que o Whisper costuma "inventar" com silêncio ou ruído.
+    HALLUCINATIONS = ("legendas pela comunidade", "amara.org", "obrigado por assistir",
+                      "inscreva-se no canal", "legenda adriana zanotto", "transcrição por")
+
+    def __init__(self, settings: Settings, post: Any = None) -> None:
+        self.key = settings.groq_api_key.get_secret_value().strip()
+        self.model = settings.voice_groq_model
+        self.max_seconds_day = settings.voice_groq_max_minutes_day * 60
+        self.force_ipv4 = settings.network_force_ipv4
+        self._post = post  # injeção para testes
+        self._lock = threading.Lock()
+        self._day = ""
+        self._used = 0.0
+
+    def status(self) -> EngineStatus:
+        if not self.key:
+            return EngineStatus(self.name, "stt", False, False, "GROQ_API_KEY não configurada.")
+        return EngineStatus(self.name, "stt", True, False,
+                            f"Reconhecimento on-line (Whisper, Groq). O áudio de cada fala é enviado "
+                            f"à Groq. Hoje: {self.used_today() / 60:.0f} de "
+                            f"{self.max_seconds_day // 60} min.")
+
+    def used_today(self) -> float:
+        with self._lock:
+            return self._used if self._day == time.strftime("%Y-%m-%d") else 0.0
+
+    def _reserve(self, seconds: float) -> None:
+        billed = max(seconds, self.MIN_BILLED_SECONDS)
+        with self._lock:
+            today = time.strftime("%Y-%m-%d")
+            if self._day != today:
+                self._day, self._used = today, 0.0
+            if self._used + billed > self.max_seconds_day:
+                raise VoiceUnavailable("Limite diário de minutos da Groq atingido; usando o Vosk.")
+            self._used += billed
+
+    def _send(self, wav: bytes) -> dict:
+        if self._post is not None:
+            return self._post(wav)
+        import httpx
+
+        transport = httpx.HTTPTransport(local_address="0.0.0.0") if self.force_ipv4 else None
+        with httpx.Client(timeout=self.TIMEOUT_SECONDS, transport=transport) as client:
+            r = client.post(self.URL, headers={"Authorization": f"Bearer {self.key}"},
+                            files={"file": ("fala.wav", wav, "audio/wav")},
+                            data={"model": self.model, "language": "pt", "temperature": "0",
+                                  "response_format": "verbose_json"})
+        if r.status_code == 429:
+            raise VoiceUnavailable("Limite da Groq atingido por agora; usando o Vosk.")
+        if r.status_code in (401, 403):
+            raise VoiceUnavailable("A Groq recusou a chave (GROQ_API_KEY); usando o Vosk.")
+        if r.status_code != 200:
+            raise VoiceUnavailable(f"A Groq respondeu {r.status_code}; usando o Vosk.")
+        return r.json()
+
+    def transcribe(self, pcm: bytes, hint: str = "") -> Transcript:
+        seconds = len(pcm) / (SAMPLE_RATE * 2)
+        self._reserve(seconds)
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(SAMPLE_RATE)
+            w.writeframes(pcm)
+        try:
+            data = self._send(buf.getvalue())
+        except VoiceUnavailable:
+            raise
+        except Exception as exc:  # rede, tempo esgotado, resposta inesperada
+            log.warning("Groq falhou: %s", type(exc).__name__)
+            raise VoiceUnavailable("A Groq não respondeu (sem internet?); usando o Vosk.") from exc
+        text = " ".join(str(data.get("text", "")).split())
+        segs = [x for x in data.get("segments") or [] if isinstance(x, dict)]
+        no_speech = [float(x.get("no_speech_prob", 0)) for x in segs]
+        low = text.lower()
+        if not text or (no_speech and min(no_speech) > 0.6) or any(h in low for h in self.HALLUCINATIONS):
+            return Transcript("", None, "noise", "groq")
+        logprobs = [float(x["avg_logprob"]) for x in segs if "avg_logprob" in x]
+        import math
+
+        conf = round(math.exp(sum(logprobs) / len(logprobs)), 3) if logprobs else None
+        t = judge_transcript(text, [])
+        return Transcript(text, conf, t.verdict, "groq")
+
+
+def speech_level(pcm: bytes) -> float:
+    """Volume médio (RMS) do PCM 16 bits; serve para não enviar silêncio à Groq."""
+    from array import array
+
+    a = array("h")
+    a.frombytes(pcm[: len(pcm) - len(pcm) % 2])
+    if sys.byteorder == "big":
+        a.byteswap()
+    if not a:
+        return 0.0
+    step = max(1, len(a) // 40_000)
+    sample = a[::step]
+    return (sum(x * x for x in sample) / len(sample)) ** 0.5
+
+
+MIN_SPEECH_SECONDS = 0.4
+MIN_SPEECH_LEVEL = 80.0
+
+
 @dataclass
 class SttSession:
     id: str
     user_id: uuid.UUID
-    recognizer: Any
+    recognizer: Any  # Vosk (texto parcial e reserva); None se o Vosk não estiver instalado
     created: float = field(default_factory=time.monotonic)
     touched: float = field(default_factory=time.monotonic)
     bytes_received: int = 0
     finals: list[str] = field(default_factory=list)  # segmentos já finalizados pelo Vosk
     words: list[dict] = field(default_factory=list)  # palavras com nota (SetWords)
+    pcm: Optional[bytearray] = None  # áudio guardado em memória só se a Groq estiver ligada
 
 
 # Avaliação da transcrição (scripts/voice_eval): a nota do Vosk NÃO separa ruído de fala
@@ -259,6 +378,7 @@ class Transcript:
     text: str
     confidence: Optional[float]  # média das notas por palavra (None se indisponível)
     verdict: str  # ok | noise (ignorar em silêncio) | unclear (pedir para repetir)
+    engine: str = "vosk"
 
 
 def judge_transcript(text: str, words: list[dict]) -> Transcript:
@@ -278,8 +398,9 @@ class SttSessions:
     MAX_SESSIONS = 2
     IDLE_TIMEOUT = 30.0
 
-    def __init__(self, engine: VoskSTT, max_seconds: int) -> None:
+    def __init__(self, engine: VoskSTT, max_seconds: int, cloud: Optional[GroqSTT] = None) -> None:
         self.engine = engine
+        self.cloud = cloud
         self.max_bytes = max_seconds * SAMPLE_RATE * 2
         self._sessions: dict[str, SttSession] = {}
         self._lock = threading.Lock()
@@ -294,10 +415,17 @@ class SttSessions:
             self._expire()
             if len(self._sessions) >= self.MAX_SESSIONS:
                 raise VoiceUnavailable("Muitas sessões de reconhecimento simultâneas.")
-        rec = self.engine.recognizer()
+        if self.cloud is None:
+            rec = self.engine.recognizer()
+        else:
+            try:
+                rec = self.engine.recognizer()
+            except VoiceUnavailable:
+                rec = None  # sem Vosk: só a Groq (sem texto parcial nem reserva)
         sid = uuid.uuid4().hex
         with self._lock:
-            self._sessions[sid] = SttSession(sid, user_id, rec)
+            self._sessions[sid] = SttSession(sid, user_id, rec,
+                                             pcm=bytearray() if self.cloud is not None else None)
         return sid
 
     def _get(self, sid: str, user_id: uuid.UUID) -> SttSession:
@@ -317,6 +445,10 @@ class SttSessions:
             self.cancel(sid, user_id)
             raise VoiceUnavailable("Fala longa demais para um único turno.")
         s.touched = time.monotonic()
+        if s.pcm is not None:
+            s.pcm.extend(pcm)
+        if s.recognizer is None:
+            return ""
         if s.recognizer.AcceptWaveform(pcm):
             result = json.loads(s.recognizer.Result())
             text = result.get("text", "").strip()
@@ -331,10 +463,23 @@ class SttSessions:
         s = self._get(sid, user_id)
         with self._lock:
             self._sessions.pop(sid, None)
-        result = json.loads(s.recognizer.FinalResult())
-        last = result.get("text", "").strip()
-        words = [*s.words, *result.get("result", [])]
-        return judge_transcript(" ".join([*s.finals, last]).strip(), words)
+        local = None
+        if s.recognizer is not None:
+            result = json.loads(s.recognizer.FinalResult())
+            last = result.get("text", "").strip()
+            local = judge_transcript(" ".join([*s.finals, last]).strip(), [*s.words, *result.get("result", [])])
+        if self.cloud is not None and s.pcm is not None:
+            pcm = bytes(s.pcm)
+            s.pcm = None
+            if len(pcm) < MIN_SPEECH_SECONDS * SAMPLE_RATE * 2 or speech_level(pcm) < MIN_SPEECH_LEVEL:
+                return Transcript("", None, "noise", "groq")  # silêncio: nada é enviado
+            try:
+                return self.cloud.transcribe(pcm)
+            except VoiceUnavailable as exc:
+                log.info("Reconhecimento on-line indisponível: %s", exc)
+                if local is None:
+                    raise
+        return local if local is not None else Transcript("", None, "noise")
 
     def cancel(self, sid: str, user_id: uuid.UUID) -> None:
         with self._lock:
@@ -347,9 +492,11 @@ class VoiceService:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.stt = VoskSTT(settings)
+        self.cloud_stt: Optional[GroqSTT] = GroqSTT(settings) if settings.voice_stt == "groq" else None
         self.tts: PiperTTS | EdgeTTS = EdgeTTS(settings) if settings.voice_tts == "edge" \
             else PiperTTS(settings)
-        self.sessions = SttSessions(self.stt, settings.voice_max_utterance_seconds)
+        self.sessions = SttSessions(self.stt, settings.voice_max_utterance_seconds, self.cloud_stt)
 
     def status(self) -> list[EngineStatus]:
-        return [self.stt.status(), self.tts.status()]
+        stt = [self.cloud_stt.status()] if self.cloud_stt is not None else []
+        return [*stt, self.stt.status(), self.tts.status()]

@@ -68,6 +68,9 @@ def voice_status(_: CurrentUser = Depends(current_user), ctx: AppContext = Depen
         engines=[EngineOut(**e.__dict__) for e in ctx.voice.status()],
         sample_rate=16000,
         notes=[
+            "O reconhecimento é on-line (Whisper, Groq): o áudio de cada fala sai do notebook. "
+            "Se a Groq falhar, o Vosk local assume."
+            if ctx.voice.cloud_stt is not None else
             "O reconhecimento (Vosk) roda no notebook: o áudio da sua fala não sai do computador.",
             "A voz do TITAN é on-line (Microsoft): o texto das respostas sai do notebook."
             if ctx.voice.tts.name == "edge" else
@@ -107,18 +110,23 @@ async def stt_audio(session_id: str, request: Request, cu: CurrentUser = Depends
 
 
 @router.post("/stt/sessions/{session_id}/finish", response_model=SttTextOut,
-             responses={404: {"model": ErrorResponse}})
-def stt_finish(session_id: str, cu: CurrentUser = Depends(current_user),
-               ctx: AppContext = Depends(get_ctx)):
+             responses={404: {"model": ErrorResponse}, 503: {"model": ErrorResponse}})
+async def stt_finish(session_id: str, cu: CurrentUser = Depends(current_user),
+                     ctx: AppContext = Depends(get_ctx)):
+    from starlette.concurrency import run_in_threadpool
+
     try:
-        t = ctx.voice.sessions.finish(session_id, cu.user.id)
-        with ctx.session_factory() as db:
-            corrections = user_prefs.get(db, cu.user.id)["corrections"]
-        text, applied = user_prefs.apply_corrections(t.text, corrections) if t.verdict != "noise" else (t.text, [])
-        return SttTextOut(text=text, final=True, confidence=t.confidence, verdict=t.verdict,
-                          corrections=applied)
+        # Pode chamar a Groq (rede): fora do laço de eventos.
+        t = await run_in_threadpool(ctx.voice.sessions.finish, session_id, cu.user.id)
     except KeyError:
         return _err(404, "not_found", "Sessão de reconhecimento expirada ou inexistente.")
+    except VoiceUnavailable as exc:
+        return _err(503, "voice_unavailable", str(exc))
+    with ctx.session_factory() as db:
+        corrections = user_prefs.get(db, cu.user.id)["corrections"]
+    text, applied = user_prefs.apply_corrections(t.text, corrections) if t.verdict != "noise" else (t.text, [])
+    return SttTextOut(text=text, final=True, confidence=t.confidence, verdict=t.verdict,
+                      corrections=applied)
 
 
 @router.delete("/stt/sessions/{session_id}", status_code=204)
