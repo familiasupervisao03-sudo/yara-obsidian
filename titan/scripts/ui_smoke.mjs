@@ -1,7 +1,8 @@
 // Teste de fumaça da interface (desktop e celular) com navegador headless.
 // Uso: [PLAYWRIGHT_MODULE=...] TITAN_URL=... TITAN_USER=... TITAN_PASSWORD=... node scripts/ui_smoke.mjs [pasta-screenshots]
 // Com TITAN_EXPECT_REPLY=1 exige resposta do modelo (servidor de teste com provedor mock).
-const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright");
+const pw = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright");
+const chromium = pw.chromium ?? pw.default.chromium;
 
 const url = process.env.TITAN_URL ?? "http://127.0.0.1:8000";
 const user = process.env.TITAN_USER;
@@ -39,7 +40,9 @@ for (const [name, viewport] of [["desktop", { width: 1366, height: 860 }], ["mob
   await page.getByRole("button", { name: "Conversa", exact: true }).click();
   await page.getByPlaceholder("Mensagem para o TITAN…").waitFor({ timeout: 10000 });
 
-  // conversa em streaming
+  // conversa em streaming (numa conversa nova: depois de uma vídeo-aula, a próxima
+  // mensagem continuaria a aula em vídeo)
+  await page.getByRole("button", { name: "Nova", exact: true }).click();
   const msg = `teste ${name} ${Date.now()}`;
   await page.getByPlaceholder("Mensagem para o TITAN…").fill(msg);
   await page.getByRole("button", { name: "Enviar" }).click();

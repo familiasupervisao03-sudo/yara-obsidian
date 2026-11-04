@@ -1,7 +1,7 @@
 // Ícones próprios em SVG (traço de 1.75px, herdam a cor do texto). Sem bibliotecas externas.
 import type { ReactNode } from "react";
 
-export type IconName = "home" | "chat" | "mic" | "tasks" | "system" | "history" | "plus" | "list" | "logout" | "globe" | "play";
+export type IconName = "home" | "chat" | "mic" | "tasks" | "system" | "history" | "plus" | "list" | "logout" | "globe" | "play" | "plug" | "bell";
 
 const PATHS: Record<IconName, ReactNode> = {
   home: <><path d="M4 11.5 12 5l8 6.5" /><path d="M6.5 10v8.5h11V10" /></>,
@@ -14,6 +14,8 @@ const PATHS: Record<IconName, ReactNode> = {
   list: <path d="M5 7h14M5 12h14M5 17h14" />,
   globe: <><circle cx="12" cy="12" r="7.5" /><path d="M4.5 12h15M12 4.5c2.2 2.2 3.2 4.7 3.2 7.5s-1 5.3-3.2 7.5c-2.2-2.2-3.2-4.7-3.2-7.5s1-5.3 3.2-7.5z" /></>,
   play: <><rect x="4" y="5.5" width="16" height="13" rx="2.5" /><path d="M10.5 9.5v5l4-2.5z" /></>,
+  plug: <><path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0zM12 16v5" /><path d="M4 4l16 16" /></>,
+  bell: <><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" /><path d="M10 20.5a2 2 0 0 0 4 0" /></>,
   logout: <><path d="M10 5H6v14h4" /><path d="M14 8.5 17.5 12 14 15.5M17.5 12H9.5" /></>,
 };
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionInfo, SettingsView, SystemStatus } from "@titan/api-contracts";
 import { api, HttpError } from "../api";
 import { ChatView } from "./ChatView";
@@ -7,8 +7,36 @@ import { TasksView } from "./TasksView";
 import { SystemView } from "./SystemView";
 import { Home } from "./Home";
 import { Icon, type IconName } from "./icons";
+import { OfflineScreen } from "./OfflineScreen";
+import { ShareView, type Shared } from "./ShareView";
+import { notify } from "../notify";
 
 export type View = "home" | "chat" | "voice" | "tasks" | "system";
+
+/** Pedido para abrir a conversa num modo (vindo do Início, de um atalho ou de algo compartilhado). */
+export interface ChatIntent {
+  lesson?: boolean;      // abre as opções de vídeo-aula
+  web?: boolean;         // liga a pesquisa na internet
+  draft?: string;        // texto já escrito na caixa
+  send?: boolean;        // envia o texto sem esperar
+  newConversation?: boolean;
+  at?: number;
+}
+
+/** Atalhos do ícone (manifest) e "Compartilhar → TITAN" chegam pelo endereço. */
+function readLaunch(): { view?: View; intent?: ChatIntent; shared?: Shared } {
+  const q = new URLSearchParams(window.location.search);
+  const acao = q.get("acao");
+  if (window.location.pathname === "/compartilhar") {
+    const shared = { title: q.get("title") ?? "", text: q.get("text") ?? "", url: q.get("url") ?? "" };
+    if (shared.title || shared.text || shared.url) return { shared };
+  }
+  if (acao === "voz") return { view: "voice" };
+  if (acao === "conversa") return { view: "chat", intent: { newConversation: true } };
+  if (acao === "aula") return { view: "chat", intent: { lesson: true } };
+  if (acao === "aprovacoes") return { view: "tasks" };
+  return {};
+}
 
 const TABS: { id: View; label: string; icon: IconName }[] = [
   { id: "home", label: "Início", icon: "home" },
@@ -33,7 +61,10 @@ export function Shell({ session, onLogout, onExpired }: {
   onLogout: () => void;
   onExpired: () => void;
 }) {
-  const [view, setView] = useState<View>(loadView);
+  const [launch] = useState(readLaunch);
+  const [view, setView] = useState<View>(() => launch.view ?? loadView());
+  const [chatIntent, setChatIntent] = useState<ChatIntent | null>(launch.intent ? { ...launch.intent, at: Date.now() } : null);
+  const [shared, setShared] = useState<Shared | null>(launch.shared ?? null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const [offline, setOffline] = useState(false);
@@ -41,10 +72,17 @@ export function Shell({ session, onLogout, onExpired }: {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [chatVersion, setChatVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const seenApprovals = useRef<number | null>(null);
+  const wasOffline = useRef(false);
+
+  // Limpa o endereço do atalho/compartilhamento (recarregar não repete a ação).
+  useEffect(() => {
+    if (window.location.search || window.location.pathname !== "/") window.history.replaceState(null, "", "/");
+  }, []);
 
   const handleError = useCallback((e: unknown) => {
     if (e instanceof HttpError && e.status === 401) onExpired();
-    else if (e instanceof HttpError && e.status === 0) setOffline(true);
+    else if (e instanceof HttpError && e.status === 0) { wasOffline.current = true; setOffline(true); }
     else setError((e as Error).message);
   }, [onExpired]);
 
@@ -54,16 +92,28 @@ export function Shell({ session, onLogout, onExpired }: {
         setStatus(st);
         setSettings(se);
         setPendingApprovals(ap.length);
+        if (seenApprovals.current !== null && ap.length > seenApprovals.current) {
+          notify("Aprovação pendente", ap.length === 1 ? "1 ação está esperando você aprovar."
+            : `${ap.length} ações estão esperando você aprovar.`, "aprovacoes", "/?acao=aprovacoes");
+        }
+        seenApprovals.current = ap.length;
         setOffline(false);
+        if (wasOffline.current) {
+          wasOffline.current = false;
+          window.dispatchEvent(new Event("titan:reconectado")); // reenvia o que ficou pendente
+        }
       })
       .catch(handleError);
   }, [handleError]);
 
   useEffect(() => {
     refresh();
+    // Visível: a cada 30 s. Em segundo plano: a cada 60 s, só para os avisos de aprovação.
+    let last = Date.now();
     const id = window.setInterval(() => {
-      if (document.visibilityState === "visible") refresh();
-    }, 30_000);
+      const every = document.visibilityState === "visible" ? 30_000 : 60_000;
+      if (Date.now() - last >= every) { last = Date.now(); refresh(); }
+    }, 10_000);
     const online = () => refresh();
     window.addEventListener("online", online);
     return () => {
@@ -71,6 +121,12 @@ export function Shell({ session, onLogout, onExpired }: {
       window.removeEventListener("online", online);
     };
   }, [refresh]);
+
+  const openChat = (intent: ChatIntent) => {
+    setShared(null);
+    setChatIntent({ ...intent, at: Date.now() });
+    go("chat");
+  };
 
   const go = (v: View) => {
     setView(v);
@@ -102,12 +158,7 @@ export function Shell({ session, onLogout, onExpired }: {
         <button className="ghost small" onClick={onLogout}><Icon name="logout" size={16} /> Sair</button>
       </header>
 
-      {offline && (
-        <div className="banner banner-warn" role="status">
-          Sem conexão com o notebook. Suas mensagens não se perdem; reconectando…
-          <button className="ghost small" onClick={refresh}>Tentar agora</button>
-        </div>
-      )}
+      {offline && <OfflineScreen onRetry={refresh} />}
       {error && (
         <div className="banner banner-error" role="alert">
           {error} <button className="ghost small" onClick={() => setError(null)}>OK</button>
@@ -128,12 +179,13 @@ export function Shell({ session, onLogout, onExpired }: {
       <main className={`content content-${view}`}>
         {view === "home" && (
           <Home username={session.user.username} status={status} offline={offline}
-                pendingApprovals={pendingApprovals} onGo={go} onError={handleError}
+                pendingApprovals={pendingApprovals} onGo={go} onChat={openChat} onError={handleError}
                 onOpenConversation={(id) => { setConversationId(id); go("chat"); }} />
         )}
         {view === "chat" && (
           <ChatView conversationId={conversationId} onConversation={setConversationId}
-                    version={chatVersion} onError={handleError} />
+                    version={chatVersion} onError={handleError} intent={chatIntent}
+                    onIntentDone={() => setChatIntent(null)} />
         )}
         {view === "voice" && (
           <VoiceView conversationId={conversationId} onConversation={setConversationId}
@@ -143,6 +195,8 @@ export function Shell({ session, onLogout, onExpired }: {
         {view === "tasks" && <TasksView onError={handleError} onChanged={refresh} />}
         {view === "system" && <SystemView status={status} settings={settings} onRefresh={refresh} />}
       </main>
+      {shared && <ShareView shared={shared} webEnabled={settings?.config.web_enabled === true}
+                            onAction={openChat} onClose={() => setShared(null)} />}
     </div>
   );
 }

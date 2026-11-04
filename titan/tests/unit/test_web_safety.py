@@ -154,3 +154,17 @@ def test_explicit_request_detection(text, wanted, query):
     assert wants_web(text) is wanted
     if query:
         assert make_query(text) == query
+
+
+def test_links_in_the_request_are_read_directly(monkeypatch):
+    from titan.config.settings import Settings
+    from titan.tools.web import research as R
+
+    s = Settings(_env_file=None, env="test", local_only=False, web_enabled=True, web_max_pages=3)
+    w = R.WebResearcher(s)
+    read = []
+    monkeypatch.setattr(w, "read_page", lambda url, max_chars=R.PAGE_CHARS: read.append(url) or ("Título", "conteúdo da página"))
+    monkeypatch.setattr(R.search, "wikipedia", lambda *a, **k: pytest.fail("não deveria buscar"))
+    res = w.research("Resuma isto para mim: Vídeo legal https://www.youtube.com/watch?v=abc123. Obrigado")
+    assert read == ["https://www.youtube.com/watch?v=abc123"]
+    assert res.provider == "link" and res.sources[0].title == "Título"

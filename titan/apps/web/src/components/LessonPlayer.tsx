@@ -556,7 +556,7 @@ function SceneBody({ s, shown, answer, onChoose, lesson }: {
             {s.itens.map((t, i) => {
               const [head, ...rest] = t.split(/:\s+|\s+[–—-]\s+/);
               return (
-                <div key={i} className={`card ${vis(i)}`}>
+                <div key={i} className={`lcard ${vis(i)}`}>
                   <IconChip name={icon(i) ?? "check"} big />
                   <b>{head}</b>{rest.length > 0 && <span>{rest.join(" — ")}</span>}
                 </div>

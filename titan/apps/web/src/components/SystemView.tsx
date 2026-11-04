@@ -1,4 +1,6 @@
 import type { SettingsView, SystemStatus } from "@titan/api-contracts";
+import { AppearancePanel } from "./AppearancePanel";
+import { NotificationsPanel } from "./NotificationsPanel";
 import { PreferencesPanel } from "./PreferencesPanel";
 
 const STATE_LABEL: Record<string, string> = {
@@ -46,6 +48,8 @@ export function SystemView({ status, settings, onRefresh }: {
           ))}
         </ul>
       </div>
+      <AppearancePanel />
+      <NotificationsPanel />
       <PreferencesPanel />
     </section>
   );

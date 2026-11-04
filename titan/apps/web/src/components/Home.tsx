@@ -2,24 +2,25 @@ import { useEffect, useState } from "react";
 import type { Conversation, SystemStatus } from "@titan/api-contracts";
 import { api } from "../api";
 import { Icon } from "./icons";
-import type { View } from "./Shell";
+import type { ChatIntent, View } from "./Shell";
 
 // Rótulos de apresentação para os serviços informados por /system/status.
 const SERVICE_LABEL: Record<string, string> = {
   database: "Banco de dados", model: "Modelo de IA", sandbox: "Laboratório de código",
-  orchestrator: "Tarefas", voice: "Voz",
+  orchestrator: "Tarefas", voice: "Voz", internet: "Internet",
 };
 const STATE_LABEL: Record<string, string> = {
   online: "online", offline: "offline", disabled: "desativado", unavailable: "indisponível", planned: "planejado",
 };
 
 /** Centro de comando: atalhos para as funções existentes e estado real dos serviços. */
-export function Home({ username, status, offline, pendingApprovals, onGo, onOpenConversation, onError }: {
+export function Home({ username, status, offline, pendingApprovals, onGo, onChat, onOpenConversation, onError }: {
   username: string;
   status: SystemStatus | null;
   offline: boolean;
   pendingApprovals: number;
   onGo: (v: View) => void;
+  onChat: (intent: ChatIntent) => void;
   onOpenConversation: (id: string) => void;
   onError: (e: unknown) => void;
 }) {
@@ -45,15 +46,48 @@ export function Home({ username, status, offline, pendingApprovals, onGo, onOpen
       </header>
 
       <div className="home-actions">
-        <button className="action" onClick={() => onGo("chat")}>
-          <span className="action-icon"><Icon name="chat" size={20} /></span>
-          <span className="action-text"><strong>Conversar</strong><span>Texto, com histórico</span></span>
-        </button>
         <button className="action" onClick={() => onGo("voice")}>
-          <span className="action-icon"><Icon name="mic" size={20} /></span>
-          <span className="action-text"><strong>Modo de voz</strong><span>Falar e ouvir</span></span>
+          <span className="action-icon"><Icon name="mic" size={22} /></span>
+          <span className="action-text"><strong>Falar</strong><span>Comando de voz</span></span>
+        </button>
+        <button className="action" onClick={() => onChat({})}>
+          <span className="action-icon"><Icon name="chat" size={22} /></span>
+          <span className="action-text"><strong>Escrever</strong><span>Conversa com histórico</span></span>
+        </button>
+        <button className="action" onClick={() => onChat({ lesson: true })}>
+          <span className="action-icon"><Icon name="play" size={22} /></span>
+          <span className="action-text"><strong>Aula</strong><span>Vídeo-aula na hora</span></span>
+        </button>
+        <button className="action" onClick={() => onChat({ web: true })} disabled={!web}
+                title={web ? undefined : "Pesquisa na internet desligada (titan enable-web)"}>
+          <span className="action-icon"><Icon name="globe" size={22} /></span>
+          <span className="action-text"><strong>Pesquisar</strong><span>{web ? "Internet com fontes" : "Desligada"}</span></span>
         </button>
       </div>
+
+      {status && (
+        <section className="card meters" aria-label="Status do sistema">
+          <h2 className="card-title">Status do sistema</h2>
+          {status.services.map((sv) => (
+            <div key={sv.name} className={`meter meter-${sv.state}`} title={sv.detail}>
+              <span className="meter-name">{SERVICE_LABEL[sv.name] ?? sv.name}</span>
+              <span className="meter-bar" aria-hidden="true">
+                <i style={{ width: sv.state === "online" ? "100%" : sv.state === "unavailable" ? "35%" : "0%" }} />
+              </span>
+              <span className={`state state-${sv.state}`}>{STATE_LABEL[sv.state] ?? sv.state}</span>
+            </div>
+          ))}
+          {!status.paid_apis_blocked && status.paid_budget_brl > 0 && (
+            <div className="meter" title="Gasto do dia com a IA paga">
+              <span className="meter-name">Orçamento hoje</span>
+              <span className="meter-bar" aria-hidden="true">
+                <i style={{ width: `${Math.min(100, (status.paid_spent_today_brl / status.paid_budget_brl) * 100)}%` }} />
+              </span>
+              <span className="state">R$ {status.paid_spent_today_brl.toFixed(2)}</span>
+            </div>
+          )}
+        </section>
+      )}
 
       {pendingApprovals > 0 && (
         <div className="card card-attention" role="status">
@@ -81,23 +115,6 @@ export function Home({ username, status, offline, pendingApprovals, onGo, onOpen
             )}
         </section>
 
-        <section className="card" aria-labelledby="home-services">
-          <header className="card-head">
-            <h2 id="home-services" className="card-title"><Icon name="system" size={16} /> Serviços</h2>
-            <button className="ghost small" onClick={() => onGo("system")}>Configurações</button>
-          </header>
-          {!status ? <p className="muted small">{offline ? "Sem conexão: estado desconhecido." : "Carregando…"}</p> : (
-            <ul className="svc">
-              {status.services.map((s) => (
-                <li key={s.name} title={s.detail}>
-                  <span className={`dot dot-${s.state}`} aria-hidden />
-                  <span className="svc-name">{SERVICE_LABEL[s.name] ?? s.name}</span>
-                  <span className={`state state-${s.state}`}>{STATE_LABEL[s.state] ?? s.state}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
       </div>
     </section>
   );

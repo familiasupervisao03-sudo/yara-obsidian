@@ -1,16 +1,84 @@
 {
   "name": "TITAN",
   "short_name": "TITAN",
-  "description": "Assistente pessoal local (servidor no seu notebook)",
+  "description": "Assistente pessoal com IA, voz e vídeo-aulas (servidor no seu notebook)",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0a0d10",
-  "theme_color": "#0a0d10",
+  "background_color": "#03070c",
+  "theme_color": "#03070c",
   "lang": "pt-BR",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
-  ]
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Falar com o TITAN",
+      "short_name": "Falar",
+      "url": "/?acao=voz",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Nova conversa",
+      "short_name": "Conversa",
+      "url": "/?acao=conversa",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Nova vídeo-aula",
+      "short_name": "Aula",
+      "url": "/?acao=aula",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Aprovações pendentes",
+      "short_name": "Aprovações",
+      "url": "/?acao=aprovacoes",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "share_target": {
+    "action": "/compartilhar",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
 }

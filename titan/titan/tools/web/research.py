@@ -23,6 +23,7 @@ from titan.tools.web.extract import clip, extract
 from titan.tools.web.net import USER_AGENT, BlockedDestination, Fetcher, WebError
 
 PAGE_CHARS = 4000
+_URL = re.compile(r"https?://[^\s<>\"'()]+")
 CACHE_TTL = 600.0
 CACHE_SIZE = 32
 
@@ -179,6 +180,13 @@ class WebResearcher:
                                 0, cached=True)
         self._take_quota(user_key)
         started = time.monotonic()
+        links = list(dict.fromkeys(u.rstrip(".,;:!?") for u in _URL.findall(text)))[:2]
+        if links:
+            # Link enviado pelo usuário (ex.: "Compartilhar → TITAN"): lê a própria página.
+            res = Research(query, "link")
+            self._fill([search.Hit(title=_site(u), url=u) for u in links], res)
+            res.elapsed_ms = int((time.monotonic() - started) * 1000)
+            return res
         res = Research(query, self.provider)
         try:
             if self.provider == "searxng":

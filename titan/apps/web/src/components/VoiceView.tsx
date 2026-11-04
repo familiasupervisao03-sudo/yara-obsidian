@@ -73,6 +73,26 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
   const [muted, setMuted] = useState(false);
   const [ttsOn, setTtsOn] = useState(true);
   const [suggestion, setSuggestion] = useState<CorrectionSuggestion | null>(null);
+
+  // Celular: a tela não apaga durante a conversa por voz e vibra quando começa a ouvir.
+  const awake = state !== "idle" && state !== "error";
+  useEffect(() => {
+    if (!awake || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    let cancelled = false;
+    const take = () => {
+      navigator.wakeLock.request("screen").then((l) => { if (cancelled) void l.release(); else lock = l; }).catch(() => undefined);
+    };
+    take();
+    const again = () => { if (document.visibilityState === "visible" && !lock) take(); };
+    document.addEventListener("visibilitychange", again);
+    return () => { cancelled = true; document.removeEventListener("visibilitychange", again); void lock?.release(); };
+  }, [awake]);
+  const prevState = useRef(state);
+  useEffect(() => {
+    if (state === "listening" && prevState.current !== "listening") navigator.vibrate?.(35);
+    prevState.current = state;
+  }, [state]);
   const sessionRef = useRef<VoiceSession | null>(null);
   const levelRef = useRef<HTMLDivElement>(null);
   const convRef = useRef<string | null>(conversationId);
@@ -202,7 +222,9 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
 
       <div className="voice-controls">
         {!active ? (
-          <button onClick={start} disabled={!sttOk}><Icon name="mic" size={18} /> Iniciar conversa por voz</button>
+          <button className="mic-big" onClick={start} disabled={!sttOk} aria-label="Iniciar conversa por voz">
+            <Icon name="mic" size={30} /><span>Iniciar conversa por voz</span>
+          </button>
         ) : (
           <button className="danger" onClick={stop}>Encerrar</button>
         )}

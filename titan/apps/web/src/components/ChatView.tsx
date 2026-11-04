@@ -4,6 +4,8 @@ import { api, newRequestId } from "../api";
 import { StreamingChat, type ResearchEvent } from "../voice/browser";
 import { Icon } from "./icons";
 import { LessonPlayer } from "./LessonPlayer";
+import type { ChatIntent } from "./Shell";
+import { notify } from "../notify";
 
 const LESSON_MARKER = "▶ Vídeo-aula: ";
 // Mesmo critério do servidor (titan/lessons/script.py): pedido explícito de vídeo-aula.
@@ -30,17 +32,21 @@ interface Pending {
   error?: string;
 }
 
-export function ChatView({ conversationId, onConversation, version, onError }: {
+export function ChatView({ conversationId, onConversation, version, onError, intent, onIntentDone }: {
   conversationId: string | null;
-  onConversation: (id: string) => void;
+  onConversation: (id: string | null) => void;
   version: number;
   onError: (e: unknown) => void;
+  intent?: ChatIntent | null;
+  onIntentDone?: () => void;
 }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [streaming, setStreaming] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  const pendingRef = useRef<Pending | null>(null);
+  pendingRef.current = pending;
   const [notice, setNotice] = useState<string | null>(null);
   const [showList, setShowList] = useState(false);
   const [webEnabled, setWebEnabled] = useState(false);
@@ -69,6 +75,29 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
     try { localStorage.setItem("titan.lesson", JSON.stringify(lessonPrefs)); } catch { /* ignora */ }
   }, [lessonPrefs]);
   useEffect(() => setVideoReply(true), [lastLesson?.id]);
+
+  // Pedido vindo do Início, de um atalho do ícone ou de algo compartilhado.
+  useEffect(() => {
+    if (!intent) return;
+    onIntentDone?.();
+    if (intent.web) setWebOn(true);
+    if (intent.lesson) setLessonPanel(true);
+    if (intent.newConversation && !intent.send) onConversation(null);
+    const text = intent.draft?.trim() ?? "";
+    if (!text) return;
+    if (!intent.send) { setDraft(intent.draft ?? ""); return; }
+    if (wantsLesson(text)) void sendLesson(text, intent.web ? { web: true } : {}, Boolean(intent.newConversation));
+    else void send({ text, requestId: newRequestId() }, { forceNew: intent.newConversation, web: intent.web });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intent?.at]);
+
+  // O notebook voltou: reenvia sozinha a mensagem que ficou pendente (mesmo id, sem duplicar).
+  useEffect(() => {
+    const again = () => { if (pendingRef.current?.error) void send(pendingRef.current); };
+    window.addEventListener("titan:reconectado", again);
+    return () => window.removeEventListener("titan:reconectado", again);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     api.settings().then((v) => setWebEnabled(v.config.web_enabled === true)).catch(() => {});
   }, []);
@@ -81,15 +110,15 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
   useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [messages, streaming]);
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  async function ensureConversation(seed: string): Promise<string> {
-    if (conversationId) return conversationId;
+  async function ensureConversation(seed: string, forceNew = false): Promise<string> {
+    if (conversationId && !forceNew) return conversationId;
     const c = await api.createConversation(seed.slice(0, 60) || "Conversa");
     setConversations((cs) => [c, ...cs]);
     onConversation(c.id);
     return c.id;
   }
 
-  async function send(p: Pending) {
+  async function send(p: Pending, opts: { forceNew?: boolean; web?: boolean } = {}) {
     setPending({ ...p, error: undefined });
     setNotice(null);
     setStreaming("");
@@ -98,21 +127,22 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
     abortRef.current = abort;
     let cid: string;
     try {
-      cid = await ensureConversation(p.text);
+      cid = await ensureConversation(p.text, opts.forceNew);
     } catch (e) {
       setPending({ ...p, error: (e as Error).message });
       setStreaming(null);
       return;
     }
     const chat = new StreamingChat(async () => cid, "text",
-                                   { web: webOn ? true : undefined, onResearch: setResearch });
+                                   { web: (opts.web ?? webOn) ? true : undefined, onResearch: setResearch });
     let acc = "";
     try {
-      await chat.send(p.text, p.requestId, abort.signal, (d) => {
+      const res = await chat.send(p.text, p.requestId, abort.signal, (d) => {
         acc += d;
         setStreaming(acc);
       });
       setPending(null);
+      notify("Resposta pronta", res.content.slice(0, 120), "resposta");
     } catch (e) {
       if (abort.signal.aborted) return;
       const err = e as Error & { fatal?: boolean };
@@ -131,16 +161,19 @@ export function ChatView({ conversationId, onConversation, version, onError }: {
     }
   }
 
-  async function sendLesson(text: string, extra: LessonOptions = {}) {
+  async function sendLesson(text: string, extra: LessonOptions = {}, forceNew = false) {
     setNotice(null);
     setPreparing(true);
     setLessonPanel(false);
     try {
-      const cid = await ensureConversation(text);
+      const cid = await ensureConversation(text, forceNew);
       const r = await api.createLesson(cid, text, newRequestId(), {
         level: lessonPrefs.level, length: lessonPrefs.length, ...(webOn ? { web: true } : {}), ...extra,
       });
-      if (r.lesson && r.reply) setLesson({ lesson: r.lesson, conversationId: cid, messageId: r.reply.id });
+      if (r.lesson && r.reply) {
+        setLesson({ lesson: r.lesson, conversationId: cid, messageId: r.reply.id });
+        notify("Vídeo-aula pronta", `"${r.lesson.titulo}" · ${r.lesson.cenas.length} cenas`, "aula");
+      }
       else setNotice(r.model.detail);
       const c = await api.conversation(cid).catch(() => null);
       if (c) setMessages(c.messages);

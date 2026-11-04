@@ -1,6 +1,6 @@
 // Service worker do TITAN: guarda só a "casca" da interface para abrir rápido.
 // NUNCA guarda respostas da API (conversas, tarefas, voz): elas vêm sempre do notebook.
-const CACHE = "titan-shell-v1";
+const CACHE = "titan-shell-v2";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(["/", "/manifest.webmanifest", "/icon.svg"])));
@@ -28,4 +28,16 @@ self.addEventListener("fetch", (e) => {
       return res;
     })));
   }
+});
+
+// Toque num aviso: abre (ou traz para frente) o TITAN na tela certa.
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || "/";
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    for (const c of list) {
+      if (new URL(c.url).origin === location.origin) return c.focus().then(() => c.navigate(url)).catch(() => c.focus());
+    }
+    return self.clients.openWindow(url);
+  }));
 });

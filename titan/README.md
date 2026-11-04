@@ -37,6 +37,7 @@ Início automático (avaliação): [`docs/autostart.md`](docs/autostart.md).
 - [`docs/voice-eval.md`](docs/voice-eval.md) — avaliação reproduzível da voz
 - [`docs/simulacao.md`](docs/simulacao.md) — simulação contínua (`titan simular`) e parada segura
 - [`docs/pesquisa-internet.md`](docs/pesquisa-internet.md) — pesquisa na internet (desligada por padrão), SearXNG local e proteções
+- [`apps/web/src/theme/README.md`](apps/web/src/theme/README.md) — temas visuais (futurista, clássico) e como criar outro
 - [`docs/video-aulas.md`](docs/video-aulas.md) — vídeo-aulas animadas feitas na hora, perguntas e teorias em vídeo
 - [`docs/mobile.md`](docs/mobile.md) — acesso pelo celular (HTTPS local)
 - [`docs/backup.md`](docs/backup.md) — backup e recuperação

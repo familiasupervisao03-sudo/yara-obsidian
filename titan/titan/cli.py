@@ -306,6 +306,100 @@ def cmd_web_search(args: argparse.Namespace) -> int:
     return 0
 
 
+MOBILE_WARNING = """
+Ligar o TITAN ao celular
+  * O TITAN passa a aceitar conexões da sua Wi-Fi (e do Tailscale, se escolher),
+    sempre com cadeado (HTTPS) e com login obrigatório.
+  * Nada é aberto para a internet: sem portas no roteador, sem túnel público.
+  * Por 15 minutos fica no ar uma página de instalação sem cadeado que entrega só
+    o certificado PÚBLICO do notebook e as instruções.
+  * Para desfazer: .venv/bin/titan desligar-celular
+"""
+
+
+def cmd_mobile_on(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from titan import mobile
+    from titan.envfile import read_env, update_env
+
+    env_path = Path(args.env_file)
+    if not env_path.exists():
+        print(f"{env_path} não existe. Rode primeiro scripts/setup.sh.", file=sys.stderr)
+        return 1
+    try:
+        ip = mobile.lan_ip()
+        ts = mobile.tailscale_ip() if args.tailscale else None
+        if args.tailscale and not ts:
+            print("Tailscale não encontrado ou desconectado. Instale e entre com: "
+                  "curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up\n"
+                  "Seguindo só com a Wi-Fi.")
+        print(MOBILE_WARNING)
+        print(f"Notebook na Wi-Fi: {ip} (rede {mobile.lan_network(ip)})" + (f" · Tailscale: {ts}" if ts else ""))
+        if _ask("Digite AUTORIZO para confirmar").strip().upper() != "AUTORIZO":
+            print("Não confirmado. Nada foi alterado.")
+            return 1
+        ca, crt, key = mobile.make_certificates([ip] + ([ts] if ts else []))
+    except mobile.MobileError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+    updates = mobile.env_updates(ip, crt, key, tailscale=bool(ts))
+    backup = update_env(env_path, updates)
+    port = read_env(env_path).get("TITAN_PORT", "8000")
+    app_url = f"https://{ip}:{port}"
+    print(f"\n✓ Cadeado (HTTPS) criado só para este notebook ({crt})")
+    print(f"✓ Só aparelhos da sua Wi-Fi{' e do Tailscale' if ts else ''} podem chegar ao TITAN")
+    print("✓ Login continua obrigatório")
+    print(f"✓ .env atualizado (cópia anterior: {backup})")
+    print(f"\nDepois de instalar, o TITAN fica em {app_url}" + (f" (fora de casa: https://{ts}:{port})" if ts else ""))
+    print(f"No notebook, use https://localhost:{port} — para o navegador do notebook confiar,")
+    print(f"importe {ca} em Configurações → Privacidade e segurança → Certificados → Autoridades.")
+    print("Reinicie o TITAN para valer:  .venv/bin/titan serve")
+    if args.sem_pagina:
+        print(f"\nInstale {ca} no celular (cabo USB) e abra {app_url}.")
+        return 0
+    install_url = f"http://{ip}:{args.porta}/instalar"
+    try:
+        server = mobile.make_install_server(ca, app_url, updates["TITAN_ALLOWED_NETWORKS"].split(","), args.porta)
+    except OSError as exc:
+        print(f"Não consegui abrir a página de instalação na porta {args.porta}: {exc}", file=sys.stderr)
+        return 1
+    qr = mobile.qr_text(install_url)
+    print("\nAponte a câmera do celular para o QR code:" if qr else
+          "\n(Para mostrar um QR code aqui: .venv/bin/pip install segno)")
+    if qr:
+        print(qr)
+    print(f"ou digite no navegador do celular:  {install_url}")
+    print(f"A página fica aberta por {mobile.INSTALL_MINUTES} minutos (Ctrl+C fecha antes).")
+    try:
+        mobile.serve_install_page(server)
+    except KeyboardInterrupt:
+        pass
+    print("Página de instalação fechada.")
+    return 0
+
+
+def cmd_mobile_off(args: argparse.Namespace) -> int:
+    import shutil
+    from pathlib import Path
+
+    from titan import mobile
+    from titan.envfile import update_env
+
+    env_path = Path(args.env_file)
+    if not env_path.exists():
+        print(f"{env_path} não existe.", file=sys.stderr)
+        return 1
+    update_env(env_path, {k: None for k in mobile.ENV_KEYS})
+    print("Acesso pelo celular desligado: o TITAN volta a aceitar só este notebook (http://127.0.0.1).")
+    if args.apagar_certificados:
+        shutil.rmtree(mobile.TLS_DIR, ignore_errors=True)
+        print(f"Certificados apagados ({mobile.TLS_DIR}). Remova também o cadeado do celular:")
+        print("  Configurações → Segurança → Credenciais do usuário → TITAN CA → Remover")
+    print("Reinicie o servidor para aplicar.")
+    return 0
+
+
 def cmd_simulate(args: argparse.Namespace) -> int:
     from titan.sim.runner import Runner
 
@@ -569,6 +663,16 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("pesquisar", help="testa a pesquisa na internet no terminal")
     p.add_argument("texto", nargs="+")
     p.set_defaults(fn=cmd_web_search)
+    p = sub.add_parser("ligar-celular", help="liga o acesso pelo celular (Wi-Fi/Tailscale, HTTPS) com QR code")
+    p.add_argument("--env-file", default=".env")
+    p.add_argument("--tailscale", action="store_true", help="também permite usar fora de casa pelo Tailscale")
+    p.add_argument("--porta", type=int, default=8001, help="porta da página de instalação temporária")
+    p.add_argument("--sem-pagina", action="store_true", help="não abre a página de instalação")
+    p.set_defaults(fn=cmd_mobile_on)
+    p = sub.add_parser("desligar-celular", help="desliga o acesso pelo celular (volta a só este notebook)")
+    p.add_argument("--env-file", default=".env")
+    p.add_argument("--apagar-certificados", action="store_true")
+    p.set_defaults(fn=cmd_mobile_off)
     p = sub.add_parser("simular", help="simulação contínua numa cópia isolada (pare com Ctrl+C ou parar-simulacao)")
     p.add_argument("--minutos", type=float, default=3, help="duração da rodada de uso prolongado")
     p.add_argument("--pausa", type=float, default=10, help="segundos entre rodadas")

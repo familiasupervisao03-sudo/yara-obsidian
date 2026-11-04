@@ -27,6 +27,7 @@ anthropic = ["anthropic>=1.15,<2"]
 voice = ["vosk>=0.3.41,<0.4", "piper-tts>=1.3,<2"]
 # Voz natural on-line (Microsoft). Envia o texto das respostas para fora do notebook.
 voice-online = ["edge-tts>=7.2,<8"]
+mobile = ["segno>=1.6,<2"]
 dev = ["pytest>=8,<9", "httpx>=0.27,<1"]
 
 [project.scripts]

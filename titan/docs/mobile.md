@@ -1,5 +1,57 @@
 # Acesso pelo celular (Android) — DESLIGADO por padrão
 
+## Jeito fácil (recomendado): um comando
+
+```sh
+.venv/bin/pip install segno            # opcional: mostra o QR code no terminal
+.venv/bin/titan ligar-celular          # pede AUTORIZO
+.venv/bin/titan serve                  # reinicie o TITAN
+```
+
+O comando descobre o IP do notebook na Wi-Fi, cria o cadeado (HTTPS) só deste
+notebook, ajusta o `.env` (só a sua rede local pode chegar; login obrigatório) e
+abre por **15 minutos** uma página de instalação. Aponte a câmera do celular
+para o QR code (ou digite o endereço mostrado) e siga os 3 passos da página:
+baixar o cadeado, instalá-lo e "Adicionar à tela inicial".
+
+A página de instalação é a única parte **sem cadeado**: ela entrega só o
+certificado **público** do notebook e as instruções, aceita só aparelhos da sua
+rede e fecha sozinha. Opções: `--sem-pagina` (você copia o certificado por cabo),
+`--porta 8001` (porta da página).
+
+**No notebook**, depois de ligar, use `https://localhost:8000`. Para o navegador
+do notebook confiar no cadeado, importe `var/tls/titan-ca.crt` em Configurações →
+Privacidade e segurança → Certificados → Autoridades.
+
+**Fora de casa (opcional, grátis): Tailscale.** Instale o Tailscale no notebook
+(`curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up`) e o app
+Tailscale no celular, com a mesma conta. Depois rode
+`.venv/bin/titan ligar-celular --tailscale`. Assim o celular alcança o notebook
+pelo 4G, numa rede privada só dos seus aparelhos: nada é aberto para a internet e
+o login continua obrigatório. O Tailscale (empresa externa) sabe quais aparelhos
+estão conectados, mas o conteúdo vai cifrado.
+
+**Desligar:** `.venv/bin/titan desligar-celular` (com `--apagar-certificados`
+apaga também o cadeado; remova-o do celular em Credenciais do usuário).
+
+### No celular (app instalado)
+
+- **Atalhos:** segure o ícone → Falar, Nova conversa, Nova vídeo-aula, Aprovações.
+- **Compartilhar → TITAN:** em qualquer app, compartilhe um link ou texto com o
+  TITAN e escolha: resumir, explicar em vídeo-aula, perguntar ou pesquisar mais
+  (ler links precisa da pesquisa na internet ligada).
+- **Voz:** botão grande; a tela não apaga enquanto a conversa por voz está ativa e
+  o celular vibra quando o TITAN começa a ouvir.
+- **Sem notebook:** aparece "Notebook fora do alcance", com nova tentativa a cada
+  10 s; a mensagem que não foi enviada vai sozinha quando ele voltar.
+- **Avisos:** em Sistema → Avisos. Aprovação pendente, vídeo-aula pronta e
+  resposta pronta, com o TITAN aberto em segundo plano (gerados pelo próprio
+  aparelho; com o app totalmente fechado não há avisos, porque isso exigiria um
+  serviço de terceiros).
+- **Aparência:** Sistema → Aparência (tema e modo leve), separado por aparelho.
+
+## Jeito manual (detalhado)
+
 O notebook continua sendo o servidor. O celular é só um navegador apontando
 para ele, pela mesma Wi-Fi. **Nada disso está ativo** até você configurar.
 
