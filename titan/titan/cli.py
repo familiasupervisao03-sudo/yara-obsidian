@@ -412,6 +412,90 @@ def cmd_test_voice(args: argparse.Namespace) -> int:
     return 0
 
 
+TUYA_WARNING = """
+TITAN Casa com a sua conta Tuya / Smart Life (nuvem oficial da Tuya)
+  * Os comandos (ligar, desligar, temperatura...) vão do notebook para a nuvem da Tuya,
+    que manda para os aparelhos. Nada da sua conversa com o TITAN vai junto.
+  * Precisa de um projeto de desenvolvedor na Tuya (grátis): Access ID e Access Secret.
+    Passo a passo: docs/casa.md
+  * O plano grátis da Tuya precisa ser renovado de tempos em tempos (no site da Tuya).
+  * Para voltar à demonstração: .venv/bin/titan disable-tuya
+"""
+
+
+def cmd_enable_tuya(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from titan.envfile import update_env
+
+    env_path = Path(args.env_file)
+    if not env_path.exists():
+        print(f"{env_path} não existe. Rode primeiro scripts/setup.sh.", file=sys.stderr)
+        return 1
+    print(TUYA_WARNING)
+    access_id = (args.access_id or _ask("Access ID (Client ID) do projeto Tuya")).strip()
+    if not access_id or not access_id.isalnum() or len(access_id) > 64:
+        print("Access ID inválido. Nada foi alterado.", file=sys.stderr)
+        return 1
+    secret = getpass.getpass("Access Secret (Client Secret) — não aparece na tela: ").strip()
+    if not secret or len(secret) > 128:
+        print("Access Secret vazio. Nada foi alterado.", file=sys.stderr)
+        return 1
+    region = (args.region or _ask("Centro de dados (us = Américas/Brasil, eu, cn, in)", "us")).strip().lower()
+    if region not in {"us", "eu", "cn", "in", "ueaz", "weaz"}:
+        print("Centro de dados inválido. Use us, eu, cn ou in. Nada foi alterado.", file=sys.stderr)
+        return 1
+    if _ask("Digite AUTORIZO para confirmar").strip().upper() != "AUTORIZO":
+        print("Não confirmado. Nada foi alterado.")
+        return 1
+    backup = update_env(env_path, {"TITAN_CASA_PROVIDER": "tuya", "TITAN_TUYA_ACCESS_ID": access_id,
+                                   "TUYA_ACCESS_SECRET": secret, "TITAN_TUYA_REGION": region,
+                                   "TITAN_LOCAL_ONLY": "false"})
+    print(f"\nTuya ligada. .env atualizado (permissão 600); cópia anterior: {backup}")
+    print("Teste (só lista, não mexe em nada):  .venv/bin/titan tuya-teste")
+    print("Depois: .venv/bin/titan ligar  →  no tablet, TITAN Casa › AJUSTES › PROCURAR NOVOS")
+    return 0
+
+
+def cmd_disable_tuya(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from titan.envfile import update_env
+
+    env_path = Path(args.env_file)
+    if not env_path.exists():
+        print(f"{env_path} não existe.", file=sys.stderr)
+        return 1
+    backup = update_env(env_path, {"TITAN_CASA_PROVIDER": "demo", "TUYA_ACCESS_SECRET": None})
+    print("TITAN Casa voltou para a demonstração; o Access Secret foi removido do .env.")
+    print(f"A cópia {backup} ainda o contém; apague com: rm {backup}")
+    return 0
+
+
+def cmd_tuya_test(_: argparse.Namespace) -> int:
+    """Lista os aparelhos da conta Tuya (só leitura: nenhum comando é enviado)."""
+    from titan.casa.providers import ProviderError, provider_for
+
+    s = _settings()
+    if s.casa_provider != "tuya":
+        print("A Tuya está desligada (TITAN_CASA_PROVIDER=demo). Ligue com: .venv/bin/titan enable-tuya")
+        return 1
+    try:
+        found = provider_for(s).list_devices(None)
+    except ProviderError as exc:
+        print(f"Falhou: {exc}", file=sys.stderr)
+        print("Confira o Access ID/Secret, o centro de dados e se a conta do app está ligada ao projeto (docs/casa.md).")
+        return 1
+    print(f"Conexão com a Tuya OK. {len(found)} aparelho(s):")
+    for d in found:
+        tipo = {"plug": "tomada", "light": "lâmpada", "tv": "TV (IR)", "ac": "ar (IR)", "fan": "ventilador"}.get(d.kind, d.category)
+        print(f"  · {d.name:30} {tipo:12} {'online' if d.online else 'OFFLINE'}")
+    uids = {d.meta.get("uid") for d in found if d.meta.get("uid")}
+    if len(uids) > 1:
+        print("Atenção: há mais de uma conta ligada ao projeto. O TITAN Casa só aceita uma por casa.")
+    return 0
+
+
 def cmd_enable_groq_stt(args: argparse.Namespace) -> int:
     return _enable_cloud_stt(args, "groq")
 
@@ -1003,6 +1087,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--env-file", default=".env")
     p.add_argument("--keep-key", action="store_true", help="mantém a chave no .env")
     p.set_defaults(fn=cmd_disable_xai_stt)
+    p = sub.add_parser("enable-tuya", help="liga o TITAN Casa à sua conta Tuya/Smart Life (nuvem da Tuya)")
+    p.add_argument("--env-file", default=".env")
+    p.add_argument("--access-id")
+    p.add_argument("--region")
+    p.set_defaults(fn=cmd_enable_tuya)
+    p = sub.add_parser("disable-tuya", help="TITAN Casa volta para a demonstração")
+    p.add_argument("--env-file", default=".env")
+    p.set_defaults(fn=cmd_disable_tuya)
+    sub.add_parser("tuya-teste", help="lista os aparelhos da conta Tuya (só leitura)").set_defaults(fn=cmd_tuya_test)
     p = sub.add_parser("enable-web", help="liga a pesquisa na internet (a pergunta sai do notebook)")
     p.add_argument("--env-file", default=".env")
     p.add_argument("--searxng", help="endereço do SearXNG local, ex.: http://127.0.0.1:8888")

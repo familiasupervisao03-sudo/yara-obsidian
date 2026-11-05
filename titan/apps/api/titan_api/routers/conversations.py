@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from titan.audit import log as audit
 from titan.brain import service as brain
+from titan.casa import chat as casa_chat
 from titan.db.models import Message
 from titan.memory import conversations as repo
 from titan.memory import preferences as user_prefs
@@ -213,6 +214,12 @@ async def post_message_stream(
         if duplicate_reply is not None:
             yield _sse("done", {"message": duplicate_reply, "duplicate": True})
             return
+        # "liga o ventilador": o TITAN Casa resolve na hora, sem IA (funciona até sem modelo).
+        casa_out = await run_in_threadpool(_casa_answer, ctx, cu, conversation_id, body.content)
+        if casa_out is not None:
+            yield _sse("delta", {"text": casa_out["content"]})
+            yield _sse("done", {"message": casa_out, "footer_chars": 0, "metrics": {"casa": True}})
+            return
         if provider is None:
             detail, reason = model_error or ("reenvio sem resposta registrada", "unavailable")
             yield _sse("error", {"detail": detail, "model_available": False, "reason": reason})
@@ -267,6 +274,17 @@ async def post_message_stream(
 
     return StreamingResponse(stream(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
+def _casa_answer(ctx: AppContext, cu: CurrentUser, conversation_id: uuid.UUID, text: str):
+    reply = casa_chat.try_handle(ctx.settings, ctx.session_factory, cu.user.id, text)
+    if not reply:
+        return None
+    with ctx.session_factory.begin() as db:
+        conv = repo.get_conversation(db, cu.user.id, conversation_id)
+        msg = repo.add_message(db, conv, "assistant", reply, model_provider="titan", model_name="casa")
+        db.flush()
+        return MessageOut.model_validate(msg).model_dump(mode="json")
 
 
 def with_research(ctx: AppContext, cu: CurrentUser, body: MessageCreate, turns: list[ChatTurn],

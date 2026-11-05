@@ -105,6 +105,16 @@ class Settings(BaseSettings):
     # Mensagens do TITAN por conta própria (bom dia, lembretes...): o agendador roda no servidor.
     brain_scheduler: bool = True
 
+    # TITAN Casa (automação). "demo" = aparelhos de demonstração (nada sai do notebook);
+    # "tuya" = sua conta Tuya/Smart Life pela nuvem da Tuya (os comandos saem do notebook).
+    casa_provider: str = "demo"
+    tuya_access_id: str = ""
+    tuya_access_secret: SecretStr = Field(default=SecretStr(""), validation_alias="TUYA_ACCESS_SECRET")
+    # Centro de dados da conta: us (Américas, inclui Brasil), eu, cn, in, ueaz, weaz.
+    tuya_region: str = "us"
+    # Comandos por minuto por casa (proteção contra abuso e laços).
+    casa_max_commands_per_minute: int = Field(default=40, ge=5, le=600)
+
     # Pesquisa na internet (opcional; ver docs/pesquisa-internet.md). Desligada por padrão:
     # a pergunta pesquisada sai do notebook para a fonte de busca e para os sites lidos.
     web_enabled: bool = False
@@ -250,6 +260,15 @@ class Settings(BaseSettings):
             if missing:
                 errors.append("A voz on-line envia o texto das respostas à Microsoft; faltam "
                               "autorizações: " + ", ".join(missing) + ".")
+        if self.casa_provider not in {"demo", "tuya"}:
+            errors.append("TITAN_CASA_PROVIDER deve ser 'demo' ou 'tuya'.")
+        if self.casa_provider == "tuya":
+            if self.local_only:
+                errors.append("TITAN_CASA_PROVIDER=tuya exige TITAN_LOCAL_ONLY=false (os comandos vão à nuvem da Tuya).")
+            if not self.tuya_access_id.strip() or not self.tuya_access_secret.get_secret_value().strip():
+                errors.append("TITAN_CASA_PROVIDER=tuya exige TITAN_TUYA_ACCESS_ID e TUYA_ACCESS_SECRET.")
+        if self.tuya_region not in {"us", "eu", "cn", "in", "ueaz", "weaz"}:
+            errors.append("TITAN_TUYA_REGION deve ser us, eu, cn, in, ueaz ou weaz.")
         if self.voice_stt not in {"vosk", "groq", "xai"}:
             errors.append("TITAN_VOICE_STT deve ser 'vosk' (local), 'groq' ou 'xai' (on-line).")
         if self.voice_stt in {"groq", "xai"}:
@@ -376,6 +395,8 @@ class Settings(BaseSettings):
             "voice_stt": self.voice_stt,
             "groq_api_key_configured": bool(self.groq_api_key.get_secret_value()),
             "xai_api_key_configured": bool(self.xai_api_key.get_secret_value()),
+            "casa_provider": self.casa_provider,
+            "tuya_region": self.tuya_region,
             "voice_edge_voice": self.voice_edge_voice,
             "allow_external_voice": self.allow_external_voice,
             "web_enabled": self.web_enabled,

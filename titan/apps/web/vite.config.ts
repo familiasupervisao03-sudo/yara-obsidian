@@ -18,5 +18,7 @@ export default defineConfig({
     sourcemap: false,
     // Sem chunks inline: a CSP do backend bloqueia scripts inline.
     assetsInlineLimit: 0,
+    // Dois apps irmãos no mesmo servidor: o TITAN (/) e o TITAN Casa (/casa).
+    rollupOptions: { input: { main: "index.html", casa: "casa.html" } },
   },
 });

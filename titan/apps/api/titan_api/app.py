@@ -24,7 +24,7 @@ from titan.tasks.runner import TaskRunner
 from titan.tasks.service import recover_on_startup
 from titan.tools.web.research import WebResearcher
 from titan.voice.engines import VoiceService
-from titan_api.routers import auth, brain, conversations, health, lessons, preferences, system, tasks, voice
+from titan_api.routers import auth, brain, casa, conversations, health, lessons, preferences, system, tasks, voice
 from titan_api.security import (
     CSRFMiddleware,
     NetworkAllowlistMiddleware,
@@ -123,6 +123,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(preferences.router)
     app.include_router(lessons.router)
     app.include_router(brain.router)
+    app.include_router(casa.router)
 
     if settings.serve_web:
         _mount_web(app, settings.web_dist_dir)
@@ -186,4 +187,8 @@ def _mount_web(app: FastAPI, dist: Path) -> None:
         candidate = (dist / path).resolve()
         if path and candidate.is_file() and candidate.is_relative_to(dist):
             return FileResponse(candidate)
+        # TITAN Casa: app irmão (outra página, mesmo servidor e mesma conta).
+        casa_page = dist / "casa.html"
+        if (path == "casa" or path.startswith("casa/")) and casa_page.is_file():
+            return FileResponse(casa_page)
         return FileResponse(index)

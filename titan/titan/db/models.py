@@ -504,3 +504,99 @@ class TitanNote(TimestampMixin, Base):
     # Dia local (AAAA-MM-DD) + tipo: impede repetir o bom-dia no mesmo dia.
     day: Mapped[str] = mapped_column(String(10), nullable=False)
     delivered_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+
+
+# --- TITAN Casa: casas, aparelhos, cenas e registro de comandos (multi-casa) ----------
+
+CASA_ROLES = ("owner", "member")
+CASA_KINDS = ("plug", "light", "tv", "ac", "fan", "other")
+
+
+class CasaHome(TimestampMixin, Base):
+    """Uma casa. Tudo do TITAN Casa pertence a uma casa; usuários entram como membros."""
+
+    __tablename__ = "casa_homes"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(80), nullable=False, default="Minha casa")
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # Conta do provedor (Tuya) ligada a esta casa: só o identificador, nunca senha.
+    provider: Mapped[str] = mapped_column(String(16), nullable=False, default="demo")
+    provider_uid: Mapped[Optional[str]] = mapped_column(String(64))
+
+
+class CasaMember(TimestampMixin, Base):
+    __tablename__ = "casa_members"
+    __table_args__ = (
+        UniqueConstraint("home_id", "user_id", name="uq_casa_member"),
+        CheckConstraint(_in("role", CASA_ROLES), name="ck_casa_member_role"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    home_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("casa_homes.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    role: Mapped[str] = mapped_column(String(8), nullable=False, default="owner")
+
+
+class CasaDevice(TimestampMixin, Base):
+    """Aparelho de uma casa. O cliente só conhece o nosso id; o id do provedor nunca vem dele."""
+
+    __tablename__ = "casa_devices"
+    __table_args__ = (
+        UniqueConstraint("home_id", "provider", "provider_id", name="uq_casa_device_provider"),
+        CheckConstraint(_in("kind", CASA_KINDS), name="ck_casa_device_kind"),
+        Index("ix_casa_devices_home", "home_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    home_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("casa_homes.id", ondelete="CASCADE"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(16), nullable=False)
+    provider_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    # Para controles infravermelhos: id do aparelhinho de IR (no provedor).
+    parent_id: Mapped[Optional[str]] = mapped_column(String(80))
+    provider_name: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    category: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    kind: Mapped[str] = mapped_column(String(8), nullable=False, default="other")
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    icon: Mapped[str] = mapped_column(String(16), nullable=False, default="plug")
+    room: Mapped[str] = mapped_column(String(40), nullable=False, default="Quarto")
+    aliases: Mapped[str] = mapped_column(String(300), nullable=False, default="")
+    # Novo (ainda não cadastrado pelo usuário): não aparece no painel nem na voz.
+    configured: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    online: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    state: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    meta: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
+
+
+class CasaScene(TimestampMixin, Base):
+    __tablename__ = "casa_scenes"
+    __table_args__ = (Index("ix_casa_scenes_home", "home_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    home_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("casa_homes.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    phrases: Mapped[str] = mapped_column(String(300), nullable=False, default="")
+    reply: Mapped[str] = mapped_column(String(300), nullable=False, default="")
+    # [{"device_id": "...", "action": "on|off|dim", "ac_temp": 24}]
+    actions: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
+
+
+class CasaEvent(TimestampMixin, Base):
+    """Registro de cada comando (quem, o quê, de onde, deu certo?)."""
+
+    __tablename__ = "casa_events"
+    __table_args__ = (Index("ix_casa_events_home_created", "home_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    home_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("casa_homes.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    device_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
+    scene_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
+    source: Mapped[str] = mapped_column(String(12), nullable=False)  # toque | voz | cena | chat
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    ok: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    detail: Mapped[str] = mapped_column(String(300), nullable=False, default="")

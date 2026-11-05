@@ -24,6 +24,8 @@ npm install && npm run build      # 3. interface (precisa de Node 20.19+, só pa
 .venv/bin/titan ligar             # OU: um comando só para notebook + celular
 ```
 
+**TITAN Casa (automação da casa, app irmão em /casa):** [`docs/casa.md`](docs/casa.md).
+
 **Sócio (memória, metas, lembretes, mensagens do TITAN):** [`docs/socio.md`](docs/socio.md).
 
 **Instalação no notebook, passo a passo:** [`docs/notebook-install.md`](docs/notebook-install.md).
