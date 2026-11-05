@@ -53,6 +53,8 @@ public class MainActivity extends Activity {
     private boolean triedAlt = false;
     private boolean loaded = false;
     private boolean errorSeen = false;
+    private boolean sslFail = false;
+    private WebView errorView; // telas de erro no estilo da nave (assets/erro.html)
     private TextView connecting;
     private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable timeout = this::connectionFailed;
@@ -157,6 +159,8 @@ public class MainActivity extends Activity {
     }
 
     private void showSetup(String error) {
+        ui.removeCallbacks(timeout);
+        if (errorView != null) { errorView.destroy(); errorView = null; }
         if (web != null) { web.destroy(); web = null; }
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -267,8 +271,9 @@ public class MainActivity extends Activity {
             @Override
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
                 handler.cancel(); // nunca continua sem cadeado válido
-                runOnUiThread(() -> showSetup("O cadeado do TITAN não está instalado neste celular (ou o endereço "
-                        + "mudou). Rode \"titan ligar-celular\" no notebook e siga a página de instalação."));
+                sslFail = true;
+                errorSeen = true;
+                runOnUiThread(() -> connectionFailed());
             }
 
             @Override
@@ -329,8 +334,10 @@ public class MainActivity extends Activity {
         if (errorSeen || url == null || !sameServer(Uri.parse(url))) return;
         loaded = true;
         triedAlt = false; // carregou: na próxima falha pode tentar o outro de novo
+        sslFail = false;
         ui.removeCallbacks(timeout);
         if (connecting != null) connecting.setVisibility(android.view.View.GONE);
+        hideError();
     }
 
     private void connectionFailed() {
@@ -347,18 +354,71 @@ public class MainActivity extends Activity {
             return;
         }
         if (connecting != null) connecting.setText("Sem resposta do notebook.");
-        showOffline();
+        showError(sslFail ? "cadeado" : "offline");
     }
 
-    private void showOffline() {
-        new AlertDialog.Builder(this)
-                .setTitle("Notebook fora do alcance")
-                .setMessage("Não consegui falar com o TITAN em " + server + (alt != null ? " nem em " + alt : "")
-                        + ".\n\nConfira se o notebook está ligado com o TITAN aberto e, fora de casa, se o "
-                        + "Tailscale está ligado no celular e no notebook.")
-                .setPositiveButton("Tentar de novo", (d, w) -> { triedAlt = false; if (web != null) load(server + "/"); })
-                .setNegativeButton("Trocar endereço", (d, w) -> showSetup(null))
-                .show();
+    /** Tela de erro (1 = notebook não encontrado, 2 = cadeado não confiável) por cima de tudo. */
+    private void showError(String kind) {
+        if (web == null) return;
+        android.widget.FrameLayout frame = (android.widget.FrameLayout) web.getParent();
+        if (errorView == null) {
+            errorView = new WebView(this);
+            errorView.setBackgroundColor(Color.parseColor("#010306"));
+            WebSettings es = errorView.getSettings();
+            es.setJavaScriptEnabled(true);
+            es.setAllowFileAccess(false);
+            es.setAllowContentAccess(false);
+            errorView.addJavascriptInterface(new ErrorBridge(), "TitanErro");
+            frame.addView(errorView, new android.widget.FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        String html;
+        try (java.io.InputStream in = getAssets().open("erro.html")) {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            html = out.toString("UTF-8");
+        } catch (java.io.IOException e) {
+            html = "<body style='background:#010306;color:#fff'>Sem resposta do notebook.</body>";
+        }
+        html = html.replace("{{KIND}}", kind)
+                .replace("{{PRIMARY}}", label(server))
+                .replace("{{ALT}}", alt == null ? "" : label(alt))
+                .replace("{{ALT_HIDE}}", alt == null ? "hide" : "");
+        errorView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
+        errorView.setVisibility(android.view.View.VISIBLE);
+    }
+
+    /** "TAILSCALE 100.x.x.x" / "WI-FI DE CASA 192.168.x.x" (texto da tela de erro). */
+    private static String label(String url) {
+        String host = Uri.parse(url).getHost();
+        if (host == null) return "";
+        String safe = host.replaceAll("[^0-9A-Za-z.:-]", "");
+        if (safe.startsWith("100.")) return "TAILSCALE " + safe;
+        if (safe.startsWith("192.168.") || safe.startsWith("10.") || safe.startsWith("172.")) return "WI-FI " + safe;
+        return safe;
+    }
+
+    private void hideError() {
+        if (errorView != null) errorView.setVisibility(android.view.View.GONE);
+    }
+
+    /** Botões da tela de erro. */
+    private class ErrorBridge {
+        @JavascriptInterface
+        public void retry() {
+            runOnUiThread(() -> {
+                triedAlt = false;
+                sslFail = false;
+                if (web != null) load(server + "/");
+            });
+        }
+
+        @JavascriptInterface
+        public void configure() {
+            runOnUiThread(() -> showSetup(null));
+        }
     }
 
     // --- microfone e câmera ------------------------------------------------------------
@@ -398,6 +458,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         ui.removeCallbacks(timeout);
+        if (errorView != null) errorView.destroy();
         if (web != null) web.destroy();
         super.onDestroy();
     }

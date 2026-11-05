@@ -106,6 +106,9 @@ class ModelStatus(BaseModel):
     available: bool
     provider: str
     detail: str
+    # Por que a IA não respondeu (a tela explica): budget, blocked, no_model, auth, limit,
+    # outage, network, refused, unavailable.
+    reason: Optional[str] = None
 
 
 class MessagePostOut(BaseModel):

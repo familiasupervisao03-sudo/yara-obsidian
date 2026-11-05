@@ -108,6 +108,25 @@ class MockProvider:
         yield "done", ModelReply(content=reply.content, provider="mock", model=self.model)
 
 
+def error_reason(exc: Exception) -> str:
+    """Motivo curto de a IA não responder, para a tela explicar o certo (não só "erro").
+
+    budget | blocked | no_model | auth | limit | outage | network | refused | unavailable
+    """
+    from titan.policies.model_gate import ProviderBlocked
+
+    msg = str(exc)
+    if isinstance(exc, ProviderBlocked):
+        return "budget" if "Orçamento diário atingido" in msg else "blocked"
+    for needle, reason in (("Nenhum modelo", "no_model"), ("não implementado", "no_model"),
+                           ("Chave da Anthropic", "auth"), ("não tem permissão", "auth"),
+                           ("Limite de uso", "limit"), ("servidor da Anthropic", "outage"),
+                           ("Falha de conexão", "network"), ("recusou a requisição", "refused")):
+        if needle in msg:
+            return reason
+    return "unavailable"
+
+
 def get_provider(settings: Settings, session_factory=None) -> ModelProvider:
     """Seleciona o provedor configurado, aplicando as políticas antes de qualquer chamada.
 

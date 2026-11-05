@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session as DBSession, sessionmaker
 from titan.audit import log as audit
 from titan.db.models import Conversation
 from titan.memory import conversations as repo
-from titan.models.providers import ChatTurn, ModelUnavailable, stream_reply
+from titan.models.providers import ChatTurn, ModelUnavailable, error_reason, stream_reply
 from titan.policies.model_gate import ProviderBlocked
 
 log = logging.getLogger("titan.chat.stream")
@@ -60,11 +60,11 @@ def run_reply_stream(session_factory: sessionmaker[DBSession], conversation_id: 
     except (ModelUnavailable, ProviderBlocked) as exc:
         if parts:
             _save(session_factory, conversation_id, "".join(parts), provider, status="error")
-        emit("error", {"detail": str(exc), "partial": bool(parts)})
+        emit("error", {"detail": str(exc), "partial": bool(parts), "reason": error_reason(exc)})
     except Exception:
         log.exception("Falha inesperada no streaming da resposta")
         emit("error", {"detail": "Erro interno ao gerar a resposta. Consulte os logs.",
-                       "partial": bool(parts)})
+                       "partial": bool(parts), "reason": "internal"})
 
 
 def _save(session_factory: sessionmaker[DBSession], conversation_id: uuid.UUID, text: str,

@@ -133,3 +133,24 @@ def test_stream_requires_auth_and_csrf(client):
                        headers=CSRF).status_code == 401
     assert client.post(f"/api/v1/conversations/{cid}/messages/stream",
                        json={"content": "x"}).status_code == 403
+
+
+def test_errors_carry_a_reason_for_the_screen(auth_client):
+    """Sem modelo: o evento de erro diz o motivo (a tela mostra 'Núcleo de IA em pausa' certo)."""
+    cid = auth_client.post("/api/v1/conversations", json={}, headers=CSRF).json()["id"]
+    events = parse(auth_client.post(f"/api/v1/conversations/{cid}/messages/stream",
+                                    json={"content": "oi"}, headers=CSRF).text)
+    err = dict(events)["error"]
+    assert err["reason"] == "no_model"
+
+
+def test_error_reason_classifies_known_failures():
+    from titan.models.providers import ModelUnavailable, error_reason
+    from titan.policies.model_gate import ProviderBlocked
+
+    assert error_reason(ProviderBlocked("Orçamento diário atingido: gasto hoje R$ 2")) == "budget"
+    assert error_reason(ProviderBlocked("Provedor 'x' é externo e o modo local proíbe")) == "blocked"
+    assert error_reason(ModelUnavailable("Chave da Anthropic inválida (ANTHROPIC_API_KEY).")) == "auth"
+    assert error_reason(ModelUnavailable("Erro no servidor da Anthropic (529). Tente mais tarde.")) == "outage"
+    assert error_reason(ModelUnavailable("Falha de conexão com a Anthropic (ConnectError).")) == "network"
+    assert error_reason(ModelUnavailable("Limite de uso da Anthropic atingido")) == "limit"

@@ -8,6 +8,7 @@ import type { ChatIntent } from "./Shell";
 import { notify } from "../notify";
 import { brain, fmtWhen, type Action } from "../brain";
 import { remindersChanged } from "../reminders";
+import { AiPaused } from "./AiPaused";
 
 const LESSON_MARKER = "▶ Vídeo-aula: ";
 // Mesmo critério do servidor (titan/lessons/script.py): pedido explícito de vídeo-aula.
@@ -50,6 +51,7 @@ export function ChatView({ conversationId, onConversation, version, onError, int
   const pendingRef = useRef<Pending | null>(null);
   pendingRef.current = pending;
   const [notice, setNotice] = useState<string | null>(null);
+  const [aiDown, setAiDown] = useState<{ reason: string; detail: string; retry?: () => void } | null>(null);
   const [showList, setShowList] = useState(false);
   const [webEnabled, setWebEnabled] = useState(false);
   const [webOn, setWebOn] = useState(false);
@@ -141,6 +143,7 @@ export function ChatView({ conversationId, onConversation, version, onError, int
   async function send(p: Pending, opts: { forceNew?: boolean; web?: boolean } = {}) {
     setPending({ ...p, error: undefined });
     setNotice(null);
+    setAiDown(null);
     setStreaming("");
     setResearch(null);
     const abort = new AbortController();
@@ -170,13 +173,18 @@ export function ChatView({ conversationId, onConversation, version, onError, int
       notify("Resposta pronta", res.content.slice(0, 120), "resposta");
     } catch (e) {
       if (abort.signal.aborted) return;
-      const err = e as Error & { fatal?: boolean };
-      if (err.fatal) {
+      const err = e as Error & { fatal?: boolean; reason?: string };
+      if (err.fatal && err.reason) {
+        // A mensagem já está salva no notebook: "tentar de novo" manda o mesmo texto outra vez.
+        setAiDown({ reason: err.reason, detail: err.message,
+                    retry: () => void send({ text: p.text, requestId: newRequestId() }, opts) });
+        setPending(null);
+      } else if (err.fatal) {
         setNotice(err.message);
         setPending(null);
       } else {
         // falha de rede: a mensagem fica pendente e o reenvio usa o MESMO id (sem duplicar)
-        setPending({ ...p, error: "Falha de conexão. Toque em reenviar." });
+        setPending({ ...p, error: "offline" });
       }
     } finally {
       setStreaming(null);
@@ -199,6 +207,7 @@ export function ChatView({ conversationId, onConversation, version, onError, int
         setLesson({ lesson: r.lesson, conversationId: cid, messageId: r.reply.id });
         notify("Vídeo-aula pronta", `"${r.lesson.titulo}" · ${r.lesson.cenas.length} cenas`, "aula");
       }
+      else if ((r.model as { reason?: string }).reason) setAiDown({ reason: (r.model as { reason?: string }).reason!, detail: r.model.detail });
       else setNotice(r.model.detail);
       const c = await api.conversation(cid).catch(() => null);
       if (c) setMessages(c.messages);
@@ -298,14 +307,14 @@ export function ChatView({ conversationId, onConversation, version, onError, int
             <div className={`msg msg-user pending ${saved ? "retry-only" : ""}`}>
               {!saved && (
                 <>
-                  <span className="msg-meta">VOCÊ · {pending.error ? "não enviada" : "enviando…"}</span>
+                  <span className="msg-meta">VOCÊ · {pending.error ? "guardada" : "enviando…"}</span>
                   <p>{pending.text}</p>
                 </>
               )}
               {pending.error && (
-                <div className="row">
-                  <span className="small bad">{saved ? "Resposta não recebida." : pending.error}</span>
-                  <button className="small" onClick={() => void send(pending)}>Reenviar</button>
+                <div className="row wrap">
+                  <span className="pending-wait">⏳ {saved ? "Resposta não recebida" : "Aguardando sinal"} · envia sozinha</span>
+                  <button className="ghost small" onClick={() => void send(pending)}>Enviar agora</button>
                 </div>
               )}
             </div>
@@ -325,6 +334,7 @@ export function ChatView({ conversationId, onConversation, version, onError, int
             <p>Montando o roteiro e as cenas{lessonPrefs.length === "completa" ? " (aula completa: pode levar até um minuto)" : ". Leva uns segundos"}.</p>
           </div>
         )}
+        {aiDown && <AiPaused reason={aiDown.reason} detail={aiDown.detail} onRetry={aiDown.retry} />}
         {notice && <p className="notice">Sem resposta da IA: {notice}</p>}
         <div ref={endRef} />
       </div>

@@ -706,3 +706,26 @@ details.card > summary::-webkit-details-marker, details.panel > summary::-webkit
 @media (max-height: 560px) {
   .bi-console { font-size: 9px; line-height: 1.5; top: 20px; }
 }
+
+/* --- Erros no estilo da nave: faixa de reconexão, IA em pausa, sessão expirada --- */
+.offline-strip { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 16px;
+  background: var(--warn-bg); border-bottom: 1px solid var(--warn); color: var(--warn);
+  font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.04em; }
+.offline-strip span { flex: 1; min-width: 0; }
+.offline-strip button.ghost { color: var(--warn); border-color: var(--warn); }
+.offline-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 8px var(--warn); flex: none;
+  animation: offline-blink 1s steps(2) infinite; }
+.offline-text { display: grid; gap: 0.1rem; }
+.offline-count { color: var(--muted); font-size: 0.66rem; }
+@keyframes offline-blink { 50% { opacity: 0.25; } }
+.pending-wait { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--warn); }
+.ai-paused { display: grid; gap: 0.4rem; padding: 0.8rem 0.9rem; margin: 0.4rem 0; border: 1px solid var(--warn);
+  background: var(--warn-bg); clip-path: var(--clip-sm); max-width: 560px; }
+.ai-paused-k { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.18em; color: var(--warn); }
+.ai-paused-title { font-weight: 600; margin: 0; }
+.ai-paused p { margin: 0; }
+.ai-paused-fix { border-left: 2px solid var(--warn); padding-left: 0.6rem; }
+.warn-bar i { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+button.ghost.warn-btn { color: var(--warn); border-color: var(--warn); }
+.login-expired { display: grid; gap: 0.3rem; margin-bottom: 0.4rem; }
+.login-title { font-family: var(--mono); font-size: 1.15rem; letter-spacing: 0.12em; text-transform: uppercase; margin: 0; }

@@ -11,8 +11,9 @@ export function App() {
   const [fatal, setFatal] = useState<string | null>(null);
   // Abertura "IA de bordo": ao entrar na conta e ao abrir o TITAN já logado (uma vez por abertura).
   const [intro, setIntro] = useState(false);
+  const [expired, setExpired] = useState(false);
   const endIntro = useCallback(() => setIntro(false), []);
-  const enter = useCallback((s: SessionInfo) => { setSession(s); setIntro(true); }, []);
+  const enter = useCallback((s: SessionInfo) => { setSession(s); setExpired(false); setIntro(true); }, []);
 
   useEffect(() => {
     api
@@ -26,7 +27,7 @@ export function App() {
 
   if (checking) return <div className="boot">TITAN // inicializando…</div>;
   if (fatal) return <div className="boot error">Falha ao contatar o servidor do notebook: {fatal}</div>;
-  if (!session) return <Login onLogin={enter} />;
+  if (!session) return <Login onLogin={enter} expired={expired} />;
   return (
     <>
     <Shell
@@ -35,7 +36,7 @@ export function App() {
         await api.logout().catch(() => undefined);
         setSession(null);
       }}
-      onExpired={() => setSession(null)}
+      onExpired={() => { setExpired(true); setSession(null); }}
     />
     {intro && <BootIntro username={session.user.username} onDone={endIntro} />}
     </>

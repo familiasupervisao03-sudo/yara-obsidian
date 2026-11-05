@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import type { SessionInfo } from "@titan/api-contracts";
 import { api } from "../api";
 
-export function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
+export function Login({ onLogin, expired = false }: { onLogin: (s: SessionInfo) => void; expired?: boolean }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -25,8 +25,18 @@ export function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
   return (
     <main className="login">
       <form className="panel login-box" onSubmit={submit}>
-        <h1 className="brand">TITAN</h1>
-        <p className="muted">Centro de comando local — acesso restrito</p>
+        {expired ? (
+          <div className="login-expired" role="status">
+            <p className="eyebrow">Identificação</p>
+            <h1 className="login-title">Operador não identificado</h1>
+            <p className="muted">Faz tempo que você não entra. Por segurança, confirme quem é.</p>
+          </div>
+        ) : (
+          <>
+            <h1 className="brand">TITAN</h1>
+            <p className="muted">Centro de comando local — acesso restrito</p>
+          </>
+        )}
         <label>
           Operador
           <input autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />

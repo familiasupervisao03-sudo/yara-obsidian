@@ -401,7 +401,7 @@ export class StreamingChat implements ChatBackend {
           const cut = Number(payload.footer_chars) || 0;
           return { messageId: payload.message?.id ?? null, content: cut ? full.slice(0, full.length - cut) : full };
         } else if (event === "error") {
-          throw Object.assign(new Error(payload.detail), { fatal: true });
+          throw Object.assign(new Error(payload.detail), { fatal: true, reason: payload.reason as string | undefined });
         } else if (event === "interrupted") {
           return { messageId: payload.message?.id ?? null, content };
         }

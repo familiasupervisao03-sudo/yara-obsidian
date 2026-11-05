@@ -20,7 +20,7 @@ from titan.memory import conversations as repo
 from titan.memory import preferences as user_prefs
 from titan.memory.reply_stream import run_reply_stream
 from titan.memory.style import build_style
-from titan.models.providers import ChatTurn, ModelUnavailable, get_provider
+from titan.models.providers import ChatTurn, ModelUnavailable, error_reason, get_provider
 from titan.policies.model_gate import ProviderBlocked
 from titan.tools.web import research as web
 from titan_api.deps import AppContext, CurrentUser, current_user, get_ctx, get_db
@@ -158,7 +158,8 @@ def post_message(
                          body.content, reply.content)
     except (ModelUnavailable, ProviderBlocked) as exc:
         # Sem modelo: a mensagem fica salva e o usuário é informado. Nada é inventado.
-        model = ModelStatus(available=False, provider=ctx.settings.model_provider, detail=str(exc))
+        model = ModelStatus(available=False, provider=ctx.settings.model_provider, detail=str(exc),
+                            reason=error_reason(exc))
 
     return MessagePostOut(
         user_message=MessageOut.model_validate(user_msg), reply=reply_out, model=model
@@ -213,8 +214,8 @@ async def post_message_stream(
             yield _sse("done", {"message": duplicate_reply, "duplicate": True})
             return
         if provider is None:
-            yield _sse("error", {"detail": model_error or "reenvio sem resposta registrada",
-                                 "model_available": False})
+            detail, reason = model_error or ("reenvio sem resposta registrada", "unavailable")
+            yield _sse("error", {"detail": detail, "model_available": False, "reason": reason})
             return
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
@@ -350,7 +351,7 @@ def _prepare_stream(ctx: AppContext, cu: CurrentUser, conversation_id: uuid.UUID
         try:
             provider = get_provider(ctx.settings, ctx.session_factory)
         except (ModelUnavailable, ProviderBlocked) as exc:
-            return user_out, None, [], None, str(exc), False
+            return user_out, None, [], None, (str(exc), error_reason(exc)), False
         turns = turns_for_model(repo.history(db, conv.id))
         if not provider.info.local:
             audit.record(db, "model.external_request", actor_type="system",
