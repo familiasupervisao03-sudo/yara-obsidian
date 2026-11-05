@@ -10,8 +10,8 @@ android {
         applicationId "br.titan.app"
         minSdk 24          // Android 7+ (o Galaxy A20 tem Android 9–11)
         targetSdk 34
-        versionCode 3
-        versionName "1.2"
+        versionCode 4
+        versionName "1.3"
     }
     signingConfigs {
         if (ks) {

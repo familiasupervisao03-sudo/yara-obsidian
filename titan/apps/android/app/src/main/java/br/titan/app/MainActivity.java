@@ -51,6 +51,12 @@ public class MainActivity extends Activity {
     private String server; // ex.: https://100.101.102.103:8000 (sem barra no fim)
     private String alt;    // reserva (ex.: Wi-Fi de casa): usado se o principal não responder
     private boolean triedAlt = false;
+    private boolean loaded = false;
+    private boolean errorSeen = false;
+    private TextView connecting;
+    private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable timeout = this::connectionFailed;
+    private static final long CONNECT_TIMEOUT_MS = 12_000;
     private PermissionRequest pendingPermission;
     private int notifyId = 1;
 
@@ -72,7 +78,7 @@ public class MainActivity extends Activity {
         if (askConfigLink(intent)) return;
         if (isConfigure(intent) || server == null) { showSetup(null); return; }
         String path = pathFor(intent);
-        if (web != null) web.loadUrl(server + path);
+        if (web != null) load(server + path);
         else openTitan(path);
     }
 
@@ -268,23 +274,18 @@ public class MainActivity extends Activity {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
                 if (!req.isForMainFrame()) return;
-                runOnUiThread(() -> {
-                    // Principal fora do alcance (ex.: Tailscale desligado em casa): tenta a reserva sozinho.
-                    if (alt != null && !triedAlt) {
-                        triedAlt = true;
-                        String other = alt;
-                        alt = server;
-                        server = other;
-                        view.loadUrl(server + "/");
-                        return;
-                    }
-                    showOffline();
-                });
+                errorSeen = true;
+                runOnUiThread(() -> connectionFailed());
+            }
+
+            @Override
+            public void onPageCommitVisible(WebView view, String url) {
+                pageArrived(url);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                triedAlt = false; // carregou: na próxima falha pode tentar o outro de novo
+                pageArrived(url);
             }
         });
 
@@ -295,8 +296,58 @@ public class MainActivity extends Activity {
             }
         });
 
-        setContentView(web);
-        web.loadUrl(server + path);
+        android.widget.FrameLayout frame = new android.widget.FrameLayout(this);
+        frame.setBackgroundColor(Color.parseColor("#03070c"));
+        frame.addView(web);
+        connecting = new TextView(this);
+        connecting.setTextColor(Color.parseColor("#3ee8ff"));
+        connecting.setTextSize(16);
+        connecting.setGravity(Gravity.CENTER);
+        connecting.setPadding(48, 48, 48, 48);
+        frame.addView(connecting, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        setContentView(frame);
+        load(server + path);
+    }
+
+    /** Carrega mostrando "Conectando…"; se nada chegar em 12 s, tenta a reserva ou avisa. */
+    private void load(String url) {
+        loaded = false;
+        errorSeen = false;
+        if (connecting != null) {
+            connecting.setText("Conectando ao notebook…\n\n" + server
+                    + "\n\nFora de casa, o Tailscale precisa estar ligado no celular.");
+            connecting.setVisibility(android.view.View.VISIBLE);
+        }
+        ui.removeCallbacks(timeout);
+        ui.postDelayed(timeout, CONNECT_TIMEOUT_MS);
+        web.loadUrl(url);
+    }
+
+    private void pageArrived(String url) {
+        // A página de erro do Android também "termina": só conta a do TITAN de verdade.
+        if (errorSeen || url == null || !sameServer(Uri.parse(url))) return;
+        loaded = true;
+        triedAlt = false; // carregou: na próxima falha pode tentar o outro de novo
+        ui.removeCallbacks(timeout);
+        if (connecting != null) connecting.setVisibility(android.view.View.GONE);
+    }
+
+    private void connectionFailed() {
+        ui.removeCallbacks(timeout);
+        if (web == null || loaded) return;
+        web.stopLoading();
+        // Principal fora do alcance (ex.: Tailscale desligado em casa): tenta a reserva sozinho.
+        if (alt != null && !triedAlt) {
+            triedAlt = true;
+            String other = alt;
+            alt = server;
+            server = other;
+            load(server + "/");
+            return;
+        }
+        if (connecting != null) connecting.setText("Sem resposta do notebook.");
+        showOffline();
     }
 
     private void showOffline() {
@@ -305,7 +356,7 @@ public class MainActivity extends Activity {
                 .setMessage("Não consegui falar com o TITAN em " + server + (alt != null ? " nem em " + alt : "")
                         + ".\n\nConfira se o notebook está ligado com o TITAN aberto e, fora de casa, se o "
                         + "Tailscale está ligado no celular e no notebook.")
-                .setPositiveButton("Tentar de novo", (d, w) -> { triedAlt = false; if (web != null) web.loadUrl(server + "/"); })
+                .setPositiveButton("Tentar de novo", (d, w) -> { triedAlt = false; if (web != null) load(server + "/"); })
                 .setNegativeButton("Trocar endereço", (d, w) -> showSetup(null))
                 .show();
     }
@@ -346,6 +397,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        ui.removeCallbacks(timeout);
         if (web != null) web.destroy();
         super.onDestroy();
     }

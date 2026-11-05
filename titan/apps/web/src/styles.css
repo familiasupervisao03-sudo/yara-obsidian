@@ -673,3 +673,5 @@ details.card > summary::-webkit-details-marker, details.panel > summary::-webkit
   .talk-dock { position: static; justify-content: flex-start; }
 }
 .memory-view .home-title { display: flex; align-items: center; gap: 0.5rem; }
+.crash { padding: 2rem 16px; max-width: 720px; margin: 0 auto; display: grid; gap: 0.75rem; color: var(--text); }
+.crash pre { max-height: 50vh; overflow: auto; border: 1px solid var(--bad); padding: 0.75rem; color: var(--bad); }
