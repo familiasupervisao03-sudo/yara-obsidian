@@ -576,6 +576,14 @@ def cmd_mobile_on(args: argparse.Namespace) -> int:
     return 0
 
 
+TAILSCALE_HOWTO = """
+Para usar o TITAN FORA DE CASA (4G, outra Wi-Fi), ligue o Tailscale — grátis e privado:
+  1. No notebook:  curl -fsSL https://tailscale.com/install.sh | sh  &&  sudo tailscale up
+     (abra o link que aparecer e entre com a sua conta)
+  2. No celular: app Tailscale, mesma conta, deixe "Connected".
+  3. Rode de novo:  .venv/bin/titan ligar
+"""
+
 LIGAR_WARNING = """
 Primeira vez: ligar o TITAN para o notebook E o celular (um comando só)
   * O TITAN passa a aceitar conexões da sua Wi-Fi, sempre com cadeado (HTTPS) e login.
@@ -585,8 +593,15 @@ Primeira vez: ligar o TITAN para o notebook E o celular (um comando só)
 """
 
 
-def _prepare_both(env_path, tailscale: bool, ask: bool = True):
-    """Deixa o .env e o cadeado prontos para notebook + celular. Devolve (ip, ts, ca, nets) ou None."""
+def _prepare_both(env_path, tailscale="auto", ask: bool = True):
+    """Deixa o .env e o cadeado prontos para notebook + celular. Devolve (ip, ts, ca, nets) ou None.
+
+    ``tailscale``: "auto" (usa se estiver instalado e conectado), "on" (avisa se faltar) ou "off".
+    """
+    if tailscale is True:
+        tailscale = "on"
+    elif tailscale is False:
+        tailscale = "auto"
     from pathlib import Path
 
     from titan import mobile
@@ -594,7 +609,10 @@ def _prepare_both(env_path, tailscale: bool, ask: bool = True):
 
     env = read_env(env_path)
     ip = mobile.lan_ip()
-    ts = mobile.tailscale_ip() if tailscale else None
+    ts = mobile.tailscale_ip() if tailscale != "off" else None
+    if tailscale == "on" and not ts:
+        print("! Tailscale não encontrado ou desconectado neste notebook (veja como ligar abaixo).")
+    had_ts = mobile.TAILSCALE_NET in env.get("TITAN_ALLOWED_NETWORKS", "")
     crt = Path(env.get("TITAN_TLS_CERT_FILE", "")) if env.get("TITAN_TLS_CERT_FILE") else None
     ca = mobile.TLS_DIR / "titan-ca.crt"
     first = not (crt and crt.is_file() and ca.is_file() and env.get("TITAN_HOST") == "0.0.0.0")
@@ -607,11 +625,15 @@ def _prepare_both(env_path, tailscale: bool, ask: bool = True):
     wanted = [ip] + ([ts] if ts else [])
     if first or not set(wanted) <= mobile.cert_ips(crt):
         if not first:
-            print(f"O notebook mudou de endereço ({ip}): renovando o cadeado (o celular continua valendo).")
+            print(f"Endereço novo do notebook ({', '.join(wanted)}): renovando o cadeado "
+                  "(o cadeado instalado no celular continua valendo).")
         ca, crt, key = mobile.make_certificates(wanted)
     else:
         key = Path(env.get("TITAN_TLS_KEY_FILE", str(mobile.TLS_DIR / "server.key")))
-    updates = mobile.env_updates(ip, crt, key, tailscale=bool(ts) or mobile.TAILSCALE_NET in env.get("TITAN_ALLOWED_NETWORKS", ""))
+    if ts and not had_ts and not first:
+        print("✓ Tailscale encontrado: o TITAN passa a aceitar também os SEUS aparelhos do Tailscale "
+              "(de qualquer lugar; ninguém de fora da sua conta Tailscale chega nele).")
+    updates = mobile.env_updates(ip, crt, key, tailscale=(bool(ts) or had_ts) and tailscale != "off")
     if any(env.get(k) != v for k, v in updates.items()):
         update_env(env_path, updates)
     if first:
@@ -637,7 +659,7 @@ def cmd_ligar(args: argparse.Namespace) -> int:
         print(f"{env_path} não existe. Rode primeiro scripts/setup.sh.", file=sys.stderr)
         return 1
     try:
-        ready = _prepare_both(env_path, args.tailscale)
+        ready = _prepare_both(env_path, "off" if args.sem_tailscale else "on" if args.tailscale else "auto")
     except mobile.MobileError as exc:
         print(f"Erro: {exc}", file=sys.stderr)
         return 1
@@ -645,17 +667,24 @@ def cmd_ligar(args: argparse.Namespace) -> int:
         return 1
     ip, ts, ca, nets = ready
     port = read_env(env_path).get("TITAN_PORT", "8000")
-    app_url = f"https://{ip}:{port}"
-    print("\n" + "=" * 60)
+    lan_url = f"https://{ip}:{port}"
+    ts_url = f"https://{ts}:{port}" if ts else None
+    app_url = ts_url or lan_url
+    print("\n" + "=" * 64)
     print(f"  NOTEBOOK:  https://localhost:{port}")
-    print(f"  CELULAR:   {app_url}   (app TITAN ou Chrome, na mesma Wi-Fi)")
-    if ts:
-        print(f"  FORA DE CASA (Tailscale): https://{ts}:{port}")
-    print("=" * 60)
+    if ts_url:
+        print(f"  CELULAR, EM QUALQUER LUGAR (Tailscale):  {ts_url}")
+        print(f"  CELULAR, Wi-Fi de casa (reserva):         {lan_url}")
+    else:
+        print(f"  CELULAR:   {lan_url}   (só na mesma Wi-Fi)")
+    print("=" * 64)
+    if not ts_url:
+        print(TAILSCALE_HOWTO)
 
     if not args.sem_pagina:
         try:
-            server = mobile.make_install_server(ca, app_url, nets, args.porta)
+            server = mobile.make_install_server(ca, app_url, nets, args.porta,
+                                                alt_url=lan_url if ts_url else None)
         except OSError as exc:
             print(f"(Página de instalação não abriu na porta {args.porta}: {exc})")
         else:
@@ -992,7 +1021,8 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(fn=cmd_mobile_on)
     p = sub.add_parser("ligar", help="UM COMANDO SÓ: liga o servidor para o notebook e o celular")
     p.add_argument("--env-file", default=".env")
-    p.add_argument("--tailscale", action="store_true", help="também permite usar fora de casa pelo Tailscale")
+    p.add_argument("--tailscale", action="store_true", help="exige o Tailscale (avisa se faltar); por padrão já é usado se estiver ligado")
+    p.add_argument("--sem-tailscale", action="store_true", help="não usa o Tailscale (só a Wi-Fi de casa)")
     p.add_argument("--porta", type=int, default=8001, help="porta da página de instalação temporária")
     p.add_argument("--sem-pagina", action="store_true", help="não abre a página de instalação/QR")
     p.add_argument("--sem-navegador", action="store_true", help="não abre o navegador do notebook")

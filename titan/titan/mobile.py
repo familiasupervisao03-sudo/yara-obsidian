@@ -165,12 +165,24 @@ def qr_text(url: str) -> Optional[str]:
 
 # --- página de instalação (temporária, sem cadeado) ---------------------------------
 
-def install_page(app_url: str, ca_name: str, has_apk: bool = False) -> str:
+def config_link(app_url: str, alt_url: Optional[str] = None) -> str:
+    """Link titan://configurar que preenche o app sozinho (ele pede confirmação)."""
+    from urllib.parse import quote
+
+    link = f"titan://configurar?s={quote(app_url, safe='')}"
+    return link + (f"&alt={quote(alt_url, safe='')}" if alt_url else "")
+
+
+def install_page(app_url: str, ca_name: str, has_apk: bool = False, alt_url: Optional[str] = None) -> str:
     u = html.escape(app_url)
+    where = (f"<code>{u}</code> (funciona em qualquer lugar, pelo Tailscale) e, de reserva, "
+             f"<code>{html.escape(alt_url)}</code> (Wi-Fi de casa)") if alt_url else f"<code>{u}</code>"
     apk = (f"""<div class="step"><span class="n">4</span><div><b>Instalar o app TITAN (opcional)</b>
 <span class="m">Em vez de "Adicionar à tela inicial", baixe o app. Na primeira vez o Android pede para
-permitir instalar apps desta origem: permita só para esta instalação. Ao abrir o app, digite o endereço
-<code>{u}</code>.</span><a class="btn" href="/titan.apk" download>BAIXAR O APP (APK)</a></div></div>"""
+permitir instalar apps desta origem: permita só para esta instalação.</span>
+<a class="btn" href="/titan.apk" download>BAIXAR O APP (APK)</a>
+<span class="m">Depois de instalar, toque abaixo para o app já abrir configurado com {where}.</span>
+<a class="btn" href="{html.escape(config_link(app_url, alt_url))}">CONFIGURAR O APP SOZINHO</a></div></div>"""
            if has_apk else "")
     return f"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Instalar o TITAN</title>
@@ -204,10 +216,10 @@ O Android avisa que "a rede pode ser monitorada": é normal para cadeados instal
 
 
 def make_install_server(ca_crt: Path, app_url: str, allowed: list[str], port: int = INSTALL_PORT,
-                        host: str = "0.0.0.0") -> ThreadingHTTPServer:
+                        host: str = "0.0.0.0", alt_url: Optional[str] = None) -> ThreadingHTTPServer:
     nets = [ipaddress.ip_network(n, strict=False) for n in allowed]
     apk = APK_FILE.read_bytes() if APK_FILE.is_file() else None
-    page = install_page(app_url, ca_crt.name, has_apk=apk is not None).encode()
+    page = install_page(app_url, ca_crt.name, has_apk=apk is not None, alt_url=alt_url).encode()
     cert = ca_crt.read_bytes()
 
     class Handler(BaseHTTPRequestHandler):

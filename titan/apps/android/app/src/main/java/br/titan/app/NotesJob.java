@@ -52,8 +52,16 @@ public class NotesJob extends JobService {
     public boolean onStopJob(JobParameters params) { return true; }
 
     private void check() throws Exception {
-        String server = getSharedPreferences("titan", MODE_PRIVATE).getString("server", null);
-        if (server == null || !server.startsWith("https://")) return;
+        android.content.SharedPreferences p = getSharedPreferences("titan", MODE_PRIVATE);
+        Exception last = null;
+        for (String server : new String[]{p.getString("server", null), p.getString(MainActivity.KEY_ALT, null)}) {
+            if (server == null || !server.startsWith("https://")) continue;
+            try { checkAt(server); return; } catch (Exception e) { last = e; } // tenta a reserva
+        }
+        if (last != null) throw last;
+    }
+
+    private void checkAt(String server) throws Exception {
         String cookie = CookieManager.getInstance().getCookie(server);
         if (cookie == null || cookie.isEmpty()) return;
         JSONArray notes = new JSONArray(request(server + "/api/v1/brain/notes", "GET", cookie, null));

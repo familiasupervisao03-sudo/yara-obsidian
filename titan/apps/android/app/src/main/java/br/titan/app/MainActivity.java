@@ -44,10 +44,13 @@ import java.util.List;
 public class MainActivity extends Activity {
     private static final String PREFS = "titan";
     private static final String KEY_SERVER = "server";
+    static final String KEY_ALT = "server_alt";
     private static final int REQ_MEDIA = 10;
 
     private WebView web;
-    private String server; // ex.: https://192.168.0.10:8000 (sem barra no fim)
+    private String server; // ex.: https://100.101.102.103:8000 (sem barra no fim)
+    private String alt;    // reserva (ex.: Wi-Fi de casa): usado se o principal não responder
+    private boolean triedAlt = false;
     private PermissionRequest pendingPermission;
     private int notifyId = 1;
 
@@ -55,7 +58,9 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         server = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_SERVER, null);
+        alt = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_ALT, null);
         NotesJob.ensure(this);
+        if (askConfigLink(getIntent())) return;
         if (server == null) showSetup(null);
         else openTitan(pathFor(getIntent()));
     }
@@ -64,6 +69,7 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        if (askConfigLink(intent)) return;
         if (isConfigure(intent) || server == null) { showSetup(null); return; }
         String path = pathFor(intent);
         if (web != null) web.loadUrl(server + path);
@@ -77,10 +83,41 @@ public class MainActivity extends Activity {
         return d != null && "titan".equals(d.getScheme()) && "configurar".equals(d.getHost());
     }
 
+    /**
+     * Link da página de instalação (titan://configurar?s=…&alt=…): preenche os endereços,
+     * mas SEMPRE pergunta antes (outro site não consegue trocar o servidor sem você ver).
+     */
+    private boolean askConfigLink(Intent i) {
+        if (!isConfigure(i)) return false;
+        Uri d = i.getData();
+        String s = normalize(d.getQueryParameter("s"));
+        if (s == null) return false;
+        String a = normalize(d.getQueryParameter("alt"));
+        if (a != null && a.equals(s)) a = null;
+        final String fa = a;
+        if (web == null) showSetup(null);
+        new AlertDialog.Builder(this)
+                .setTitle("Usar este TITAN?")
+                .setMessage("Endereço principal:\n" + s + (fa != null ? "\n\nReserva (se o principal não responder):\n" + fa : "")
+                        + "\n\nSó confirme se veio da página de instalação do SEU notebook.")
+                .setPositiveButton("Usar", (dlg, w) -> {
+                    server = s;
+                    alt = fa;
+                    triedAlt = false;
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_SERVER, s)
+                            .putString(KEY_ALT, fa).apply();
+                    if (web != null) { web.destroy(); web = null; }
+                    openTitan("/");
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
+        return true;
+    }
+
     /** Converte atalho / compartilhamento no caminho da interface do TITAN. */
     private String pathFor(Intent i) {
         if (i == null) return "/";
-        if (isConfigure(i)) { showSetup(null); return "/"; }
+        if (isConfigure(i)) return "/";
         Uri d = i.getData();
         if (d != null && "titan".equals(d.getScheme()) && "acao".equals(d.getHost())) {
             String acao = d.getLastPathSegment();
@@ -128,9 +165,9 @@ public class MainActivity extends Activity {
         box.addView(title);
 
         TextView help = new TextView(this);
-        help.setText("Endereço do TITAN no seu notebook.\n\nNo notebook, rode \"titan ligar-celular\": ele mostra o "
-                + "endereço (ex.: https://192.168.0.10:8000) e a página para instalar o cadeado. Instale o cadeado "
-                + "antes de continuar.");
+        help.setText("Endereço do TITAN no seu notebook.\n\nNo notebook, rode \"titan ligar\": ele mostra os "
+                + "endereços e um QR code. Na página do QR, instale o cadeado e toque em \"CONFIGURAR O APP SOZINHO\" "
+                + "(ou digite aqui).");
         help.setTextColor(Color.parseColor("#86aebe"));
         help.setTextSize(15);
         help.setPadding(0, 48, 0, 24);
@@ -145,6 +182,21 @@ public class MainActivity extends Activity {
         if (server != null) input.setText(server);
         box.addView(input);
 
+        TextView altLabel = new TextView(this);
+        altLabel.setText("Reserva (opcional): usado se o primeiro não responder. Ex.: Tailscale em cima, Wi-Fi de casa aqui.");
+        altLabel.setTextColor(Color.parseColor("#86aebe"));
+        altLabel.setTextSize(13);
+        altLabel.setPadding(0, 32, 0, 8);
+        box.addView(altLabel);
+        EditText altInput = new EditText(this);
+        altInput.setHint("https://100.x.x.x:8000");
+        altInput.setInputType(InputType.TYPE_TEXT_VARIATION_URI);
+        altInput.setTextColor(Color.WHITE);
+        altInput.setHintTextColor(Color.parseColor("#4b6a78"));
+        altInput.setSingleLine(true);
+        if (alt != null) altInput.setText(alt);
+        box.addView(altInput);
+
         if (error != null) {
             TextView err = new TextView(this);
             err.setText(error);
@@ -158,8 +210,14 @@ public class MainActivity extends Activity {
         go.setOnClickListener(v -> {
             String s = normalize(input.getText().toString());
             if (s == null) { showSetup("Use um endereço que comece com https:// (o TITAN só abre com cadeado)."); return; }
+            String a = altInput.getText().toString().trim().isEmpty() ? null : normalize(altInput.getText().toString());
+            if (a == null && !altInput.getText().toString().trim().isEmpty()) {
+                showSetup("O endereço de reserva também precisa começar com https://."); return;
+            }
             server = s;
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_SERVER, s).apply();
+            alt = s.equals(a) ? null : a;
+            triedAlt = false;
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_SERVER, s).putString(KEY_ALT, alt).apply();
             openTitan("/");
         });
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -209,9 +267,24 @@ public class MainActivity extends Activity {
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
-                if (req.isForMainFrame() && view.getUrl() == null) {
-                    runOnUiThread(() -> showOffline());
-                }
+                if (!req.isForMainFrame()) return;
+                runOnUiThread(() -> {
+                    // Principal fora do alcance (ex.: Tailscale desligado em casa): tenta a reserva sozinho.
+                    if (alt != null && !triedAlt) {
+                        triedAlt = true;
+                        String other = alt;
+                        alt = server;
+                        server = other;
+                        view.loadUrl(server + "/");
+                        return;
+                    }
+                    showOffline();
+                });
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                triedAlt = false; // carregou: na próxima falha pode tentar o outro de novo
             }
         });
 
@@ -229,9 +302,10 @@ public class MainActivity extends Activity {
     private void showOffline() {
         new AlertDialog.Builder(this)
                 .setTitle("Notebook fora do alcance")
-                .setMessage("Não consegui falar com o TITAN em " + server + ".\n\nConfira se o notebook está ligado, "
-                        + "com o TITAN aberto, e se o celular está na mesma Wi-Fi (ou no Tailscale).")
-                .setPositiveButton("Tentar de novo", (d, w) -> { if (web != null) web.loadUrl(server + "/"); })
+                .setMessage("Não consegui falar com o TITAN em " + server + (alt != null ? " nem em " + alt : "")
+                        + ".\n\nConfira se o notebook está ligado com o TITAN aberto e, fora de casa, se o "
+                        + "Tailscale está ligado no celular e no notebook.")
+                .setPositiveButton("Tentar de novo", (d, w) -> { triedAlt = false; if (web != null) web.loadUrl(server + "/"); })
                 .setNegativeButton("Trocar endereço", (d, w) -> showSetup(null))
                 .show();
     }

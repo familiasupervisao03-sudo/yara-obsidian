@@ -14,6 +14,26 @@ vez também faz o Chrome/Chromium do notebook confiar no cadeado (precisa de
 servidor é renovado sozinho — o celular não precisa reinstalar nada.
 Opções: `--tailscale`, `--sem-navegador`, `--sem-pagina`.
 
+## Fora de casa (4G, outra Wi-Fi): Tailscale
+
+O TITAN não fica aberto na internet. Para usar de qualquer lugar, o notebook e o celular
+entram na **mesma rede particular do Tailscale** (grátis para uso pessoal; só os
+aparelhos da SUA conta enxergam o notebook).
+
+1. Notebook: `curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up`
+   (abra o link e entre com a sua conta).
+2. Celular: app Tailscale, mesma conta, "Connected".
+3. Notebook: `.venv/bin/titan ligar` — ele detecta o Tailscale sozinho, renova o cadeado
+   para o endereço novo e mostra:
+   - **em qualquer lugar**: `https://100.x.x.x:8000`
+   - **Wi-Fi de casa (reserva)**: `https://192.168.x.x:8000`
+4. Na página do QR code, toque em **CONFIGURAR O APP SOZINHO** (app 1.2+): o app guarda os
+   dois endereços (ele pergunta antes). Se o principal não responder, usa a reserva.
+
+O cadeado já instalado no celular continua valendo. Na primeira vez em cada endereço o
+TITAN pede o login (a sessão é por endereço). Para não usar o Tailscale:
+`titan ligar --sem-tailscale`.
+
 ## Só preparar o celular (sem ligar o servidor)
 
 ```sh

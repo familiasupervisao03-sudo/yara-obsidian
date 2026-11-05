@@ -173,3 +173,40 @@ def test_ligar_refused_changes_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr("builtins.input", lambda *_: "nao")
     assert cli.main(["ligar", "--env-file", str(env), "--sem-pagina", "--sem-navegador"]) == 1
     assert env.read_text() == "TITAN_LOCAL_ONLY=true\n"
+
+
+def test_ligar_uses_tailscale_automatically_and_page_configures_app(tmp_path, monkeypatch, capsys):
+    from titan import cli
+
+    monkeypatch.chdir(tmp_path)
+    env = tmp_path / ".env"
+    env.write_text("TITAN_LOCAL_ONLY=true\nTITAN_PORT=8000\n")
+    monkeypatch.setattr(mobile, "lan_ip", lambda: "192.168.1.20")
+    ts = {"ip": None}
+    monkeypatch.setattr(mobile, "tailscale_ip", lambda: ts["ip"])
+    monkeypatch.setattr(mobile, "trust_on_notebook", lambda ca: None)
+    monkeypatch.setattr(cli, "cmd_serve", lambda a: 0)
+    monkeypatch.setattr("builtins.input", lambda *_: "AUTORIZO")
+    args = ["ligar", "--env-file", str(env), "--sem-pagina", "--sem-navegador"]
+    assert cli.main(args) == 0
+    out = capsys.readouterr().out
+    assert "FORA DE CASA" in out and "tailscale up" in out  # ensina a ligar
+    assert mobile.TAILSCALE_NET not in env.read_text()
+    # Tailscale ligado depois: sem flag, entra sozinho (sem perguntar de novo).
+    ts["ip"] = "100.101.102.103"
+    monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("não deveria perguntar"))
+    assert cli.main(args) == 0
+    out = capsys.readouterr().out
+    assert "EM QUALQUER LUGAR (Tailscale):  https://100.101.102.103:8000" in out
+    assert "Wi-Fi de casa (reserva):         https://192.168.1.20:8000" in out
+    assert mobile.TAILSCALE_NET in env.read_text()
+    assert "100.101.102.103" in mobile.cert_ips(tmp_path / "var/tls/server.crt")
+    # --sem-tailscale tira a rede do Tailscale.
+    assert cli.main(args + ["--sem-tailscale"]) == 0
+    assert mobile.TAILSCALE_NET not in env.read_text()
+
+
+def test_install_page_has_one_tap_app_config(tmp_path):
+    page = mobile.install_page("https://100.1.2.3:8000", "titan-ca.crt", has_apk=True, alt_url="https://192.168.1.20:8000")
+    assert "titan://configurar?s=https%3A%2F%2F100.1.2.3%3A8000&amp;alt=https%3A%2F%2F192.168.1.20%3A8000" in page
+    assert "CONFIGURAR O APP SOZINHO" in page and "qualquer lugar" in page
