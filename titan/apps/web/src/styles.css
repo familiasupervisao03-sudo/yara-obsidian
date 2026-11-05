@@ -675,3 +675,34 @@ details.card > summary::-webkit-details-marker, details.panel > summary::-webkit
 .memory-view .home-title { display: flex; align-items: center; gap: 0.5rem; }
 .crash { padding: 2rem 16px; max-width: 720px; margin: 0 auto; display: grid; gap: 0.75rem; color: var(--text); }
 .crash pre { max-height: 50vh; overflow: auto; border: 1px solid var(--bad); padding: 0.75rem; color: var(--bad); }
+
+/* --- Abertura "IA de bordo" (BootIntro) — cores fixas: é a "tela da nave", igual em todo tema --- */
+.boot-intro { position: fixed; inset: 0; z-index: 1000; background: #010306; overflow: hidden; color: #dff7ff;
+  font-family: "DejaVu Sans Mono", ui-monospace, monospace; }
+.boot-intro canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.bi-br { position: absolute; width: 0; height: 0; border-color: #3ee8ff; border-style: solid; opacity: 0.8; }
+.bi-br.tl { left: 14px; top: 14px; border-width: 2px 0 0 2px; } .bi-br.tr { right: 14px; top: 14px; border-width: 2px 2px 0 0; }
+.bi-br.bl { left: 14px; bottom: 14px; border-width: 0 0 2px 2px; } .bi-br.brr { right: 14px; bottom: 14px; border-width: 0 2px 2px 0; }
+.bi-console { position: absolute; left: 26px; right: 26px; top: 30px; max-width: 420px; font-size: 10.5px; line-height: 1.75;
+  color: #86aebe; letter-spacing: 0.04em; }
+.bi-console div { white-space: pre; display: flex; justify-content: space-between; gap: 1rem; }
+.bi-st { color: #3dffa8; font-weight: 600; }
+.bi-caret { display: inline-block; width: 6px; height: 10px; background: #3ee8ff; vertical-align: -1px; margin-left: 2px; }
+.bi-horizon { position: absolute; left: 20px; right: 20px; top: 40%; height: 1px; transform: scaleX(0);
+  background: linear-gradient(90deg, transparent, #3ee8ff, transparent); }
+.bi-reticle { position: absolute; left: 50%; top: 40%; width: 210px; height: 210px; transform: translate(-50%, -50%); opacity: 0; }
+.bi-sig { position: absolute; left: 50%; top: 40%; width: 120px; height: 120px; transform: translate(-50%, -50%); }
+.bi-reticle svg, .bi-sig svg { width: 100%; height: 100%; overflow: visible; }
+.bi-ticks { position: absolute; left: 50%; width: 220px; margin-left: -110px; top: calc(40% + 128px); height: 10px; opacity: 0;
+  background: repeating-linear-gradient(90deg, #3ee8ff 0 1px, transparent 1px 12px); }
+.bi-name, .bi-online, .bi-hello { position: absolute; left: 0; right: 0; text-align: center; opacity: 0; }
+.bi-name { top: calc(40% + 146px); font-size: 30px; font-weight: 800; letter-spacing: 0.55em; padding-left: 0.55em;
+  text-shadow: 0 0 14px rgba(62, 232, 255, 0.7); }
+.bi-online { top: calc(40% + 190px); font-size: 10px; font-weight: 600; letter-spacing: 0.4em; color: #86aebe; }
+.bi-online span { color: #3dffa8; }
+.bi-hello { top: calc(40% + 222px); }
+.bi-hello b { display: block; font: 700 17px "DejaVu Sans", system-ui, sans-serif; }
+.bi-hello small { display: block; font-size: 11px; color: #86aebe; margin-top: 4px; letter-spacing: 0.08em; }
+@media (max-height: 560px) {
+  .bi-console { font-size: 9px; line-height: 1.5; top: 20px; }
+}

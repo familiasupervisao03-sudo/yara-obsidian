@@ -120,6 +120,7 @@ class HomeOut(BaseModel):
     today: list[TodoOut]
     open_todos: int
     pending_memories: int
+    memory_total: int = 0
 
 
 # --- Início ---------------------------------------------------------------------------
@@ -127,6 +128,7 @@ class HomeOut(BaseModel):
 @router.get("/home", response_model=HomeOut)
 def home(cu: CurrentUser = Depends(current_user), db: DBSession = Depends(get_db)) -> HomeOut:
     now = store.local_now()
+    counts = store.counts(db, cu.user.id)
     greeting = "Bom dia" if 5 <= now.hour < 12 else "Boa tarde" if now.hour < 18 else "Boa noite"
     cont = None
     conv = db.scalar(select(Conversation).where(Conversation.user_id == cu.user.id,
@@ -143,7 +145,7 @@ def home(cu: CurrentUser = Depends(current_user), db: DBSession = Depends(get_db
                    goals=[goal_out(g) for g in store.active_goals(db, cu.user.id)],
                    today=[todo_out(t) for t in store.today_todos(db, cu.user.id)],
                    open_todos=len(store.list_todos(db, cu.user.id)),
-                   pending_memories=store.counts(db, cu.user.id)["pending"])
+                   pending_memories=counts["pending"], memory_total=counts["total"])
 
 
 # --- metas ----------------------------------------------------------------------------

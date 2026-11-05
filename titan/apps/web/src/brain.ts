@@ -25,7 +25,7 @@ export interface HomeData {
   greeting: string; now: string;
   continue_conversation: { conversation_id: string; title: string; last_role: string; last_text: string;
                            updated_at: string; origin: string } | null;
-  goals: Goal[]; today: Todo[]; open_todos: number; pending_memories: number;
+  goals: Goal[]; today: Todo[]; open_todos: number; pending_memories: number; memory_total: number;
 }
 export interface Question { key: string; category: Category; question: string; options: string[]; answered: number; total: number }
 export interface Note { id: string; kind: string; title: string; body: string; conversation_id: string | null;
@@ -115,4 +115,9 @@ export function fmtWhen(iso: string | null): string {
   if (diff === 1) return `amanhã ${hm}`;
   if (diff === -1) return `ontem ${hm}`;
   return `${d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" })} ${hm}`;
+}
+
+/** "luiz" → "Luiz" (só para exibir). */
+export function displayName(username: string): string {
+  return username ? username.charAt(0).toUpperCase() + username.slice(1) : username;
 }

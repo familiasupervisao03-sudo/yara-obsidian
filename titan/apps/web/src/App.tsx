@@ -1,28 +1,34 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { SessionInfo } from "@titan/api-contracts";
 import { api, HttpError } from "./api";
 import { Login } from "./components/Login";
 import { Shell } from "./components/Shell";
+import { BootIntro } from "./components/BootIntro";
 
 export function App() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [checking, setChecking] = useState(true);
   const [fatal, setFatal] = useState<string | null>(null);
+  // Abertura "IA de bordo": ao entrar na conta e ao abrir o TITAN já logado (uma vez por abertura).
+  const [intro, setIntro] = useState(false);
+  const endIntro = useCallback(() => setIntro(false), []);
+  const enter = useCallback((s: SessionInfo) => { setSession(s); setIntro(true); }, []);
 
   useEffect(() => {
     api
       .me()
-      .then(setSession)
+      .then(enter)
       .catch((e) => {
         if (!(e instanceof HttpError && e.status === 401)) setFatal(String(e.message ?? e));
       })
       .finally(() => setChecking(false));
-  }, []);
+  }, [enter]);
 
   if (checking) return <div className="boot">TITAN // inicializando…</div>;
   if (fatal) return <div className="boot error">Falha ao contatar o servidor do notebook: {fatal}</div>;
-  if (!session) return <Login onLogin={setSession} />;
+  if (!session) return <Login onLogin={enter} />;
   return (
+    <>
     <Shell
       session={session}
       onLogout={async () => {
@@ -31,5 +37,7 @@ export function App() {
       }}
       onExpired={() => setSession(null)}
     />
+    {intro && <BootIntro username={session.user.username} onDone={endIntro} />}
+    </>
   );
 }

@@ -30,6 +30,9 @@ for (const [name, viewport] of [["desktop", { width: 1366, height: 860 }], ["mob
   await page.getByLabel("Operador").fill(user);
   await page.getByLabel("Senha").fill(password);
   await page.getByRole("button", { name: "Entrar" }).click();
+  await page.locator(".boot-intro").waitFor({ timeout: 10000 });
+  await page.locator(".boot-intro").waitFor({ state: "detached", timeout: 10000 });
+  check(true, `${name}: abertura "IA de bordo" aparece e some sozinha`);
   // a primeira tela é o Início (centro de comando); a conversa fica na aba "Conversa"
   await page.getByRole("heading", { name: /(Bom dia|Boa tarde|Boa noite|Olá), / }).waitFor({ timeout: 10000 });
   loggedIn = true;
@@ -65,6 +68,7 @@ for (const [name, viewport] of [["desktop", { width: 1366, height: 860 }], ["mob
   if (outDir) await page.screenshot({ path: `${outDir}/titan-${name}-conversa.png` });
 
   await page.reload();
+  await page.locator(".boot-intro").waitFor({ state: "detached", timeout: 10000 });
   await page.locator(".messages").getByText(msg, { exact: true }).first().waitFor({ timeout: 10000 });
   check(true, `${name}: mensagem persiste após recarregar`);
 

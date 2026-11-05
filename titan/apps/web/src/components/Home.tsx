@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { SystemStatus } from "@titan/api-contracts";
-import { brain, fmtWhen, type Goal, type HomeData, type Todo } from "../brain";
+import { brain, displayName, fmtWhen, type Goal, type HomeData, type Todo } from "../brain";
 import { remindersChanged } from "../reminders";
 import { Icon } from "./icons";
 import type { ChatIntent, View } from "./Shell";
@@ -47,7 +47,7 @@ export function Home({ username, status, offline, pendingApprovals, onGo, onChat
     <section className="home" aria-labelledby="home-title">
       <header className="home-head">
         <p className="eyebrow">Início · {new Date().toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" })}</p>
-        <h1 id="home-title" className="home-title">{data?.greeting ?? "Olá"}, {username}.</h1>
+        <h1 id="home-title" className="home-title">{data?.greeting ?? "Olá"}, {displayName(username)}.</h1>
         {offline && <p className="muted small">Sem conexão com o notebook.</p>}
       </header>
 

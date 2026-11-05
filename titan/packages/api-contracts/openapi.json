@@ -1010,6 +1010,11 @@
             "title": "Greeting",
             "type": "string"
           },
+          "memory_total": {
+            "default": 0,
+            "title": "Memory Total",
+            "type": "integer"
+          },
           "now": {
             "format": "date-time",
             "title": "Now",
