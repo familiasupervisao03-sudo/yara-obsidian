@@ -324,12 +324,41 @@ export class StreamingChat implements ChatBackend {
   /** true: pesquisar na internet; undefined: só se o texto pedir ("pesquisa na internet ..."). */
   web?: boolean;
   onResearch?: (e: ResearchEvent) => void;
+  /** Lembretes, tarefas e lembranças que o cérebro tirou da mensagem (chegam depois da resposta). */
+  onActions?: (messageId: string, actions: unknown[]) => void;
   constructor(conversationId: () => Promise<string>, mode: "text" | "voice" = "text",
-              opts: { web?: boolean; onResearch?: (e: ResearchEvent) => void } = {}) {
+              opts: { web?: boolean; onResearch?: (e: ResearchEvent) => void;
+                      onActions?: (messageId: string, actions: unknown[]) => void } = {}) {
     this.conversationId = conversationId;
     this.mode = mode;
     this.web = opts.web;
     this.onResearch = opts.onResearch;
+    this.onActions = opts.onActions;
+  }
+
+  /** Continua lendo depois do fim da resposta, só para o evento "actions" (sem segurar a fala). */
+  private async drain(reader: ReadableStreamDefaultReader<string>, buf: string): Promise<void> {
+    try {
+      for (;;) {
+        let idx: number;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const block = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          if (/^event: actions$/m.test(block)) {
+            const data = /^data: (.*)$/m.exec(block)?.[1];
+            if (data) {
+              const p = JSON.parse(data);
+              this.onActions?.(p.message_id, p.actions ?? []);
+            }
+          }
+        }
+        const { value, done } = await reader.read();
+        if (done) return;
+        buf += value;
+      }
+    } catch {
+      /* conexão fechada: sem cartões desta vez (aparecem ao reabrir a conversa) */
+    }
   }
 
   async send(text: string, requestId: string, signal: AbortSignal,
@@ -366,6 +395,7 @@ export class StreamingChat implements ChatBackend {
         } else if (event === "research") {
           this.onResearch?.(payload as ResearchEvent);
         } else if (event === "done") {
+          if (this.onActions) void this.drain(reader, buf);
           // A lista de fontes no fim da mensagem salva não é parte da fala.
           const full: string = payload.message?.content ?? content;
           const cut = Number(payload.footer_chars) || 0;

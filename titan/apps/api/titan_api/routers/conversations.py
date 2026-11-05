@@ -177,6 +177,10 @@ def turns_for_model(messages) -> list[ChatTurn]:
         elif m.role == "assistant" and m.status == "error":
             continue
         turns.append(ChatTurn(m.role, content))
+    if turns and turns[0].role == "assistant":
+        # Conversa que o TITAN começou (bom dia, papo…): a API exige começar pelo usuário, e
+        # sem isto a mensagem do TITAN seria descartada e a resposta ficaria sem contexto.
+        turns.insert(0, ChatTurn("user", "[O TITAN puxou este assunto por conta própria; a mensagem dele vem a seguir.]"))
     return turns
 
 

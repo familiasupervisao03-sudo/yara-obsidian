@@ -16,7 +16,7 @@ from starlette.concurrency import run_in_threadpool
 from titan.audit import log as audit
 from titan.brain import extract, service, store
 from titan.brain import prefs as brain_prefs
-from titan.brain.questions import BY_KEY, QUESTIONS
+from titan.brain.questions import BY_KEY, LABELS, QUESTIONS
 from titan.db.models import BrainMemory, Conversation, Goal, Message, TitanNote, Todo, utcnow
 from titan.memory import conversations as repo
 from titan.models.providers import ModelUnavailable
@@ -432,7 +432,7 @@ def answer_question(key: str, body: AnswerIn, cu: CurrentUser = Depends(current_
         raise _404("Pergunta")
     cat, q, _ = BY_KEY[key]
     answer = " ".join(body.answer.split()).rstrip(".")
-    label = q.rstrip("?").split(":")[0]
+    label = LABELS.get(key) or q.rstrip("?").split(":")[0]
     try:
         m = store.add_memory(db, cu.user.id, f"{label}: {answer}", cat, status="active", origin="pergunta",
                              question_key=key)

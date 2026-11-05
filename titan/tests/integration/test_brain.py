@@ -267,3 +267,17 @@ def test_quiet_hours_cross_midnight():
 def test_brain_requires_auth(client):
     assert client.get("/api/v1/brain/home").status_code == 401
     assert client.get("/api/v1/brain/memories").status_code == 401
+
+
+def test_titan_started_conversation_keeps_its_first_message_in_context():
+    from types import SimpleNamespace
+
+    from titan.models.anthropic_provider import to_api_messages
+    from titan_api.routers.conversations import turns_for_model
+
+    msgs = [SimpleNamespace(role="assistant", content="E aí, passou da fase no Brawl Stars?", status="complete",
+                            interrupted_at_char=None),
+            SimpleNamespace(role="user", content="consegui!", status="complete", interrupted_at_char=None)]
+    api = to_api_messages(turns_for_model(msgs))
+    assert [m["role"] for m in api] == ["user", "assistant", "user"]
+    assert "Brawl Stars" in api[1]["content"] if isinstance(api[1]["content"], str) else True

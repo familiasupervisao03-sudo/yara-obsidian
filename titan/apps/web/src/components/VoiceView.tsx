@@ -7,6 +7,8 @@ import type { CorrectionSuggestion } from "../voice/corrections";
 import type { TtsEngine } from "../voice/player";
 import { Icon } from "./icons";
 import { androidApp } from "../notify";
+import { fmtWhen, type Action } from "../brain";
+import { remindersChanged } from "../reminders";
 import {
   BrowserMicrophone,
   BrowserStt,
@@ -151,7 +153,17 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
       onConversation(c.id);
       convRef.current = c.id;
       return c.id;
-    }, "voice");
+    }, "voice", {
+      onActions: (_mid, acts) => {
+        const list = acts as Action[];
+        const said = list.map((a) => a.type === "lembrete" ? `⏰ ${a.title} (${fmtWhen(a.due_at)})`
+          : a.type === "tarefa" ? `☐ ${a.title}` : a.type === "memoria" ? `🧠 ${a.content}`
+          : a.type === "meta" || a.type === "meta_nova" ? `🎯 ${a.line}` : a.type === "resolvido" ? `✓ ${a.content}` : "")
+          .filter(Boolean);
+        if (said.length) setNotice(`Anotado: ${said.join(" · ")}`);
+        if (list.some((a) => a.type === "lembrete")) remindersChanged();
+      },
+    });
     let lastPaint = 0;
     const session = new VoiceSession(
       { mic: new BrowserMicrophone(), stt, tts: buildTts(), chat, now: () => performance.now(),

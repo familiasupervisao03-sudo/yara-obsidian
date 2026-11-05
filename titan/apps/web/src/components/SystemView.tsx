@@ -2,15 +2,18 @@ import type { SettingsView, SystemStatus } from "@titan/api-contracts";
 import { AppearancePanel } from "./AppearancePanel";
 import { NotificationsPanel } from "./NotificationsPanel";
 import { PreferencesPanel } from "./PreferencesPanel";
+import { TitanMessagesPanel } from "./TitanMessagesPanel";
 
 const STATE_LABEL: Record<string, string> = {
   online: "ONLINE", offline: "OFFLINE", disabled: "DESATIVADO", unavailable: "INDISPONÍVEL", planned: "PLANEJADO",
 };
 
-export function SystemView({ status, settings, onRefresh }: {
+export function SystemView({ status, settings, onRefresh, pendingApprovals = 0, onTasks }: {
   status: SystemStatus | null;
   settings: SettingsView | null;
   onRefresh: () => void;
+  pendingApprovals?: number;
+  onTasks?: () => void;
 }) {
   if (!status) return <p className="muted">Carregando…</p>;
   const c = settings?.config ?? {};
@@ -48,6 +51,13 @@ export function SystemView({ status, settings, onRefresh }: {
           ))}
         </ul>
       </div>
+      {onTasks && (
+        <div className="panel row between">
+          <span>Tarefas do laboratório e aprovações{pendingApprovals > 0 ? ` · ${pendingApprovals} esperando você` : ""}</span>
+          <button className="small" onClick={onTasks}>Abrir</button>
+        </div>
+      )}
+      <TitanMessagesPanel />
       <AppearancePanel />
       <NotificationsPanel />
       <PreferencesPanel />

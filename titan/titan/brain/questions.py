@@ -36,3 +36,14 @@ QUESTIONS: list[tuple[str, str, str, list[str]]] = [
 ]
 
 BY_KEY = {k: (cat, q, opts) for k, cat, q, opts in QUESTIONS}
+
+# Como a resposta fica guardada na memória ("Aprende melhor: na prática").
+LABELS = {
+    "aprende": "Aprende melhor", "jeito": "Prefere que o TITAN seja", "energia": "Tem mais energia de",
+    "curte": "Curte agora", "dinheiro": "Com o primeiro dinheiro do negócio, faria", "materia_facil": "Matéria mais fácil",
+    "materia_chata": "Matéria mais difícil", "um_ano": "Daqui a 1 ano quer estar", "desanima": "O que desanima",
+    "orgulho": "Ficou orgulhoso de", "musica": "Música que dá ânimo", "habilidade": "Faz bem",
+    "aprender": "Quer aprender", "negocio_ideia": "Negócio que quer tentar", "tempo": "Tempo por dia para projetos",
+    "cobranca": "Sobre cobrança do TITAN", "comida": "Comida favorita", "esporte": "Esporte/time",
+    "rotina": "Dia normal", "sonho": "Sonho grande",
+}

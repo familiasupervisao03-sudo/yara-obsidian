@@ -53,6 +53,10 @@ export interface Conversation {
   title: string;
   created_at: ISODateTime;
   updated_at: ISODateTime;
+  /** 📌 importante: o resumo foi para a memória. */
+  important?: boolean;
+  /** Quem começou: "user" ou "titan" (o TITAN puxou assunto). */
+  origin?: "user" | "titan";
 }
 
 export interface ConversationDetail extends Conversation {

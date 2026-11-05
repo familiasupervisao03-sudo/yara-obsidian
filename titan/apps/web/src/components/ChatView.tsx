@@ -6,6 +6,8 @@ import { Icon } from "./icons";
 import { LessonPlayer } from "./LessonPlayer";
 import type { ChatIntent } from "./Shell";
 import { notify } from "../notify";
+import { brain, fmtWhen, type Action } from "../brain";
+import { remindersChanged } from "../reminders";
 
 const LESSON_MARKER = "▶ Vídeo-aula: ";
 // Mesmo critério do servidor (titan/lessons/script.py): pedido explícito de vídeo-aula.
@@ -57,6 +59,8 @@ export function ChatView({ conversationId, onConversation, version, onError, int
   const [lessonPrefs, setLessonPrefs] = useState<LessonPrefs>(loadLessonPrefs);
   const [lessonPanel, setLessonPanel] = useState(false);
   const [videoReply, setVideoReply] = useState(true);
+  const [actions, setActions] = useState<Record<string, Action[]>>({});
+  const [pinning, setPinning] = useState<"idle" | "busy" | "done">("idle");
   // Logo depois de uma aula, a próxima pergunta ou teoria continua em vídeo (dá para desligar).
   const lastMsg = messages[messages.length - 1];
   const lastLesson = lastMsg && lastMsg.role === "assistant" && lastMsg.content.startsWith(LESSON_MARKER) ? lastMsg : null;
@@ -103,9 +107,25 @@ export function ChatView({ conversationId, onConversation, version, onError, int
   }, []);
 
   useEffect(() => {
-    if (!conversationId) return setMessages([]);
+    setPinning("idle");
+    if (!conversationId) { setActions({}); return setMessages([]); }
     api.conversation(conversationId).then((c) => setMessages(c.messages)).catch(onError);
+    brain.actions(conversationId).then(setActions).catch(() => setActions({}));
   }, [conversationId, version, onError]);
+
+  async function pin() {
+    if (!conversationId) return;
+    setPinning("busy");
+    setNotice(null);
+    try {
+      await brain.summarize(conversationId);
+      setPinning("done");
+      setConversations((cs) => cs.map((c) => (c.id === conversationId ? { ...c, important: true } : c)));
+    } catch (e) {
+      setPinning("idle");
+      setNotice((e as Error).message);
+    }
+  }
 
   useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [messages, streaming]);
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -133,8 +153,13 @@ export function ChatView({ conversationId, onConversation, version, onError, int
       setStreaming(null);
       return;
     }
-    const chat = new StreamingChat(async () => cid, "text",
-                                   { web: (opts.web ?? webOn) ? true : undefined, onResearch: setResearch });
+    const chat = new StreamingChat(async () => cid, "text", {
+      web: (opts.web ?? webOn) ? true : undefined, onResearch: setResearch,
+      onActions: (mid, acts) => {
+        setActions((a) => ({ ...a, [mid]: acts as Action[] }));
+        if ((acts as Action[]).some((x) => x.type === "lembrete")) remindersChanged();
+      },
+    });
     let acc = "";
     try {
       const res = await chat.send(p.text, p.requestId, abort.signal, (d) => {
@@ -215,7 +240,15 @@ export function ChatView({ conversationId, onConversation, version, onError, int
     }
   }
 
-  const title = conversations.find((c) => c.id === conversationId)?.title ?? "Nova conversa";
+  const current = conversations.find((c) => c.id === conversationId);
+  const title = current?.title ?? "Nova conversa";
+  // Cartões de ação aparecem depois da resposta à mensagem que os originou.
+  const cardsAfter: Record<string, Action[]> = {};
+  messages.forEach((m, i) => {
+    if (m.role !== "user" || !actions[m.id]) return;
+    const reply = messages.slice(i + 1).find((x) => x.role === "assistant");
+    cardsAfter[reply?.id ?? m.id] = actions[m.id];
+  });
 
   return (
     <section className="chat-view">
@@ -223,7 +256,13 @@ export function ChatView({ conversationId, onConversation, version, onError, int
         <button className="ghost small" onClick={() => setShowList((s) => !s)} aria-expanded={showList}>
           <Icon name="list" size={16} /> Conversas
         </button>
-        <span className="chat-title" title={title}>{title}</span>
+        <span className="chat-title" title={title}>{current?.important && "📌 "}{title}</span>
+        {conversationId && messages.length > 0 && (
+          <button className={`ghost small ${current?.important ? "on" : ""}`} onClick={() => void pin()} disabled={pinning === "busy"}
+                  title="Resumir esta conversa e guardar na memória para nunca esquecer">
+            <Icon name="pin" size={16} /> {pinning === "busy" ? "Resumindo…" : current?.important ? "Atualizar resumo" : "Importante"}
+          </button>
+        )}
         <button className="small" onClick={newConversation}><Icon name="plus" size={16} /> Nova</button>
       </div>
       {showList && (
@@ -231,7 +270,9 @@ export function ChatView({ conversationId, onConversation, version, onError, int
           {conversations.map((c) => (
             <li key={c.id}>
               <button className={`link ${c.id === conversationId ? "active" : ""}`}
-                      onClick={() => { onConversation(c.id); setShowList(false); }}>{c.title}</button>
+                      onClick={() => { onConversation(c.id); setShowList(false); }}>
+                {c.important && "📌 "}{c.origin === "titan" && <span className="tag">TITAN</span>} {c.title}
+              </button>
             </li>
           ))}
           {conversations.length === 0 && <li className="muted small">Nenhuma conversa ainda.</li>}
@@ -241,7 +282,15 @@ export function ChatView({ conversationId, onConversation, version, onError, int
         {messages.length === 0 && streaming === null && !pending && (
           <p className="muted empty-chat">Escreva uma mensagem para começar.</p>
         )}
-        {messages.map((m) => <Bubble key={m.id} m={m} onWatch={openLesson} />)}
+        {messages.map((m) => (
+          <div key={m.id} className="msg-wrap">
+            <Bubble m={m} onWatch={openLesson} />
+            {cardsAfter[m.id] && <ActionCards items={cardsAfter[m.id]} />}
+          </div>
+        ))}
+        {pinning === "done" && (
+          <p className="notice ok-notice">📌 Resumo guardado na Memória. O TITAN não vai esquecer o que importa desta conversa.</p>
+        )}
         {pending && (() => {
           const last = [...messages].reverse().find((m) => m.role === "user");
           const saved = Boolean(pending.error && last && last.content === pending.text);
@@ -362,6 +411,33 @@ function ResearchLine({ r }: { r: ResearchEvent }) {
   if (r.status === "failed") return <p className="research small warn">A pesquisa falhou.</p>;
   if (!r.sources?.length) return <p className="research small warn">Nenhuma fonte encontrada.</p>;
   return <p className="research small">{r.sources.length} fonte(s): {r.sources.map((s) => s.site).join(", ")}</p>;
+}
+
+function ActionCards({ items }: { items: Action[] }) {
+  return (
+    <div className="action-cards">
+      {items.map((a, i) => {
+        switch (a.type) {
+          case "lembrete":
+            return <div key={i} className="acard"><span className="k">⏰ Lembrete</span><b>{a.title}</b><span className="muted small">{fmtWhen(a.due_at)} · aviso no celular</span></div>;
+          case "tarefa":
+            return <div key={i} className="acard"><span className="k">☐ Tarefa</span><b>{a.title}</b><span className="muted small">{a.due_at ? fmtWhen(a.due_at).split(" ")[0] : "sem data"} · aparece no Início</span></div>;
+          case "memoria":
+            return <div key={i} className="acard"><span className="k">🧠 {a.status === "pending" ? "Quero lembrar (aprove na Memória)" : a.updated ? "Memória atualizada" : "Guardei na memória"}</span><b>{a.content}</b>{a.topic === "open" && <span className="muted small">vou perguntar depois como ficou</span>}</div>;
+          case "resolvido":
+            return <div key={i} className="acard"><span className="k">✓ Resolvido</span><b>{a.content}</b></div>;
+          case "meta":
+            return <div key={i} className="acard"><span className="k">🎯 Meta avançou</span><b>{a.line}</b></div>;
+          case "meta_nova":
+            return <div key={i} className="acard"><span className="k">🎯 Nova meta no Início</span><b>{a.line}</b></div>;
+          case "bloqueado":
+            return <div key={i} className="acard acard-block"><span className="k">🔒 {a.detail}</span><span className="muted small">dados pessoais sensíveis ficam de fora da memória</span></div>;
+          default:
+            return null;
+        }
+      })}
+    </div>
+  );
 }
 
 const FOOTER = "\n\nFontes:\n";

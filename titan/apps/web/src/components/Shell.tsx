@@ -6,12 +6,15 @@ import { VoiceView } from "./VoiceView";
 import { TasksView } from "./TasksView";
 import { SystemView } from "./SystemView";
 import { Home } from "./Home";
+import { MemoryView } from "./MemoryView";
+import { brain, type Note } from "../brain";
+import { syncReminders } from "../reminders";
 import { Icon, type IconName } from "./icons";
 import { OfflineScreen } from "./OfflineScreen";
 import { ShareView, type Shared } from "./ShareView";
-import { notify } from "../notify";
+import { androidApp, notify } from "../notify";
 
-export type View = "home" | "chat" | "voice" | "tasks" | "system";
+export type View = "home" | "chat" | "voice" | "memory" | "tasks" | "system";
 
 /** Pedido para abrir a conversa num modo (vindo do Início, de um atalho ou de algo compartilhado). */
 export interface ChatIntent {
@@ -24,9 +27,13 @@ export interface ChatIntent {
 }
 
 /** Atalhos do ícone (manifest) e "Compartilhar → TITAN" chegam pelo endereço. */
-function readLaunch(): { view?: View; intent?: ChatIntent; shared?: Shared } {
+function readLaunch(): { view?: View; intent?: ChatIntent; shared?: Shared; conversation?: string } {
   const q = new URLSearchParams(window.location.search);
   const acao = q.get("acao");
+  const conversa = q.get("conversa");
+  if (conversa && /^[0-9a-f-]{36}$/.test(conversa)) return { view: "chat", conversation: conversa };
+  if (acao === "inicio") return { view: "home" };
+  if (acao === "memoria") return { view: "memory" };
   if (window.location.pathname === "/compartilhar") {
     const shared = { title: q.get("title") ?? "", text: q.get("text") ?? "", url: q.get("url") ?? "" };
     if (shared.title || shared.text || shared.url) return { shared };
@@ -40,16 +47,16 @@ function readLaunch(): { view?: View; intent?: ChatIntent; shared?: Shared } {
 
 const TABS: { id: View; label: string; icon: IconName }[] = [
   { id: "home", label: "Início", icon: "home" },
-  { id: "chat", label: "Conversa", icon: "chat" },
+  { id: "chat", label: "Conversas", icon: "chat" },
   { id: "voice", label: "Voz", icon: "mic" },
-  { id: "tasks", label: "Tarefas", icon: "tasks" },
+  { id: "memory", label: "Memória", icon: "brain" },
   { id: "system", label: "Sistema", icon: "system" },
 ];
 
 function loadView(): View {
   try {
     const v = localStorage.getItem("titan.view");
-    if (v && TABS.some((t) => t.id === v)) return v as View;
+    if (v && (TABS.some((t) => t.id === v) || v === "tasks")) return v as View;
   } catch {
     /* armazenamento indisponível */
   }
@@ -69,8 +76,10 @@ export function Shell({ session, onLogout, onExpired }: {
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const [offline, setOffline] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState(0);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(launch.conversation ?? null);
   const [chatVersion, setChatVersion] = useState(0);
+  const [homeVersion, setHomeVersion] = useState(0);
+  const [toast, setToast] = useState<Note | null>(null);
   const [error, setError] = useState<string | null>(null);
   const seenApprovals = useRef<number | null>(null);
   const wasOffline = useRef(false);
@@ -98,6 +107,7 @@ export function Shell({ session, onLogout, onExpired }: {
         }
         seenApprovals.current = ap.length;
         setOffline(false);
+        void checkNotes();
         if (wasOffline.current) {
           wasOffline.current = false;
           window.dispatchEvent(new Event("titan:reconectado")); // reenvia o que ficou pendente
@@ -121,6 +131,28 @@ export function Shell({ session, onLogout, onExpired }: {
       window.removeEventListener("online", online);
     };
   }, [refresh]);
+
+  // Mensagens do TITAN: aviso no aparelho (se em segundo plano) ou faixa na tela.
+  const checkNotes = useCallback(async () => {
+    try {
+      const notes = await brain.notes();
+      if (!notes.length) return;
+      const visible = document.visibilityState === "visible";
+      // No app Android, os lembretes com hora já tocam pelo próprio celular (sem repetir aqui).
+      const phoneAlarms = typeof (androidApp() as unknown as { scheduleReminders?: unknown } | null)?.scheduleReminders === "function";
+      for (const n of notes.slice(0, 3).reverse()) {
+        if (phoneAlarms && n.kind === "lembrete" && !visible) continue;
+        const url = n.conversation_id ? `/?conversa=${n.conversation_id}` : "/?acao=inicio";
+        if (visible) setToast(n);
+        else notify(n.title.replace(/^TITAN · /, ""), n.body, `titan-${n.kind}`, url);
+      }
+      await brain.delivered(notes.map((n) => n.id));
+      setHomeVersion((v) => v + 1);
+    } catch {
+      /* sem mensagens agora */
+    }
+    syncReminders();
+  }, []);
 
   const openChat = (intent: ChatIntent) => {
     setShared(null);
@@ -165,13 +197,25 @@ export function Shell({ session, onLogout, onExpired }: {
         </div>
       )}
 
+      {toast && (
+        <div className="banner banner-titan" role="status">
+          <span><strong>{toast.title}</strong> {toast.body}</span>
+          {toast.conversation_id && (
+            <button className="small" onClick={() => { setConversationId(toast.conversation_id); setToast(null); go("chat"); }}>
+              Responder
+            </button>
+          )}
+          <button className="ghost small" onClick={() => setToast(null)} aria-label="Fechar">✕</button>
+        </div>
+      )}
+
       <nav className="tabs" aria-label="Seções">
         {TABS.map((t) => (
           <button key={t.id} className={`tab ${view === t.id ? "active" : ""}`} onClick={() => go(t.id)}
                   aria-current={view === t.id ? "page" : undefined}>
             <span className="tab-icon"><Icon name={t.icon} size={20} /></span>
             <span>{t.label}</span>
-            {t.id === "tasks" && pendingApprovals > 0 && <span className="pill">{pendingApprovals}</span>}
+            {t.id === "system" && pendingApprovals > 0 && <span className="pill">{pendingApprovals}</span>}
           </button>
         ))}
       </nav>
@@ -180,6 +224,7 @@ export function Shell({ session, onLogout, onExpired }: {
         {view === "home" && (
           <Home username={session.user.username} status={status} offline={offline}
                 pendingApprovals={pendingApprovals} onGo={go} onChat={openChat} onError={handleError}
+                version={homeVersion}
                 onOpenConversation={(id) => { setConversationId(id); go("chat"); }} />
         )}
         {view === "chat" && (
@@ -192,8 +237,12 @@ export function Shell({ session, onLogout, onExpired }: {
                      onTurn={() => setChatVersion((v) => v + 1)} onUseText={() => go("chat")}
                      onError={handleError} />
         )}
+        {view === "memory" && (
+          <MemoryView onError={handleError} onOpenConversation={(id) => { setConversationId(id); go("chat"); }} />
+        )}
         {view === "tasks" && <TasksView onError={handleError} onChanged={refresh} />}
-        {view === "system" && <SystemView status={status} settings={settings} onRefresh={refresh} />}
+        {view === "system" && <SystemView status={status} settings={settings} onRefresh={refresh}
+                                          pendingApprovals={pendingApprovals} onTasks={() => go("tasks")} />}
       </main>
       {shared && <ShareView shared={shared} webEnabled={settings?.config.web_enabled === true}
                             onAction={openChat} onClose={() => setShared(null)} />}

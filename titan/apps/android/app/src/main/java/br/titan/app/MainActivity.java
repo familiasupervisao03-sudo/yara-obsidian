@@ -3,10 +3,6 @@ package br.titan.app;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -49,7 +45,6 @@ public class MainActivity extends Activity {
     private static final String PREFS = "titan";
     private static final String KEY_SERVER = "server";
     private static final int REQ_MEDIA = 10;
-    private static final String CHANNEL = "titan";
 
     private WebView web;
     private String server; // ex.: https://192.168.0.10:8000 (sem barra no fim)
@@ -60,6 +55,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         server = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_SERVER, null);
+        NotesJob.ensure(this);
         if (server == null) showSetup(null);
         else openTitan(pathFor(getIntent()));
     }
@@ -88,9 +84,15 @@ public class MainActivity extends Activity {
         Uri d = i.getData();
         if (d != null && "titan".equals(d.getScheme()) && "acao".equals(d.getHost())) {
             String acao = d.getLastPathSegment();
-            if ("voz".equals(acao) || "conversa".equals(acao) || "aula".equals(acao) || "aprovacoes".equals(acao)) {
+            if ("voz".equals(acao) || "conversa".equals(acao) || "aula".equals(acao) || "aprovacoes".equals(acao)
+                    || "inicio".equals(acao) || "memoria".equals(acao)) {
                 return "/?acao=" + acao;
             }
+        }
+        // Aviso de mensagem do TITAN: abre direto a conversa que ele começou.
+        if (d != null && "titan".equals(d.getScheme()) && "conversa".equals(d.getHost())) {
+            String id = d.getLastPathSegment();
+            if (id != null && id.matches("^[0-9a-f-]{36}$")) return "/?conversa=" + id;
         }
         if (Intent.ACTION_SEND.equals(i.getAction())) {
             String text = i.getStringExtra(Intent.EXTRA_TEXT);
@@ -301,30 +303,24 @@ public class MainActivity extends Activity {
                     requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 11));
         }
 
-        /** Aviso do sistema (aprovação pendente, aula pronta, resposta pronta). */
+        /** Aviso do sistema (aprovação pendente, resposta pronta, mensagem do TITAN). */
         @JavascriptInterface
         public void notify(String title, String body, String path) {
-            if (!canNotify()) return;
-            NotificationManager nm = getSystemService(NotificationManager.class);
-            if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL) == null) {
-                nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Avisos do TITAN",
-                        NotificationManager.IMPORTANCE_DEFAULT));
-            }
             String safe = path != null && path.startsWith("/") ? path : "/";
-            Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse("titan://acao" + (safe.contains("aprovacoes")
-                    ? "/aprovacoes" : "/inicio")), MainActivity.this, MainActivity.class);
-            PendingIntent pi = PendingIntent.getActivity(MainActivity.this, 0, open,
-                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-            Notification.Builder b = Build.VERSION.SDK_INT >= 26
-                    ? new Notification.Builder(MainActivity.this, CHANNEL)
-                    : new Notification.Builder(MainActivity.this);
-            b.setSmallIcon(R.mipmap.ic_launcher)
-                    .setContentTitle(title == null ? "TITAN" : title)
-                    .setContentText(body == null ? "" : body)
-                    .setStyle(new Notification.BigTextStyle().bigText(body == null ? "" : body))
-                    .setContentIntent(pi)
-                    .setAutoCancel(true);
-            nm.notify(notifyId++, b.build());
+            String target = "titan://acao/inicio";
+            if (safe.contains("aprovacoes")) target = "titan://acao/aprovacoes";
+            int at = safe.indexOf("conversa=");
+            if (at >= 0) {
+                String id = safe.substring(at + 9).split("&")[0];
+                if (id.matches("^[0-9a-f-]{36}$")) target = "titan://conversa/" + id;
+            }
+            Notifier.show(MainActivity.this, notifyId++, title, body, target, false);
+        }
+
+        /** Lembretes com hora: agendados no próprio celular (tocam mesmo sem o notebook). */
+        @JavascriptInterface
+        public void scheduleReminders(String json) {
+            Reminders.schedule(MainActivity.this, json == null ? "[]" : json);
         }
     }
 

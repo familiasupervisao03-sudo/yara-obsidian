@@ -31,13 +31,16 @@ for (const [name, viewport] of [["desktop", { width: 1366, height: 860 }], ["mob
   await page.getByLabel("Senha").fill(password);
   await page.getByRole("button", { name: "Entrar" }).click();
   // a primeira tela é o Início (centro de comando); a conversa fica na aba "Conversa"
-  await page.getByRole("heading", { name: /Olá,/ }).waitFor({ timeout: 10000 });
+  await page.getByRole("heading", { name: /(Bom dia|Boa tarde|Boa noite|Olá), / }).waitFor({ timeout: 10000 });
   loggedIn = true;
   check(true, `${name}: login e tela inicial`);
-  await page.getByText(/Modo (local|híbrido)/).waitFor({ timeout: 10000 });
+  await page.getByText("Status do sistema").click();
+  await page.locator(".meters .meter").first().waitFor({ timeout: 10000 });
   check(true, `${name}: estado real dos serviços no Início`);
+  await page.getByText("Minhas metas").waitFor();
+  check(true, `${name}: metas e "Hoje" no Início`);
   if (outDir) await page.screenshot({ path: `${outDir}/titan-${name}-inicio.png` });
-  await page.getByRole("button", { name: "Conversa", exact: true }).click();
+  await page.getByRole("button", { name: "Conversas", exact: true }).click();
   await page.getByPlaceholder("Mensagem para o TITAN…").waitFor({ timeout: 10000 });
 
   // conversa em streaming (numa conversa nova: depois de uma vídeo-aula, a próxima
@@ -66,7 +69,8 @@ for (const [name, viewport] of [["desktop", { width: 1366, height: 860 }], ["mob
   check(true, `${name}: mensagem persiste após recarregar`);
 
   // tarefas: criar, executar e verificar
-  await page.getByRole("button", { name: /Tarefas/ }).click();
+  await page.getByRole("button", { name: "Sistema", exact: true }).click();
+  await page.getByText(/Tarefas do laboratório/).locator("..").getByRole("button", { name: "Abrir" }).click();
   await page.getByRole("button", { name: "+ Nova tarefa" }).click();
   await page.getByLabel("Objetivo").fill(`Anotar ${name}`);
   await page.getByLabel("Título").fill("Guardar lembrete");
