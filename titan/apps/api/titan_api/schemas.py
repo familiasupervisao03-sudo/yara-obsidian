@@ -75,6 +75,9 @@ class ConversationOut(BaseModel):
     title: str
     created_at: datetime
     updated_at: datetime
+    # 📌 importante (o resumo foi para a memória) e quem começou: "user" ou "titan".
+    important: bool = False
+    origin: str = "user"
 
 
 class ConversationDetail(ConversationOut):

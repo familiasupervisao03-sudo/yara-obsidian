@@ -24,7 +24,7 @@ from titan.tasks.runner import TaskRunner
 from titan.tasks.service import recover_on_startup
 from titan.tools.web.research import WebResearcher
 from titan.voice.engines import VoiceService
-from titan_api.routers import auth, conversations, health, lessons, preferences, system, tasks, voice
+from titan_api.routers import auth, brain, conversations, health, lessons, preferences, system, tasks, voice
 from titan_api.security import (
     CSRFMiddleware,
     NetworkAllowlistMiddleware,
@@ -49,9 +49,19 @@ _STATUS_CODES = {
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    _recover_interrupted(app.state.ctx)
+    ctx = app.state.ctx
+    _recover_interrupted(ctx)
+    scheduler = None
+    if ctx.settings.brain_scheduler and ctx.settings.env.value != "test":
+        from titan.brain.proactive import Scheduler
+        from titan.brain.service import brain_provider
+
+        scheduler = Scheduler(ctx.session_factory, lambda: brain_provider(ctx.settings, ctx.session_factory))
+        scheduler.start()
     yield
-    app.state.ctx.engine.dispose()
+    if scheduler is not None:
+        scheduler.stop()
+    ctx.engine.dispose()
 
 
 def _recover_interrupted(ctx: AppContext) -> None:
@@ -112,6 +122,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(voice.router)
     app.include_router(preferences.router)
     app.include_router(lessons.router)
+    app.include_router(brain.router)
 
     if settings.serve_web:
         _mount_web(app, settings.web_dist_dir)

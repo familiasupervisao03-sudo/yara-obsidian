@@ -80,14 +80,15 @@ def test_voice_mode_and_preferences_reach_the_model_as_fixed_style(mock_users):
     a, _, _ = mock_users
     cid = a.post("/api/v1/conversations", json={}, headers=CSRF).json()["id"]
     a.post(f"/api/v1/conversations/{cid}/messages/stream", json={"content": "oi"}, headers=CSRF)
-    assert MockProvider.last_style == ""
+    # Sem preferências, só a data/hora de agora (bloco da memória) chega ao modelo.
+    assert MockProvider.last_style.startswith("Agora: ") and "\n" not in MockProvider.last_style
     a.post(f"/api/v1/conversations/{cid}/messages/stream", json={"content": "oi", "mode": "voice"},
            headers=CSRF)
     assert MockProvider.last_style.startswith(VOICE)
     p = {**prefs.DEFAULTS, "response_length": "curta"}
     a.put("/api/v1/preferences", json=p, headers=CSRF)
     a.post(f"/api/v1/conversations/{cid}/messages", json={"content": "oi"}, headers=CSRF)
-    assert MockProvider.last_style == build_style("text", p)
+    assert MockProvider.last_style.split("\n\nAgora: ")[0] == build_style("text", p)
     r = a.post(f"/api/v1/conversations/{cid}/messages/stream", json={"content": "oi", "mode": "grito"},
                headers=CSRF)
     assert r.status_code == 422  # só "text" ou "voice"

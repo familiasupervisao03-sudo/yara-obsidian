@@ -98,6 +98,13 @@ class Settings(BaseSettings):
     # Teto de minutos de áudio enviados por dia ao reconhecimento on-line (protege o custo).
     voice_cloud_max_minutes_day: int = Field(default=60, ge=1, le=1440)
 
+    # Sócio (memória, lembretes, mensagens do TITAN). Modelo usado para "entender" as
+    # conversas e escrever as mensagens; vazio = o mesmo das conversas. Recomendado: o
+    # mais barato (ex.: claude-haiku-5-5), porque roda depois de cada mensagem.
+    brain_model_name: str = ""
+    # Mensagens do TITAN por conta própria (bom dia, lembretes...): o agendador roda no servidor.
+    brain_scheduler: bool = True
+
     # Pesquisa na internet (opcional; ver docs/pesquisa-internet.md). Desligada por padrão:
     # a pergunta pesquisada sai do notebook para a fonte de busca e para os sites lidos.
     web_enabled: bool = False

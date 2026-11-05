@@ -132,6 +132,10 @@ class Conversation(TimestampMixin, Base):
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Marcada como importante (📌): o resumo foi para a memória.
+    important: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # user (você começou) | titan (o TITAN puxou assunto)
+    origin: Mapped[str] = mapped_column(String(8), nullable=False, default="user")
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=utcnow, nullable=False
     )
@@ -399,3 +403,104 @@ class ModelUsage(TimestampMixin, Base):
     cost_brl: Mapped[float] = mapped_column(Float, nullable=False)
     request_id: Mapped[Optional[str]] = mapped_column(String(128))
     detail: Mapped[Optional[str]] = mapped_column(Text)
+
+
+# --- "Sócio": cérebro (memória), metas, lembretes/tarefas e mensagens do TITAN --------
+
+BRAIN_CATEGORIES = ("sobre", "gostos", "negocio", "estudos", "resumo", "outros")
+BRAIN_STATES = ("pending", "active", "archived")
+TODO_KINDS = ("lembrete", "tarefa")
+NOTE_KINDS = ("bom_dia", "boa_noite", "papo", "lembrete", "acompanhamento", "socio")
+
+
+class BrainMemory(TimestampMixin, Base):
+    """Uma lembrança que o usuário vê, edita e apaga na aba Memória.
+
+    ``pending`` espera aprovação; ``active`` entra no contexto da IA; ``archived`` é
+    antiga (fica visível, mas só é usada se a busca a encontrar).
+    ``topic`` marca um assunto em aberto (``open``) que o TITAN acompanha até ``resolved``.
+    """
+
+    __tablename__ = "brain_memories"
+    __table_args__ = (
+        CheckConstraint(_in("category", BRAIN_CATEGORIES), name="ck_brain_category"),
+        CheckConstraint(_in("status", BRAIN_STATES), name="ck_brain_status"),
+        Index("ix_brain_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    category: Mapped[str] = mapped_column(String(16), nullable=False, default="outros")
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    # conversa | voce | pergunta | resumo
+    origin: Mapped[str] = mapped_column(String(16), nullable=False, default="conversa")
+    conversation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"))
+    message_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
+    question_key: Mapped[Optional[str]] = mapped_column(String(32))
+    # Sugestão que, aprovada, substitui esta lembrança antiga (a antiga vai para "antigas").
+    replaces_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
+    topic: Mapped[Optional[str]] = mapped_column(String(16))  # None | open | resolved
+    follow_up_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
+
+
+class Goal(TimestampMixin, Base):
+    __tablename__ = "goals"
+    __table_args__ = (Index("ix_goals_user", "user_id", "done"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    unit: Mapped[str] = mapped_column(String(24), nullable=False, default="")  # "R$", "aulas"...
+    target: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    current: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    deadline: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+    done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
+
+
+class Todo(TimestampMixin, Base):
+    """Lembrete (com hora: avisa no celular) ou tarefa (com ou sem data)."""
+
+    __tablename__ = "todos"
+    __table_args__ = (
+        CheckConstraint(_in("kind", TODO_KINDS), name="ck_todos_kind"),
+        Index("ix_todos_user_done", "user_id", "done_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="tarefa")
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    due_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+    done_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+    notified_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+    conversation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"))
+    message_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
+
+
+class TitanNote(TimestampMixin, Base):
+    """Mensagem que o TITAN manda por conta própria (vira aviso no celular)."""
+
+    __tablename__ = "titan_notes"
+    __table_args__ = (
+        CheckConstraint(_in("kind", NOTE_KINDS), name="ck_notes_kind"),
+        Index("ix_notes_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    conversation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"))
+    todo_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
+    # Dia local (AAAA-MM-DD) + tipo: impede repetir o bom-dia no mesmo dia.
+    day: Mapped[str] = mapped_column(String(10), nullable=False)
+    delivered_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())

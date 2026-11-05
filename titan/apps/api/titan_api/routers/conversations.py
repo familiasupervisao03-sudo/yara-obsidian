@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
 
 from titan.audit import log as audit
+from titan.brain import service as brain
 from titan.db.models import Message
 from titan.memory import conversations as repo
 from titan.memory import preferences as user_prefs
@@ -141,6 +142,7 @@ def post_message(
             db.commit()
         style = build_style(body.mode, user_prefs.get(db, cu.user.id))
         turns, style, footer = with_research(ctx, cu, body, turns, style, lambda *_: None)
+        style = brain.with_memory(style, brain.context_for(ctx.session_factory, cu.user.id, body.content))
         reply = provider.chat(turns, style=style)
         reply_msg = repo.add_message(
             db, conv, "assistant", reply.content.strip() + footer,
@@ -151,6 +153,9 @@ def post_message(
                      data={"provider": reply.provider, "model": reply.model})
         reply_out = MessageOut.model_validate(reply_msg)
         model = ModelStatus(available=True, provider=reply.provider, detail=reply.model)
+        db.commit()
+        brain.after_turn(ctx.settings, ctx.session_factory, cu.user.id, conv.id, user_msg.id,
+                         body.content, reply.content)
     except (ModelUnavailable, ProviderBlocked) as exc:
         # Sem modelo: a mensagem fica salva e o usuário é informado. Nada é inventado.
         model = ModelStatus(available=False, provider=ctx.settings.model_provider, detail=str(exc))
@@ -223,8 +228,23 @@ async def post_message_stream(
                 t, st, footer = with_research(ctx, cu, body, turns, style, emit)
                 if cancel.is_set():
                     return
-                run_reply_stream(ctx.session_factory, conversation_id, provider, t, emit,
+                st = brain.with_memory(st, brain.context_for(ctx.session_factory, cu.user.id, body.content))
+                replied: dict = {}
+
+                def emit_and_keep(kind: str, data: dict) -> None:
+                    if kind == "done" and data.get("message"):
+                        replied["text"] = data["message"]["content"]
+                    emit(kind, data)
+
+                run_reply_stream(ctx.session_factory, conversation_id, provider, t, emit_and_keep,
                                  cancel, st, footer)
+                if replied and not cancel.is_set() and not is_duplicate:
+                    # Depois da resposta (o usuário já está lendo): lembretes, tarefas, lembranças.
+                    actions = brain.after_turn(ctx.settings, ctx.session_factory, cu.user.id,
+                                               conversation_id, uuid.UUID(user_out["id"]),
+                                               body.content, replied["text"])
+                    if actions:
+                        emit("actions", {"message_id": user_out["id"], "actions": actions})
             finally:
                 emit("_end", {})
 
