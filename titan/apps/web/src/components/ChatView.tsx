@@ -80,7 +80,7 @@ export function ChatView({ conversationId, onConversation, version, onError, int
   useEffect(() => {
     try { localStorage.setItem("titan.lesson", JSON.stringify(lessonPrefs)); } catch { /* ignora */ }
   }, [lessonPrefs]);
-  useEffect(() => setVideoReply(true), [lastLesson?.id]);
+  useEffect(() => { setVideoReply(true); }, [lastLesson?.id]);
 
   // Pedido vindo do Início, de um atalho do ícone ou de algo compartilhado.
   useEffect(() => {
@@ -110,7 +110,7 @@ export function ChatView({ conversationId, onConversation, version, onError, int
 
   useEffect(() => {
     setPinning("idle");
-    if (!conversationId) { setActions({}); return setMessages([]); }
+    if (!conversationId) { setActions({}); setMessages([]); return; }
     api.conversation(conversationId).then((c) => setMessages(c.messages)).catch(onError);
     brain.actions(conversationId).then(setActions).catch(() => setActions({}));
   }, [conversationId, version, onError]);
@@ -129,7 +129,9 @@ export function ChatView({ conversationId, onConversation, version, onError, int
     }
   }
 
-  useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [messages, streaming]);
+  // Chaves de propósito: o Chrome novo faz scrollIntoView devolver uma Promise, e um efeito
+  // não pode devolver nada além de uma função de limpeza (senão a tela quebra ao sair).
+  useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [messages, streaming]);
   useEffect(() => () => abortRef.current?.abort(), []);
 
   async function ensureConversation(seed: string, forceNew = false): Promise<string> {

@@ -96,7 +96,7 @@ export function LessonPlayer({ lesson, messageId, conversationId, onClose, onCha
     clipRef.current?.stop();
     clipRef.current = null;
   }, []);
-  useEffect(() => stopAudio, [stopAudio]);
+  useEffect(() => () => stopAudio(), [stopAudio]);
 
   useEffect(() => {
     const on = () => setFull(document.fullscreenElement === rootRef.current);
