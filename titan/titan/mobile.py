@@ -29,6 +29,8 @@ from typing import Callable, Optional
 TLS_DIR = Path("var/tls")
 # App Android do TITAN (gerado a partir de apps/android; ver apps/android/README.md).
 APK_FILE = Path(__file__).resolve().parents[1] / "apps" / "web" / "public" / "titan.apk"
+# App TITAN Casa (central da casa no tablet): mesmo projeto Android, outro app.
+CASA_APK_FILE = APK_FILE.with_name("casa.apk")
 TAILSCALE_NET = "100.64.0.0/10"
 INSTALL_PORT = 8001
 INSTALL_MINUTES = 15
@@ -165,15 +167,16 @@ def qr_text(url: str) -> Optional[str]:
 
 # --- página de instalação (temporária, sem cadeado) ---------------------------------
 
-def config_link(app_url: str, alt_url: Optional[str] = None) -> str:
-    """Link titan://configurar que preenche o app sozinho (ele pede confirmação)."""
+def config_link(app_url: str, alt_url: Optional[str] = None, scheme: str = "titan") -> str:
+    """Link titan://configurar (ou titancasa://) que preenche o app sozinho (ele pede confirmação)."""
     from urllib.parse import quote
 
-    link = f"titan://configurar?s={quote(app_url, safe='')}"
+    link = f"{scheme}://configurar?s={quote(app_url, safe='')}"
     return link + (f"&alt={quote(alt_url, safe='')}" if alt_url else "")
 
 
-def install_page(app_url: str, ca_name: str, has_apk: bool = False, alt_url: Optional[str] = None) -> str:
+def install_page(app_url: str, ca_name: str, has_apk: bool = False, alt_url: Optional[str] = None,
+                 has_casa_apk: bool = False) -> str:
     u = html.escape(app_url)
     where = (f"<code>{u}</code> (funciona em qualquer lugar, pelo Tailscale) e, de reserva, "
              f"<code>{html.escape(alt_url)}</code> (Wi-Fi de casa)") if alt_url else f"<code>{u}</code>"
@@ -184,6 +187,12 @@ permitir instalar apps desta origem: permita só para esta instalação.</span>
 <span class="m">Depois de instalar, toque abaixo para o app já abrir configurado com {where}.</span>
 <a class="btn" href="{html.escape(config_link(app_url, alt_url))}">CONFIGURAR O APP SOZINHO</a></div></div>"""
            if has_apk else "")
+    casa = (f"""<div class="step"><span class="n">5</span><div><b>TITAN Casa no tablet (opcional)</b>
+<span class="m">O app da central da casa: abre direto nos aparelhos e cenas, em tela cheia e com a tela sempre acesa.
+Faça os passos 1 e 2 (cadeado) também no tablet.</span>
+<a class="btn" href="/casa.apk" download>BAIXAR O TITAN CASA (APK)</a>
+<a class="btn" href="{html.escape(config_link(app_url, alt_url, "titancasa"))}">CONFIGURAR O CASA SOZINHO</a></div></div>"""
+            if has_casa_apk else "")
     return f"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Instalar o TITAN</title>
 <style>
@@ -211,6 +220,7 @@ O Android avisa que "a rede pode ser monitorada": é normal para cadeados instal
 "Instalar app" ou "Adicionar à tela inicial".</span><a class="btn" href="{u}">ABRIR O TITAN</a>
 <span class="m">Se aparecer "conexão não segura", o passo 2 não foi concluído: não continue, volte ao passo 2.</span></div></div>
 {apk}
+{casa}
 <p class="m">Esta página fecha sozinha em {INSTALL_MINUTES} minutos.</p>
 </body></html>"""
 
@@ -219,7 +229,9 @@ def make_install_server(ca_crt: Path, app_url: str, allowed: list[str], port: in
                         host: str = "0.0.0.0", alt_url: Optional[str] = None) -> ThreadingHTTPServer:
     nets = [ipaddress.ip_network(n, strict=False) for n in allowed]
     apk = APK_FILE.read_bytes() if APK_FILE.is_file() else None
-    page = install_page(app_url, ca_crt.name, has_apk=apk is not None, alt_url=alt_url).encode()
+    casa_apk = CASA_APK_FILE.read_bytes() if CASA_APK_FILE.is_file() else None
+    page = install_page(app_url, ca_crt.name, has_apk=apk is not None, alt_url=alt_url,
+                        has_casa_apk=casa_apk is not None).encode()
     cert = ca_crt.read_bytes()
 
     class Handler(BaseHTTPRequestHandler):
@@ -251,6 +263,9 @@ def make_install_server(ca_crt: Path, app_url: str, allowed: list[str], port: in
             if path == "/titan.apk" and apk is not None:
                 return self._send(200, apk, "application/vnd.android.package-archive",
                                   {"Content-Disposition": 'attachment; filename="titan.apk"'})
+            if path == "/casa.apk" and casa_apk is not None:
+                return self._send(200, casa_apk, "application/vnd.android.package-archive",
+                                  {"Content-Disposition": 'attachment; filename="titan-casa.apk"'})
             return self._send(404, b"Nada aqui.", "text/plain; charset=utf-8")
 
         def log_message(self, *args):

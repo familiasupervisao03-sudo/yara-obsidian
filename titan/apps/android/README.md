@@ -14,6 +14,17 @@ notebook**. O app não guarda conversas nem chaves; ele abre a interface do serv
 
 O APK também fica em `apps/web/public/titan.apk` (e o TITAN o serve em `/titan.apk`).
 
+## TITAN Casa (tablet)
+
+O mesmo projeto gera um **segundo app**, o **TITAN Casa** (`br.titan.casa`), que instala ao lado
+do TITAN. Ele abre direto em `/casa` (aparelhos, cenas e voz), em tela cheia e com a tela sempre
+acesa — feito para o tablet que fica como central da casa. Não busca as mensagens do TITAN
+(isso fica no app TITAN, para não avisar em dobro).
+
+- APK: `apps/web/public/casa.apk` (o TITAN serve em `/casa.apk`; a página do QR também oferece).
+- Configurar sozinho: `titancasa://configurar?s=…` (botão "CONFIGURAR O CASA SOZINHO" na página do QR).
+- O tablet também precisa do **cadeado** instalado (passos 1 e 2 da página do QR).
+
 ## O que o app faz
 
 - Só abre `https://`; certificado inválido **não abre** (nunca "continuar mesmo assim").
@@ -33,8 +44,9 @@ Precisa do Android SDK (platforms;android-34, build-tools;34.0.0), Java 17+ e Gr
 ```sh
 cd apps/android
 echo "sdk.dir=/caminho/do/android-sdk" > local.properties
-TITAN_KEYSTORE=/caminho/titan-release.jks TITAN_KEYSTORE_PASS=... gradle assembleRelease
-cp app/build/outputs/apk/release/app-release.apk ../web/public/titan.apk
+TITAN_KEYSTORE=/caminho/titan-release.jks TITAN_KEYSTORE_PASS=... gradle assembleRelease   # gera os dois apps: TITAN e TITAN Casa
+cp app/build/outputs/apk/titan/release/app-titan-release.apk ../web/public/titan.apk
+cp app/build/outputs/apk/casa/release/app-casa-release.apk ../web/public/casa.apk
 ```
 
 **Chave de assinatura:** fica fora do repositório (`*.jks` está no `.gitignore`).

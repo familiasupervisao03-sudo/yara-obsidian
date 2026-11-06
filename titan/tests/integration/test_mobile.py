@@ -111,6 +111,9 @@ def test_install_page_offers_the_app_when_built(tmp_path, monkeypatch):
     apk = tmp_path / "titan.apk"
     apk.write_bytes(b"PK\x03\x04 apk falso")
     monkeypatch.setattr(mobile, "APK_FILE", apk)
+    casa = tmp_path / "casa.apk"
+    casa.write_bytes(b"PK\x03\x04 apk da casa")
+    monkeypatch.setattr(mobile, "CASA_APK_FILE", casa)
     ca, _crt, _key = mobile.make_certificates(["192.168.0.10"], tmp_path / "tls")
     srv = mobile.make_install_server(ca, "https://192.168.0.10:8000", ["127.0.0.1/32"], port=0, host="127.0.0.1")
     stop = threading.Event()
@@ -121,11 +124,16 @@ def test_install_page_offers_the_app_when_built(tmp_path, monkeypatch):
         assert "BAIXAR O APP (APK)" in _get(base + "/instalar")[2].decode()
         code, ctype, body = _get(base + "/titan.apk")
         assert code == 200 and ctype == "application/vnd.android.package-archive" and body == apk.read_bytes()
+        page = _get(base + "/instalar")[2].decode()
+        assert "BAIXAR O TITAN CASA (APK)" in page and "titancasa://configurar?s=" in page
+        code, ctype, body = _get(base + "/casa.apk")
+        assert code == 200 and ctype == "application/vnd.android.package-archive" and body == casa.read_bytes()
     finally:
         stop.set()
         t.join(5)
     monkeypatch.setattr(mobile, "APK_FILE", tmp_path / "nao-existe.apk")
     assert "BAIXAR O APP" not in mobile.install_page("https://x", "titan-ca.crt", has_apk=False)
+    assert "TITAN CASA" not in mobile.install_page("https://x", "titan-ca.crt", has_apk=True)
 
 
 def test_ligar_one_command_prepares_both_and_starts_server(tmp_path, monkeypatch, capsys):

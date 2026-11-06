@@ -761,6 +761,7 @@ def cmd_ligar(args: argparse.Namespace) -> int:
         print(f"  CELULAR, Wi-Fi de casa (reserva):         {lan_url}")
     else:
         print(f"  CELULAR:   {lan_url}   (só na mesma Wi-Fi)")
+    print(f"  TITAN CASA (tablet):  {lan_url}/casa")
     print("=" * 64)
     if not ts_url:
         print(TAILSCALE_HOWTO)
@@ -776,7 +777,7 @@ def cmd_ligar(args: argparse.Namespace) -> int:
             print(f"\nCelular novo? Aponte a câmera para o QR (ou abra {install_url}):")
             qr = mobile.qr_text(install_url)
             print(qr if qr else "(Para ver o QR code aqui: .venv/bin/pip install segno)")
-            print(f"Lá estão o cadeado e o app (APK). A página fecha sozinha em {mobile.INSTALL_MINUTES} minutos.")
+            print(f"Lá estão o cadeado, o app TITAN e o app TITAN Casa (APK). A página fecha sozinha em {mobile.INSTALL_MINUTES} minutos.")
             threading.Thread(target=mobile.serve_install_page, args=(server,), daemon=True).start()
 
     if not args.sem_navegador and shutil.which("xdg-open"):

@@ -67,10 +67,32 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         server = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_SERVER, null);
         alt = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_ALT, null);
-        NotesJob.ensure(this);
+        // Casa: central da casa (tablet) — tela sempre acesa e em tela cheia.
+        // As mensagens do TITAN (NotesJob) ficam só no app TITAN, para não avisar em dobro.
+        if (BuildConfig.CASA) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            fullscreen();
+        } else {
+            NotesJob.ensure(this);
+        }
         if (askConfigLink(getIntent())) return;
         if (server == null) showSetup(null);
         else openTitan(pathFor(getIntent()));
+    }
+
+    /** Esconde as barras do sistema (deslizar da borda mostra de novo por um instante). */
+    @SuppressWarnings("deprecation")
+    private void fullscreen() {
+        getWindow().getDecorView().setSystemUiVisibility(android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | android.view.View.SYSTEM_UI_FLAG_FULLSCREEN | android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE | android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && BuildConfig.CASA) fullscreen();
     }
 
     @Override
@@ -88,7 +110,7 @@ public class MainActivity extends Activity {
 
     private static boolean isConfigure(Intent i) {
         Uri d = i == null ? null : i.getData();
-        return d != null && "titan".equals(d.getScheme()) && "configurar".equals(d.getHost());
+        return d != null && BuildConfig.SCHEME.equals(d.getScheme()) && "configurar".equals(d.getHost());
     }
 
     /**
@@ -115,7 +137,7 @@ public class MainActivity extends Activity {
                     getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_SERVER, s)
                             .putString(KEY_ALT, fa).apply();
                     if (web != null) { web.destroy(); web = null; }
-                    openTitan("/");
+                    openTitan(BuildConfig.HOME);
                 })
                 .setNegativeButton("Cancelar", null)
                 .show();
@@ -124,8 +146,8 @@ public class MainActivity extends Activity {
 
     /** Converte atalho / compartilhamento no caminho da interface do TITAN. */
     private String pathFor(Intent i) {
-        if (i == null) return "/";
-        if (isConfigure(i)) return "/";
+        if (i == null) return BuildConfig.HOME;
+        if (isConfigure(i)) return BuildConfig.HOME;
         Uri d = i.getData();
         if (d != null && "titan".equals(d.getScheme()) && "acao".equals(d.getHost())) {
             String acao = d.getLastPathSegment();
@@ -142,10 +164,11 @@ public class MainActivity extends Activity {
         if (Intent.ACTION_SEND.equals(i.getAction())) {
             String text = i.getStringExtra(Intent.EXTRA_TEXT);
             String title = i.getStringExtra(Intent.EXTRA_SUBJECT);
+            if (BuildConfig.CASA) return BuildConfig.HOME;
             return "/compartilhar?title=" + Uri.encode(title == null ? "" : title)
                     + "&text=" + Uri.encode(text == null ? "" : text) + "&url=";
         }
-        return "/";
+        return BuildConfig.HOME;
     }
 
     static String normalize(String raw) {
@@ -168,7 +191,7 @@ public class MainActivity extends Activity {
         box.setBackgroundColor(Color.parseColor("#03070c"));
 
         TextView title = new TextView(this);
-        title.setText("T I T A N");
+        title.setText(BuildConfig.CASA ? "T I T A N   C A S A" : "T I T A N");
         title.setTextColor(Color.parseColor("#3ee8ff"));
         title.setTextSize(30);
         title.setGravity(Gravity.CENTER);
@@ -228,7 +251,7 @@ public class MainActivity extends Activity {
             alt = s.equals(a) ? null : a;
             triedAlt = false;
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_SERVER, s).putString(KEY_ALT, alt).apply();
-            openTitan("/");
+            openTitan(BuildConfig.HOME);
         });
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -350,7 +373,7 @@ public class MainActivity extends Activity {
             String other = alt;
             alt = server;
             server = other;
-            load(server + "/");
+            load(server + BuildConfig.HOME);
             return;
         }
         if (connecting != null) connecting.setText("Sem resposta do notebook.");
@@ -411,7 +434,7 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 triedAlt = false;
                 sslFail = false;
-                if (web != null) load(server + "/");
+                if (web != null) load(server + BuildConfig.HOME);
             });
         }
 
@@ -472,6 +495,7 @@ public class MainActivity extends Activity {
         /** Tela acesa durante a conversa por voz. */
         @JavascriptInterface
         public void keepAwake(boolean on) {
+            if (BuildConfig.CASA) return; // a central da casa fica sempre acesa
             runOnUiThread(() -> {
                 if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);

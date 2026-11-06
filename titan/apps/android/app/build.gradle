@@ -10,8 +10,32 @@ android {
         applicationId "br.titan.app"
         minSdk 24          // Android 7+ (o Galaxy A20 tem Android 9–11)
         targetSdk 34
-        versionCode 5
-        versionName "1.4"
+    }
+    buildFeatures { buildConfig true }
+    // Um projeto, dois apps (mesma mãe): o TITAN e o TITAN Casa (central da casa no tablet).
+    // Instalam lado a lado: cada um tem o seu applicationId.
+    flavorDimensions "app"
+    productFlavors {
+        titan {
+            dimension "app"
+            applicationId "br.titan.app"
+            versionCode 6
+            versionName "1.5"
+            buildConfigField "String", "HOME", '"/"'
+            buildConfigField "String", "SCHEME", '"titan"'
+            buildConfigField "boolean", "CASA", "false"
+            manifestPlaceholders = [appLabel: "TITAN", scheme: "titan"]
+        }
+        casa {
+            dimension "app"
+            applicationId "br.titan.casa"
+            versionCode 1
+            versionName "1.0"
+            buildConfigField "String", "HOME", '"/casa"'
+            buildConfigField "String", "SCHEME", '"titancasa"'
+            buildConfigField "boolean", "CASA", "true"
+            manifestPlaceholders = [appLabel: "TITAN Casa", scheme: "titancasa"]
+        }
     }
     signingConfigs {
         if (ks) {

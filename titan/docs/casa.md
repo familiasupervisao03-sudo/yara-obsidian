@@ -4,6 +4,11 @@ Abra no tablet: **`https://ENDEREÇO-DO-NOTEBOOK:8000/casa`** (o mesmo do TITAN,
 no fim). No Chrome do tablet: menu ⋮ → **Instalar app** → vira o ícone **TITAN Casa**,
 em tela cheia e deitado. Mesmo login, mesma voz e mesmo servidor do TITAN.
 
+**Ou instale o app (APK) TITAN Casa** — tela cheia e tela sempre acesa, ideal para a central:
+no notebook rode `.venv/bin/titan ligar`, aponte o tablet para o QR code e, na página,
+instale o cadeado (passos 1 e 2) e toque em **BAIXAR O TITAN CASA (APK)** e depois em
+**CONFIGURAR O CASA SOZINHO**. Também dá para baixar em `https://ENDEREÇO:8000/casa.apk`.
+
 - **PAINEL**: toque liga/desliga; ⋯ (ou segurar) abre os controles (brilho, ar, controle da TV).
   O núcleo de voz fica à direita: toque e fale, ou digite. **Escuta contínua** (opcional):
   o tablet fica ouvindo e só obedece quando a frase começa com "Ei, Titã".
