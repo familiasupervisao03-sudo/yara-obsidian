@@ -997,6 +997,50 @@
         "title": "DevicePatch",
         "type": "object"
       },
+      "DuckIn": {
+        "properties": {
+          "holder": {
+            "maxLength": 64,
+            "minLength": 6,
+            "pattern": "^[A-Za-z0-9_\\-]+$",
+            "title": "Holder",
+            "type": "string"
+          },
+          "on": {
+            "title": "On",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on",
+          "holder"
+        ],
+        "title": "DuckIn",
+        "type": "object"
+      },
+      "DuckOut": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "changed": {
+            "default": 0,
+            "title": "Changed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "available",
+          "active"
+        ],
+        "title": "DuckOut",
+        "type": "object"
+      },
       "EngineOut": {
         "properties": {
           "available": {
@@ -7906,6 +7950,58 @@
         "summary": "Start",
         "tags": [
           "tasks"
+        ]
+      }
+    },
+    "/api/v1/voice/duck": {
+      "post": {
+        "description": "Abaixa (on=true) ou devolve (on=false) o som dos outros programas do notebook.\n\nSó o dono do servidor mexe no som da máquina. Renovar a cada ~10 s enquanto durar;\nsem renovação, o volume volta sozinho em ~30 s.",
+        "operationId": "duck_api_v1_voice_duck_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DuckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Duck",
+        "tags": [
+          "voice"
         ]
       }
     },

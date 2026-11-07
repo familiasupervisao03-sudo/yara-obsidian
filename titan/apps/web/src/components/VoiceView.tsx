@@ -7,6 +7,7 @@ import type { CorrectionSuggestion } from "../voice/corrections";
 import type { TtsEngine } from "../voice/player";
 import { Icon } from "./icons";
 import { androidApp } from "../notify";
+import { duckEnd, duckStart } from "../voice/duck";
 import { fmtWhen, type Action } from "../brain";
 import { remindersChanged } from "../reminders";
 import {
@@ -79,6 +80,12 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
 
   // Celular: a tela não apaga durante a conversa por voz e vibra quando começa a ouvir.
   const awake = state !== "idle" && state !== "error";
+  // No notebook: durante a conversa por voz, a música/vídeo do notebook fica baixinha.
+  useEffect(() => {
+    if (!awake) return;
+    void duckStart("conversa");
+    return () => duckEnd("conversa");
+  }, [awake]);
   useEffect(() => {
     const app = androidApp();
     if (app) { // app Android do TITAN: a tela fica acesa pelo próprio sistema

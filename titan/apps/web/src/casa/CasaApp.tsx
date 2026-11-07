@@ -6,6 +6,7 @@ import { ServerTts } from "../voice/browser.ts";
 import { casa, ICON_LABEL, ICONS, stateWord, subtitle, type Action, type CasaEvent, type CommandResult,
          type Device, type Scene, type SceneAction, type Status } from "./api";
 import { Ear, type EarState } from "./listen";
+import { duckEnd, duckStart } from "../voice/duck";
 
 type Tab = "painel" | "cenas" | "ajustes";
 const EXAMPLES = ["Ei Titã, liga a luz do quarto", "desliga o ventilador", "põe o ar em 22", "luz em 30%",
@@ -213,7 +214,12 @@ async function speak(text: string) {
     const clip = await tts.prepare(text, new AbortController().signal);
     await clip.play();
   } catch {
-    try { const u = new SpeechSynthesisUtterance(text); u.lang = "pt-BR"; speechSynthesis.speak(u); } catch { /* sem voz */ }
+    try {
+      const u = new SpeechSynthesisUtterance(text); u.lang = "pt-BR";
+      await duckStart("tts-nav");
+      u.onend = u.onerror = () => duckEnd("tts-nav");
+      speechSynthesis.speak(u);
+    } catch { duckEnd("tts-nav"); /* sem voz */ }
   }
 }
 

@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HttpError } from "../api";
 import { ServerTts } from "../voice/browser";
+import { duckEnd, duckStart } from "../voice/duck";
 import { casa, ICONS } from "../casa/api";
 import { Ear, type EarState } from "../casa/listen";
 import { askTitan, central, type Alert, type Overview, type Telemetry } from "./api";
@@ -33,7 +34,9 @@ async function say(text: string, on: boolean, onStart?: () => void): Promise<voi
   } catch {
     try {
       const u = new SpeechSynthesisUtterance(text); u.lang = "pt-BR"; u.pitch = 0.8; onStart?.();
+      await duckStart("tts-nav");
       await new Promise<void>((ok) => { u.onend = () => ok(); u.onerror = () => ok(); speechSynthesis.speak(u); });
+      duckEnd("tts-nav");
     } catch { /* sem voz */ }
   }
 }

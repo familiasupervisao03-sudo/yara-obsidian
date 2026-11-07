@@ -5,6 +5,7 @@
 import { BrowserMicrophone, ServerStt } from "../voice/browser.ts";
 import type { AudioFrame } from "../voice/session.ts";
 import { Vad } from "../voice/vad.ts";
+import { duckEnd, duckStart } from "../voice/duck.ts";
 
 export type EarState = "off" | "waiting" | "hearing" | "thinking";
 
@@ -41,6 +42,8 @@ export class Ear {
   private async start(): Promise<void> {
     this.stop();
     this.stopped = false;
+    // ouvindo uma fala (toque no núcleo): a música do notebook abaixa já
+    if (this.oneShot) void duckStart("ouvir");
     this.vad = new Vad({ silenceEndMs: 800, maxUtteranceMs: 12_000 });
     this.mic = new BrowserMicrophone();
     this.onState("waiting");
@@ -66,6 +69,7 @@ export class Ear {
     }
     if (ev?.type === "speech_start" && !this.stt && !this.busy) {
       if (this.noSpeechTimer) window.clearTimeout(this.noSpeechTimer);
+      void duckStart("ouvir");  // escuta contínua: abaixa quando começa a fala
       const stt = new ServerStt();
       this.stt = stt;
       this.onState("hearing");
@@ -84,12 +88,13 @@ export class Ear {
       }).catch(() => this.onError("Não entendi o áudio. Tente de novo.")).finally(() => {
         this.busy = false;
         if (this.oneShot) this.stop();
-        else if (!this.stopped) this.onState("waiting");
+        else if (!this.stopped) { duckEnd("ouvir"); this.onState("waiting"); }
       });
     }
   }
 
   stop(): void {
+    duckEnd("ouvir");
     if (this.noSpeechTimer) window.clearTimeout(this.noSpeechTimer);
     this.noSpeechTimer = null;
     this.stt?.abort();

@@ -5,6 +5,7 @@ import type { AudioFrame, ChatBackend, ChatResult, Microphone, SttEngine, SttRes
 import type { Clip, TtsEngine } from "./player.ts";
 import { InterruptedError } from "./player.ts";
 import { rmsOf } from "./vad.ts";
+import { duckEnd, duckStart } from "./duck.ts";
 
 const CSRF = { "X-Titan-Request": "1" };
 
@@ -226,16 +227,25 @@ export class ServerTts implements TtsEngine {
     });
     if (!r.ok) throw new Error((await r.json().catch(() => null))?.error?.message ?? `HTTP ${r.status}`);
     const data = await r.arrayBuffer();
-    this.ctx ??= new AudioContext();
+    if (!this.ctx) {
+      // começa "pausado": o som do TITAN só abre na hora de falar, depois que a música do
+      // notebook já abaixou (senão o próprio TITAN seria abaixado junto)
+      this.ctx = new AudioContext();
+      void this.ctx.suspend().catch(() => undefined);
+    }
     const buffer = await this.ctx.decodeAudioData(data);
     return new BufferClip(this.ctx, buffer);
   }
 }
 
+let playing = 0;
+let idleTimer: number | null = null;
+
 class BufferClip implements Clip {
   private src: AudioBufferSourceNode | null = null;
   private gain: GainNode;
   private reject: ((e: unknown) => void) | null = null;
+  private stopped = false;
   private ctx: AudioContext;
   private buffer: AudioBuffer;
   constructor(ctx: AudioContext, buffer: AudioBuffer) {
@@ -248,18 +258,33 @@ class BufferClip implements Clip {
     return this.buffer.duration;
   }
   play(): Promise<void> {
-    return new Promise((resolve, reject) => {
+    playing += 1;
+    if (idleTimer !== null) { window.clearTimeout(idleTimer); idleTimer = null; }
+    // primeiro abaixa a música do notebook, depois toca (a voz do TITAN não entra no "abaixar")
+    const go = duckStart("tts");
+    return new Promise<void>((resolve, reject) => {
       this.reject = reject;
-      void this.ctx.resume();
-      const src = this.ctx.createBufferSource();
-      src.buffer = this.buffer;
-      src.connect(this.gain);
-      src.onended = () => resolve();
-      this.src = src;
-      src.start();
-    });
+      void go.then(() => {
+        if (this.stopped) return;
+        void this.ctx.resume();
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.buffer;
+        src.connect(this.gain);
+        src.onended = () => resolve();
+        this.src = src;
+        src.start();
+      });
+    }).finally(() => this.done());
+  }
+  private done(): void {
+    playing = Math.max(0, playing - 1);
+    if (playing > 0) return;
+    // 1,2 s sem falar: devolve o volume e "pausa" o áudio do TITAN (o som dele fica parado,
+    // assim não é confundido com música na próxima vez que abaixar)
+    idleTimer = window.setTimeout(() => { idleTimer = null; duckEnd("tts"); void this.ctx.suspend().catch(() => undefined); }, 1200);
   }
   stop(): void {
+    this.stopped = true;
     try { this.src?.stop(); } catch { /* já parado */ }
     this.src?.disconnect();
     this.reject?.(new InterruptedError());
@@ -294,12 +319,12 @@ export class BrowserTts implements TtsEngine {
     u.lang = this.voice.lang;
     u.rate = 1.05;
     return {
-      play: () => new Promise<void>((resolve, reject) => {
+      play: () => duckStart("tts-nav").then(() => new Promise<void>((resolve, reject) => {
         u.onend = () => resolve();
         u.onerror = (e) => (e.error === "interrupted" || e.error === "canceled"
           ? reject(new InterruptedError()) : reject(new Error(e.error)));
         speechSynthesis.speak(u);
-      }),
+      })).finally(() => duckEnd("tts-nav")),
       stop: () => speechSynthesis.cancel(),
       setVolume: (v: number) => { u.volume = v; },
     };

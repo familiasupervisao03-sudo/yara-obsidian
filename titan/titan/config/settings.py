@@ -114,6 +114,11 @@ class Settings(BaseSettings):
     tuya_region: str = "us"
     # Comandos por minuto por casa (proteção contra abuso e laços).
     casa_max_commands_per_minute: int = Field(default=40, ge=5, le=600)
+    # Abaixar o som do notebook (música, vídeo...) enquanto você fala com o TITAN e enquanto
+    # ele responde; volta ao volume de antes no final. Nível = % do volume original.
+    audio_duck: bool = True
+    audio_duck_level: int = Field(default=20, ge=1, le=90)
+
     # TITAN Central (tela da TV): clima da sua cidade (Open-Meteo, grátis e sem chave).
     # Configure com: titan central-clima "Sua cidade". Vazio = sem cartão de clima.
     central_city: str = ""

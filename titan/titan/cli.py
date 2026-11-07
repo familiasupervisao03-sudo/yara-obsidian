@@ -571,7 +571,14 @@ def cmd_abrir(args: argparse.Namespace) -> int:
     cmd = desktop.browser_command(found[0], found[1], args.app, url, project / "var/apps")
     import subprocess
 
-    subprocess.Popen(cmd, cwd=project, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    proc = subprocess.Popen(cmd, cwd=project, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            start_new_session=True)
+    # o som deste app é a voz do TITAN: nunca é abaixado quando o TITAN fala (ver titan/voice/duck.py)
+    try:
+        (project / "var/apps").mkdir(parents=True, exist_ok=True)
+        (project / f"var/apps/{args.app}.pid").write_text(str(getattr(proc, "pid", "")))
+    except OSError:
+        pass
     print(f"{desktop.APPS[args.app]['name']} abrindo: {url}{desktop.APPS[args.app]['path']}")
     if args.app == "central":
         print("Tela cheia: Alt+F4 sai. Mexa o mouse para ver os botões.")

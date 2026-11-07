@@ -117,6 +117,22 @@ mas é pago pelos créditos: ~US$ 0,10 por hora de fala (~R$ 0,01 por minuto).
 ```
 Desligar: `.venv/bin/titan disable-xai-stt`.
 
+## Abaixar a música enquanto fala ("ducking")
+
+Com o TITAN aberto **no próprio notebook** (apps do menu, Central ou `https://localhost:8000`),
+quando você fala com ele ou ele responde, o som dos outros programas que estão tocando
+(música, vídeo) **abaixa para 20%** e, no final, **volta ao volume de antes**.
+
+- Funciona pelo servidor de som do Linux (PulseAudio ou PipeWire, comando `pactl`, que já vem
+  no Linux Mint). Só o dono do servidor mexe no som da máquina.
+- Só abaixa o que está **tocando** na hora; a voz do TITAN não é abaixada. Se você mexer no
+  volume de um programa durante a fala, o TITAN não muda de volta.
+- Se o navegador fechar no meio, o volume volta sozinho em ~30 s.
+- Quando: modo voz (a conversa inteira), toque no núcleo da Central/Casa (enquanto ouve) e
+  sempre que o TITAN fala. Na escuta contínua, abaixa quando começa uma fala.
+- Ajustes no `.env`: `TITAN_AUDIO_DUCK=false` desliga; `TITAN_AUDIO_DUCK_LEVEL=30` = 30% do volume.
+- Pelo celular não mexe no som do notebook.
+
 ## Medições reais (ambiente de desenvolvimento, Xeon 2,1 GHz, 4 núcleos)
 
 | Medida | Valor |

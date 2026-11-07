@@ -150,3 +150,48 @@ def speak(body: SpeakIn, cu: CurrentUser = Depends(current_user),
     except VoiceUnavailable as exc:
         return _err(503, "voice_unavailable", str(exc))
     return Response(audio, media_type=ctx.voice.tts.media_type, headers={"Cache-Control": "no-store"})
+
+
+# --- abaixar o som do notebook enquanto fala ("ducking") ---------------------------------
+
+_ducker = None
+
+
+def _get_ducker(ctx: AppContext):
+    global _ducker
+    from titan.voice.duck import Ducker
+
+    if _ducker is None:
+        _ducker = Ducker(ctx.settings.audio_duck_level, ctx.settings.data_dir / "apps")
+    return _ducker
+
+
+class DuckIn(BaseModel):
+    on: bool
+    holder: str = Field(min_length=6, max_length=64, pattern=r"^[A-Za-z0-9_\-]+$")
+
+
+class DuckOut(BaseModel):
+    available: bool
+    active: bool
+    changed: int = 0
+
+
+@router.post("/duck", response_model=DuckOut)
+def duck(body: DuckIn, cu: CurrentUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)) -> DuckOut:
+    """Abaixa (on=true) ou devolve (on=false) o som dos outros programas do notebook.
+
+    Só o dono do servidor mexe no som da máquina. Renovar a cada ~10 s enquanto durar;
+    sem renovação, o volume volta sozinho em ~30 s.
+    """
+    from titan.voice.duck import Ducker
+
+    s = ctx.settings
+    if cu.user.role != "owner" or not s.audio_duck or not Ducker.available():
+        return DuckOut(available=False, active=False)
+    d = _get_ducker(ctx)
+    try:
+        n = d.duck(body.holder) if body.on else d.release(body.holder)
+    except Exception:  # servidor de som fora do ar: a voz continua normal
+        return DuckOut(available=False, active=False)
+    return DuckOut(available=True, active=d.active, changed=n)
