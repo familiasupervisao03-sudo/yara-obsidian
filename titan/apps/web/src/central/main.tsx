@@ -23,13 +23,27 @@ function CentralRoot() {
   const [expired, setExpired] = useState(false);
   const enter = useCallback((s: SessionInfo) => { setSession(s); setExpired(false); setIntro(true); }, []);
   const endIntro = useCallback(() => setIntro(false), []);
+  // A TV pode ligar antes do notebook: sem resposta, tenta de novo sozinha a cada 5 s.
+  const [tries, setTries] = useState(0);
   useEffect(() => {
-    api.me().then(enter).catch((e) => {
-      if (!(e instanceof HttpError && e.status === 401)) setFatal(String(e.message ?? e));
-    }).finally(() => setChecking(false));
-  }, [enter]);
+    let alive = true, timer = 0;
+    api.me().then((s) => { if (alive) { setFatal(null); enter(s); } }).catch((e) => {
+      if (!alive) return;
+      if (e instanceof HttpError && e.status === 401) { setFatal(null); return; }
+      setFatal(String(e.message ?? e));
+      timer = window.setTimeout(() => setTries((n) => n + 1), 5000);
+    }).finally(() => { if (alive) setChecking(false); });
+    return () => { alive = false; window.clearTimeout(timer); };
+  }, [enter, tries]);
   if (checking) return <div className="boot">TITAN CENTRAL // inicializando…</div>;
-  if (fatal) return <div className="boot error">Falha ao contatar o servidor do notebook: {fatal}</div>;
+  if (fatal) return (
+    <div className="boot error">
+      <p>TITAN CENTRAL // procurando o notebook… (tentativa {tries + 1})</p>
+      <p>Falha ao contatar o servidor do notebook: {fatal}</p>
+      <p className="muted">Ligue o servidor no notebook (.venv/bin/titan ligar). Esta tela tenta de novo sozinha a cada 5 segundos.
+        Se o navegador nunca abriu o TITAN, abra primeiro https://ENDEREÇO:8000 e aceite o cadeado.</p>
+    </div>
+  );
   if (!session) return <Login onLogin={enter} expired={expired} />;
   return (
     <>
