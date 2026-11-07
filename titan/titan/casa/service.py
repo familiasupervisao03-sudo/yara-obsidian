@@ -259,9 +259,33 @@ def strip_wake(text: str) -> tuple[str, bool]:
     return (t[m.end():].strip(), True) if m else (t, False)
 
 
+# Apelidos automáticos pelo ícone escolhido (o notebook atende por "notebook", "computador"...).
+ICON_ALIASES = {"light": "luz, lâmpada, lampada", "lamp": "luminária, abajur", "fan": "ventilador, ventinho",
+                "laptop": "notebook, computador, pc", "tv": "tv, televisão", "ac": "ar, ar-condicionado, ar condicionado",
+                "speaker": "caixa de som, som", "game": "videogame, video game, game", "charger": "carregador",
+                "heater": "aquecedor", "router": "roteador, wi-fi, wifi, internet", "plug": "tomada"}
+
+
 def _aliases(d: CasaDevice) -> list[str]:
-    al = [d.name] + [a for a in (d.aliases or "").split(",")]
+    al = [d.name] + (d.aliases or "").split(",") + ICON_ALIASES.get(d.icon, "").split(",")
     return sorted({norm(a) for a in al if norm(a)}, key=len, reverse=True)
+
+
+def _close(a: str, b: str) -> bool:
+    """Parecidos o bastante ("notebook" ≈ "nootebook", "ventilado" ≈ "ventilador")? Palavras curtas
+    precisam ser iguais (senão "ar" pegaria tudo)."""
+    if len(a) < 5 or abs(len(a) - len(b)) > 2:
+        return False
+    limit = 1 if len(a) < 8 else 2
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        if min(cur) > limit:
+            return False
+        prev = cur
+    return prev[-1] <= limit
 
 
 def find_device(text: str, ds: list[CasaDevice]) -> Optional[CasaDevice]:
@@ -270,7 +294,13 @@ def find_device(text: str, ds: list[CasaDevice]) -> Optional[CasaDevice]:
         for a in _aliases(d):
             if re.search(rf"(^| ){re.escape(a)}( |$)", text) and len(a) > size:
                 best, size = d, len(a)
-    return best
+    if best is not None:
+        return best
+    # sem igual: aceita um nome parecido (erro de digitação no app ou no reconhecimento de voz)
+    words = text.split()
+    grams = words + [" ".join(words[i:i + 2]) for i in range(len(words) - 1)]
+    found = {d.id: d for d in ds for a in _aliases(d) if any(_close(a, g) for g in grams)}
+    return next(iter(found.values())) if len(found) == 1 else None
 
 
 def understand(text: str, ds: list[CasaDevice], scs: list[CasaScene]) -> dict:

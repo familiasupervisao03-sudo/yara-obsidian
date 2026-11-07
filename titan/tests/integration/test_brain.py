@@ -281,3 +281,20 @@ def test_titan_started_conversation_keeps_its_first_message_in_context():
     api = to_api_messages(turns_for_model(msgs))
     assert [m["role"] for m in api] == ["user", "assistant", "user"]
     assert "Brawl Stars" in api[1]["content"] if isinstance(api[1]["content"], str) else True
+
+
+def test_chat_ai_receives_the_house(chat, monkeypatch):
+    """Pergunta que não é comando vai para a IA, e ela recebe os aparelhos da casa (stream e normal)."""
+    from tests.integration.test_casa import setup_home
+
+    c, cid, _s, _uid = chat
+    MockProvider.json_reply = empty()
+    styles = []
+    orig = MockProvider.chat
+    monkeypatch.setattr(MockProvider, "chat", lambda self, history, style="": (styles.append(style), orig(self, history, style))[1])
+    setup_home(c)
+    c.post(f"/api/v1/conversations/{cid}/messages/stream", json={"content": "a luz do quarto tá acesa?"}, headers=CSRF)
+    c.post(f"/api/v1/conversations/{cid}/messages", json={"content": "quais aparelhos eu tenho?"}, headers=CSRF)
+    assert len(styles) >= 2
+    assert all("Casa do dono" in st and "Luz do quarto" in st for st in styles[:2])
+    assert "Nunca diga que não tem acesso à casa" in styles[1]

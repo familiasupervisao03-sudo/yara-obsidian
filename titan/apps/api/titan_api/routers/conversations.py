@@ -144,6 +144,7 @@ def post_message(
         style = build_style(body.mode, user_prefs.get(db, cu.user.id))
         turns, style, footer = with_research(ctx, cu, body, turns, style, lambda *_: None)
         style = brain.with_memory(style, brain.context_for(ctx.session_factory, cu.user.id, body.content))
+        style = brain.with_memory(style, casa_chat.context_block(ctx.settings, ctx.session_factory, cu.user.id))
         reply = provider.chat(turns, style=style)
         reply_msg = repo.add_message(
             db, conv, "assistant", reply.content.strip() + footer,
@@ -241,6 +242,7 @@ async def post_message_stream(
                 if cancel.is_set():
                     return
                 st = brain.with_memory(st, brain.context_for(ctx.session_factory, cu.user.id, body.content))
+                st = brain.with_memory(st, casa_chat.context_block(ctx.settings, ctx.session_factory, cu.user.id))
                 replied: dict = {}
 
                 def emit_and_keep(kind: str, data: dict) -> None:

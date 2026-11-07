@@ -48,6 +48,16 @@ funcionar com erro de permissão, é isso. Para vender em escala, contrata-se o 
 
 Voltar para a demonstração: `.venv/bin/titan disable-tuya`.
 
+## Nomes e voz
+
+- O nome que você deu no app (Smart Life) vira o nome sugerido e apelido de voz.
+- O **ícone** também dá apelidos: notebook → "notebook, computador, pc"; ventilador → "ventinho";
+  luz → "lâmpada"; TV → "televisão"; ar → "ar-condicionado"...
+- Nome **parecido** também vale (erro de digitação ou de reconhecimento de voz): "notebook" acha o
+  "Nootebook", "ventilado" acha o "Ventilador". Palavras curtas (ex.: "ar") precisam ser exatas.
+- A IA do TITAN (chat, voz, Central) **conhece a sua casa**: os aparelhos, se estão ligados e as cenas.
+  Comandos são executados pelo TITAN Casa antes da IA; se um pedido não for entendido, a IA diz a frase certa.
+
 ## Segurança e muitas casas
 - Cada usuário tem a **sua casa**; todo comando confere se o aparelho é daquela casa (o app
   nunca manda o id do aparelho na Tuya, só o nosso). Outra conta recebe "não encontrado".
