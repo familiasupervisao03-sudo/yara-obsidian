@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import getpass
 import secrets
 import sys
@@ -539,29 +540,111 @@ def cmd_central_clima(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_central(args: argparse.Namespace) -> int:
-    """Abre o TITAN Central em tela cheia (para o notebook ligado na TV pelo HDMI)."""
-    import shutil
-    import subprocess
+def _project_paths(env_file: str):
     from pathlib import Path
 
+    env_path = Path(env_file).resolve()
+    project = env_path.parent
+    titan_bin = str(Path(sys.argv[0]).resolve()) if Path(sys.argv[0]).name == "titan" else str(project / ".venv/bin/titan")
+    return env_path, project, titan_bin
+
+
+def cmd_abrir(args: argparse.Namespace) -> int:
+    """Abre um app do TITAN (liga o servidor em segundo plano se estiver desligado)."""
+    from titan import desktop
     from titan.envfile import read_env
 
-    port = read_env(Path(args.env_file)).get("TITAN_PORT", "8000") if Path(args.env_file).exists() else "8000"
-    url = f"https://localhost:{port}/central"
-    for exe, flags in (("firefox", ["--kiosk"]), ("chromium", ["--kiosk"]), ("chromium-browser", ["--kiosk"]),
-                       ("google-chrome", ["--kiosk"])):
-        if shutil.which(exe):
-            subprocess.Popen([exe, *flags, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print(f"TITAN Central abrindo em tela cheia ({exe}): {url}")
-            print("Para sair da tela cheia: Alt+F4. O servidor precisa estar ligado (.venv/bin/titan ligar).")
-            return 0
-    if shutil.which("xdg-open"):
-        subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print(f"Abrindo {url} — aperte F11 para tela cheia.")
-        return 0
-    print(f"Abra no navegador: {url}  (F11 = tela cheia)")
+    env_path, project, titan_bin = _project_paths(args.env_file)
+    env = read_env(env_path) if env_path.exists() else {}
+    url = desktop.base_url(env)
+    if not desktop.server_up(url):
+        print(f"Servidor desligado: ligando em segundo plano (registro em {project / 'var/servidor.log'})...")
+        desktop.start_server(titan_bin, project, project / "var/servidor.log", project / "var/servidor.pid")
+        if not desktop.wait_up(url):
+            print("O servidor não respondeu. Veja var/servidor.log ou ligue no terminal: .venv/bin/titan ligar",
+                  file=sys.stderr)
+            return 1
+    found = desktop.find_browser()
+    if not found:
+        print(f"Nenhum navegador encontrado. Abra: {url}{desktop.APPS[args.app]['path']}", file=sys.stderr)
+        return 1
+    cmd = desktop.browser_command(found[0], found[1], args.app, url, project / "var/apps")
+    import subprocess
+
+    subprocess.Popen(cmd, cwd=project, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    print(f"{desktop.APPS[args.app]['name']} abrindo: {url}{desktop.APPS[args.app]['path']}")
+    if args.app == "central":
+        print("Tela cheia: Alt+F4 sai. Mexa o mouse para ver os botões.")
     return 0
+
+
+def cmd_central(args: argparse.Namespace) -> int:
+    """Abre o TITAN Central em tela cheia (para o notebook ligado na TV pelo HDMI)."""
+    args.app = "central"
+    return cmd_abrir(args)
+
+
+def cmd_instalar_app(args: argparse.Namespace) -> int:
+    """Põe TITAN, TITAN Casa e TITAN Central no menu de aplicativos do Linux."""
+    from pathlib import Path
+
+    from titan import desktop
+
+    env_path, project, titan_bin = _project_paths(args.env_file)
+    if not env_path.exists():
+        print(f"{env_path} não existe. Rode primeiro scripts/setup.sh.", file=sys.stderr)
+        return 1
+    found = desktop.find_browser()
+    if not found:
+        print("Nenhum navegador (Firefox ou Chromium) encontrado.", file=sys.stderr)
+        return 1
+    apps_dir = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "applications"
+    apps_dir.mkdir(parents=True, exist_ok=True)
+    icons = {"main": project / "apps/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+             "casa": project / "apps/android/app/src/casa/res/mipmap-xxxhdpi/ic_launcher.png",
+             "central": project / "apps/android/app/src/central/res/mipmap-xxxhdpi/ic_launcher.png"}
+    for app, info in desktop.APPS.items():
+        f = apps_dir / f"titan-{app}.desktop"
+        f.write_text(desktop.desktop_entry(app, titan_bin, project, env_path, icons[info["icon"]]))
+        f.chmod(0o755)
+        print(f"  ✓ {info['name']} no menu ({f})")
+    # cadeado do TITAN confiável nos perfis dos apps (sem aviso de segurança)
+    ca = project / "var/tls/titan-ca.crt"
+    done = desktop.trust_ca(ca, project / "var/apps", found[0])
+    if done:
+        print("  ✓ Cadeado do TITAN confiável nos apps (sem aviso de segurança).")
+    elif not ca.is_file():
+        print("  ! Ainda não há cadeado (rode .venv/bin/titan ligar uma vez) — depois rode este comando de novo.")
+    else:
+        print("  ! Para os apps confiarem no cadeado sozinhos, instale uma ferramenta e rode este comando de novo:")
+        print("      sudo apt install libnss3-tools")
+        print("    (Sem ela, na primeira vez cada app mostra o aviso: Avançado → Aceitar o risco e continuar.)")
+    autostart = args.ao_ligar
+    if autostart is None and sys.stdin.isatty():
+        autostart = _ask("Abrir o TITAN Central sozinho quando o notebook ligar? (s/n)", "n").strip().lower() in ("s", "sim")
+    auto = Path.home() / ".config/autostart/titan-central.desktop"
+    if autostart:
+        auto.parent.mkdir(parents=True, exist_ok=True)
+        auto.write_text(desktop.desktop_entry("central", titan_bin, project, env_path, icons["central"]))
+        print("  ✓ A Central abre sozinha quando o notebook ligar (para tirar: titan instalar-app --nao-ao-ligar).")
+    elif autostart is False and auto.exists():
+        auto.unlink()
+        print("  ✓ A Central não abre mais sozinha ao ligar.")
+    print("\nPronto. Procure \"TITAN\" no menu do Linux Mint. Clicou no ícone: o servidor liga sozinho se precisar.")
+    print("Para desligar o servidor que foi ligado pelo ícone: .venv/bin/titan parar")
+    return 0
+
+
+def cmd_parar(args: argparse.Namespace) -> int:
+    """Desliga o servidor que um app ligou em segundo plano."""
+    from titan import desktop
+
+    env_path, project, _ = _project_paths(args.env_file)
+    if desktop.stop_server(project / "var/servidor.pid"):
+        print("Servidor desligado.")
+        return 0
+    print("Nenhum servidor ligado pelos apps. (Se ligou no terminal, use Ctrl+C lá.)")
+    return 1
 
 
 def cmd_enable_groq_stt(args: argparse.Namespace) -> int:
@@ -1174,6 +1257,20 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("central", help="abre o TITAN Central em tela cheia (notebook na TV pelo HDMI)")
     p.add_argument("--env-file", default=".env")
     p.set_defaults(fn=cmd_central)
+    p = sub.add_parser("abrir", help="abre um app do TITAN (liga o servidor sozinho se precisar)")
+    p.add_argument("app", choices=["titan", "casa", "central"])
+    p.add_argument("--env-file", default=".env")
+    p.set_defaults(fn=cmd_abrir)
+    p = sub.add_parser("instalar-app", help="põe TITAN, TITAN Casa e TITAN Central no menu do Linux")
+    p.add_argument("--env-file", default=".env")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--ao-ligar", dest="ao_ligar", action="store_true", default=None,
+                   help="abre a Central sozinha quando o notebook ligar")
+    g.add_argument("--nao-ao-ligar", dest="ao_ligar", action="store_false")
+    p.set_defaults(fn=cmd_instalar_app)
+    p = sub.add_parser("parar", help="desliga o servidor ligado pelos apps")
+    p.add_argument("--env-file", default=".env")
+    p.set_defaults(fn=cmd_parar)
     p = sub.add_parser("enable-web", help="liga a pesquisa na internet (a pergunta sai do notebook)")
     p.add_argument("--env-file", default=".env")
     p.add_argument("--searxng", help="endereço do SearXNG local, ex.: http://127.0.0.1:8888")

@@ -5,6 +5,13 @@ reage à sua voz, controla a casa e avisa quando algo grave acontece com o noteb
 
 ## Como abrir
 
+- **Como app no menu do Linux (recomendado)**: rode uma vez `.venv/bin/titan instalar-app`.
+  Aparecem **TITAN**, **TITAN Casa** e **TITAN Central** no menu. Clicou no ícone: se o servidor
+  estiver desligado, ele liga sozinho em segundo plano; o app abre numa janela própria (a Central
+  em tela cheia), sem aviso de cadeado. Desligar o servidor ligado pelo ícone: `.venv/bin/titan parar`.
+  Para os apps confiarem no cadeado sozinhos, o comando usa o `certutil`
+  (`sudo apt install libnss3-tools`, uma vez). Opcional: a Central abrir sozinha quando o notebook
+  ligar (`titan instalar-app --ao-ligar`; tirar com `--nao-ao-ligar`).
 - **Notebook ligado na TV pelo HDMI** (mais fácil): com o servidor ligado (`titan ligar`),
   rode `.venv/bin/titan central`. Abre em tela cheia (Alt+F4 sai).
 - **TV com Android / TV box**: na página do QR (`titan ligar`), baixe o **TITAN Central (APK)**
