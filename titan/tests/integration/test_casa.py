@@ -191,13 +191,21 @@ class FakeTuya:
             return {"success": False, "code": 1004, "msg": "sign invalid"}
         if path.startswith("/v1.0/token"):
             return {"success": True, "result": {"access_token": "tok123", "expire_time": 7200}}
-        if path.startswith("/v1.0/iot-01/associated-users/devices"):
+        if path.startswith("/v1.0/iot-01/associated-users/devices") or path.startswith("/v1.0/users/"):
             devs = [{"id": "plug1", "name": "Smart Plug 1", "category": "cz", "online": True, "uid": self.uids[0],
                      "status": [{"code": "switch_1", "value": True}, {"code": "cur_power", "value": 380}]},
                     {"id": "bulb1", "name": "Smart Bulb", "category": "dj", "online": True, "uid": self.uids[-1],
                      "status": [{"code": "switch_led", "value": False}, {"code": "bright_value_v2", "value": 500},
                                 {"code": "temp_value_v2", "value": 900}]},
-                    {"id": "ir1", "name": "IR Hub", "category": "wnykq", "online": True, "uid": self.uids[0], "status": []}]
+                    {"id": "ir1", "name": "IR Hub", "category": "wnykq", "online": True, "uid": self.uids[0], "status": []},
+                    # como na conta real: o controle do ar TAMBÉM vem solto, com o mesmo id
+                    {"id": "rac", "name": "Air Conditioner", "category": "infrared_ac", "online": True,
+                     "uid": self.uids[0], "status": []},
+                    {"id": "plug2", "name": "ventilador ", "category": "tdq", "online": True, "uid": self.uids[0],
+                     "status": [{"code": "switch_1", "value": True}, {"code": "cur_power", "value": 1163}]}]
+            if path.startswith("/v1.0/users/"):  # depois de travar na conta: lista só dela
+                uid = path.split("/")[3]
+                return {"success": True, "result": [d for d in devs if d["uid"] == uid]}
             return {"success": True, "result": {"devices": devs, "has_more": False}}
         if path == "/v2.0/infrareds/ir1/remotes":
             return {"success": True, "result": [{"remote_id": "rtv", "remote_name": "TV Samsung", "category_id": 2},
@@ -211,7 +219,7 @@ def test_tuya_lists_signs_and_sends_commands():
     fake = FakeTuya()
     p = providers.TuyaProvider("idteste", "segredo", "us", http=fake)
     found = {d.provider_id: d for d in p.list_devices(None)}
-    assert set(found) == {"plug1", "bulb1", "rtv", "rac"}  # o hub IR vira TV e ar
+    assert set(found) == {"plug1", "bulb1", "rtv", "rac", "plug2"}  # o hub IR vira TV e ar (sem repetir o ar)
     assert found["plug1"].kind == "plug" and found["plug1"].state == {"on": True, "watts": 38.0}
     assert found["bulb1"].state == {"on": False, "bright": 50, "white": "frio"}
     assert found["rac"].kind == "ac" and found["rac"].parent_id == "ir1" and found["rtv"].kind == "tv"
@@ -252,7 +260,7 @@ def test_tuya_refuses_mixing_two_accounts(make_settings, monkeypatch):
     r._providers.clear()
     with build_client(s) as c:
         login(c)
-        assert c.post("/api/v1/casa/devices/discover", headers=CSRF).json()["found"] == 4
+        assert c.post("/api/v1/casa/devices/discover", headers=CSRF).json()["found"] == 5
         assert c.get("/api/v1/casa/status").json()["linked"] is True
 
 
@@ -282,3 +290,29 @@ def test_main_titan_chat_controls_the_house(auth_client):
                            json={"content": "como eu ligo o ventilador mais rápido?"}, headers=CSRF).text))
     assert "error" in ev and ev["error"]["reason"] == "no_model"
     assert c.get("/api/v1/casa/events").json()[0]["source"] == "chat"
+
+
+def test_tuya_discover_real_account_shape(make_settings, monkeypatch):
+    """Formato visto na conta real: controle IR repetido como aparelho solto e nomes dados no app."""
+    s = make_settings(casa_provider="tuya", local_only=False, tuya_access_id="idteste",
+                      tuya_access_secret="segredo", tuya_region="us")
+    import titan_api.routers.casa as r
+    from titan.db.migrate import upgrade_head
+
+    upgrade_head(s.database_url)
+
+    fake = FakeTuya()
+    monkeypatch.setattr(r, "provider_for", lambda st: providers.TuyaProvider("idteste", "segredo", "us", http=fake))
+    create_user(s)
+    with build_client(s) as c:
+        login(c)
+        res = c.post("/api/v1/casa/devices/discover", headers=CSRF)
+        assert res.status_code == 200, res.text
+        assert res.json() == {"found": 5, "new": 5}
+        names = {d["provider_name"]: d for d in c.get("/api/v1/casa/devices?all=1").json()}
+        assert names["ventilador "]["name"] == "Ventilador"           # o nome que você deu no app
+        assert "ventilador" in names["ventilador "]["aliases"]
+        assert names["Smart Plug 1"]["name"] == "Tomada"              # nome de fábrica → padrão
+        assert names["Ar LG"]["kind"] == "ac" and names["Ar LG"]["infrared"] is True
+        assert "Air Conditioner" not in names                          # o repetido ficou de fora
+        assert c.post("/api/v1/casa/devices/discover", headers=CSRF).json()["new"] == 0

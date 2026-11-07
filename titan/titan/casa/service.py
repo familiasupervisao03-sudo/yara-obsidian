@@ -86,6 +86,17 @@ def scenes(db: DBSession, home: CasaHome) -> list[CasaScene]:
 
 # --- procurar aparelhos ----------------------------------------------------------------
 
+def suggested_name(provider_name: str, kind: str) -> str:
+    """Nome que você deu no app (ex.: "ventilador") vira o nome sugerido; nome de fábrica
+    (ex.: "LED BULB W5K", "Smart Plug 1") fica com o nome padrão ("Luz", "Tomada")."""
+    n = " ".join((provider_name or "").split())
+    generic = (not n or (n.upper() == n and any(c.isdigit() for c in n))
+               or norm(n).startswith(("smart ", "wifi ", "wi-fi ", "led bulb", "ir remote", "air conditioner")))
+    if generic:
+        return DEFAULT_NAME.get(kind, "Aparelho")
+    return n[0].upper() + n[1:]
+
+
 def discover(db: DBSession, home: CasaHome, provider) -> dict:
     """Busca na conta do provedor. Novos entram como NÃO cadastrados (o usuário dá nome)."""
     remote = provider.list_devices(home.provider_uid)
@@ -99,16 +110,26 @@ def discover(db: DBSession, home: CasaHome, provider) -> dict:
             if uids:
                 home.provider_uid = uids.pop()  # trava a casa nesta conta Tuya
         remote = [r for r in remote if not r.meta.get("uid") or r.meta.get("uid") == home.provider_uid]
+    # nunca o mesmo aparelho duas vezes (se repetir, fica o que veio com o aparelhinho IR)
+    unique: dict[str, Any] = {}
+    for r in remote:  # mantém a ordem da conta
+        if r.provider_id not in unique or (r.parent_id and not unique[r.provider_id].parent_id):
+            unique[r.provider_id] = r
+    remote = list(unique.values())
     known = {d.provider_id: d for d in devices(db, home)}
     new = 0
     pos = len(known)
     for r in remote:
         d = known.get(r.provider_id)
         if d is None:
+            name = suggested_name(r.name, r.kind)
+            aliases = DEFAULT_ALIASES.get(r.kind, "")
+            if name.lower() not in [a.strip() for a in aliases.split(",")]:
+                aliases = ", ".join(x for x in (name.lower(), aliases) if x)
             d = CasaDevice(home_id=home.id, provider=provider.name, provider_id=r.provider_id, parent_id=r.parent_id,
                            provider_name=r.name[:120], category=r.category[:32], kind=r.kind,
-                           name=(DEFAULT_NAME.get(r.kind, "Aparelho"))[:60], icon=DEFAULT_ICON.get(r.kind, "plug"),
-                           aliases=DEFAULT_ALIASES.get(r.kind, ""), configured=False, online=r.online,
+                           name=name[:60], icon=DEFAULT_ICON.get(r.kind, "plug"),
+                           aliases=aliases[:300], configured=False, online=r.online,
                            state=r.state, meta=r.meta, position=pos)
             db.add(d)
             pos += 1

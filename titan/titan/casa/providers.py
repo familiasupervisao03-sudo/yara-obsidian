@@ -238,14 +238,22 @@ class TuyaProvider:
                 if not res.get("has_more"):
                     break
                 last = res.get("last_row_key", "")
+        # 1º os controles dentro dos aparelhinhos infravermelhos (TV, ar)...
         out: list[RemoteDevice] = []
         for d in raw:
+            if str(d.get("category", "")) in IR_HUB_CATS:
+                for r in self._ir_remotes(d):
+                    r.meta.setdefault("uid", d.get("uid", ""))
+                    out.append(r)
+        ir_ids = {r.provider_id for r in out}
+        # ... depois o resto. A Tuya também lista cada controle IR como aparelho solto (categoria
+        # "infrared_*", mesmo id): esses ficam de fora, o certo é o que veio pelo aparelhinho.
+        for d in raw:
             cat = str(d.get("category", ""))
+            if cat in IR_HUB_CATS or str(d.get("id")) in ir_ids or cat.startswith("infrared"):
+                continue
             st, meta = normalize_status(d.get("status") or [])
             meta["uid"] = d.get("uid", "")
-            if cat in IR_HUB_CATS:
-                out.extend(self._ir_remotes(d))
-                continue
             out.append(RemoteDevice(str(d["id"]), str(d.get("name", "Aparelho")), cat, kind_for(cat),
                                     bool(d.get("online", True)), st, None, meta))
         return out
