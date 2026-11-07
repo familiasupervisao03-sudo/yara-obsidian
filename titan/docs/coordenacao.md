@@ -89,3 +89,5 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
 
 - 2026-11-07 · inicial · TITAN, sócio, Casa, Central, apps no menu do Linux, abaixar a música; criou
   `CLAUDE.md` e este caderno · (todos, antes de dividir)
+- 2026-11-07 · CENTRAL · a conversa original passa a ser a CENTRAL (sessão claude/g-ayvaxj); prompts
+  das conversas CASA e TITAN entregues ao Luiz · (só este caderno)
