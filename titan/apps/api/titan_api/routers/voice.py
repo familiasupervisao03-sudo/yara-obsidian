@@ -85,11 +85,22 @@ def voice_status(_: CurrentUser = Depends(current_user), ctx: AppContext = Depen
     )
 
 
+def _stt_hint(ctx: AppContext, cu: CurrentUser) -> str:
+    """Dica para o reconhecimento on-line: frases com os nomes dos aparelhos e cenas desta conta.
+    O Whisper usa como "texto anterior" e passa a acertar esses nomes (só vai junto do áudio)."""
+    from titan.casa.chat import vocabulary_hint
+
+    try:
+        return vocabulary_hint(ctx.settings, ctx.session_factory, cu.user.id)
+    except Exception:
+        return ""
+
+
 @router.post("/stt/sessions", response_model=SttSessionOut, status_code=201,
              responses={503: {"model": ErrorResponse}})
 def stt_open(cu: CurrentUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
     try:
-        return SttSessionOut(session_id=ctx.voice.sessions.open(cu.user.id))
+        return SttSessionOut(session_id=ctx.voice.sessions.open(cu.user.id, _stt_hint(ctx, cu)))
     except VoiceUnavailable as exc:
         return _err(503, "voice_unavailable", str(exc))
 

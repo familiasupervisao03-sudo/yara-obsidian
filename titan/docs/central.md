@@ -41,6 +41,34 @@ Mexa o mouse (ou toque) para aparecer a barra de controles; ela some sozinha.
 - **Modo leve** automático: se o notebook não aguentar as animações, a Central diminui sozinha.
   Forçar: `/central?leve=1` (ou `?leve=0`).
 
+## Palavras de ativação (uma para cada app)
+
+- **TITAN Central** (TV): **"Ei, Titã"**.
+- **TITAN Casa** (tablet): **"Ei, Casa"**.
+
+Assim, com os dois ouvindo no mesmo quarto, um não responde pelo outro. Com a escuta contínua
+desligada (tocar no núcleo / Espaço), não precisa da palavra.
+
+## Lembretes pela Central
+
+"Me lembra de tirar o bolo às 2:30 da tarde", "lembrete amanhã às 7 horas levar o documento",
+"me avisa daqui a 10 minutos de desligar o forno": a Central entende na hora (sem IA), cria o
+lembrete (o mesmo do TITAN: aparece em HOJE, no Início do app e no celular) e **avisa na hora**
+na tela e falando. Lembretes criados pelo celular também tocam na Central. Sem hora na frase,
+o pedido vai para a IA do TITAN.
+
+## Velocidade (notebook fraco)
+
+- A resposta da IA é **falada frase a frase** enquanto ainda chega (não espera a resposta inteira).
+- Com 2 núcleos ou menos, a Central já começa no **modo leve** (animação em meia resolução,
+  20–30 quadros/s).
+- Com a Groq ligada, o Vosk **não roda mais ao vivo** (poupa o processador); só entra se a
+  Groq falhar. Para ver o texto parcial mesmo assim: `TITAN_VOICE_LOCAL_PARTIALS=true`.
+- A Groq recebe uma **dica de vocabulário** com os nomes dos seus aparelhos e cenas: acerta mais.
+- Embaixo da resposta aparece quanto tempo levou cada etapa (**ouvir · pensar · voz**), para
+  achar onde está a demora.
+- **⌨ Digitar** na barra de baixo: escreve o comando em vez de falar.
+
 ## Alertas críticos (só o que é grave)
 
 Lembrete não é alerta. Alerta é o que, se continuar, derruba o TITAN:

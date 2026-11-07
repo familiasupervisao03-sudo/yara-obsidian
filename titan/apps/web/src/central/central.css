@@ -163,3 +163,20 @@
 .cx-dock button:hover{border-color:var(--cy);color:#fff}
 .cx-dock button.main{background:var(--cy);color:#00161e;border-color:var(--cy)}
 .cx-dock button.on{border-color:var(--gn);color:var(--gn)}
+
+.cx-legend .tm{margin-top:6px;font:500 14px ui-monospace,monospace;letter-spacing:.12em;color:var(--dim)}
+/* lembrete na hora: aviso calmo (não é alerta crítico) */
+.cx-remind{position:absolute;left:50%;top:120px;transform:translateX(-50%);z-index:25;min-width:720px;max-width:1100px;
+  padding:26px 36px 24px;background:rgba(3,18,26,.97);border:1px solid var(--cy);box-shadow:0 0 60px rgba(62,232,255,.35);
+  text-align:center;animation:cx-drop .6s cubic-bezier(.2,.8,.2,1)}
+.cx-remind .k{font:700 18px ui-monospace,monospace;letter-spacing:.4em;color:var(--cy)}
+.cx-remind .v{font:400 52px/1.2 system-ui;margin:12px 0 18px;text-shadow:0 0 22px rgba(62,232,255,.4)}
+.cx-remind-ok{margin:0 auto;border:1px solid var(--cy);padding:10px 26px;font:700 16px ui-monospace,monospace!important;letter-spacing:.2em;color:var(--cy)!important}
+@keyframes cx-drop{from{transform:translate(-50%,-140%);opacity:0}}
+
+.cx-type{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);z-index:101;display:flex;gap:8px;width:min(900px,calc(100vw - 24px));
+  padding:10px;background:rgba(3,10,16,.96);border:1px solid var(--cy)}
+.cx-type input{flex:1;min-width:0;background:#020a10;border:1px solid #1b4256;color:#e7f9ff;font:500 18px system-ui;padding:10px 12px;outline:none}
+.cx-type input:focus{border-color:var(--cy)}
+.cx-type button{flex:none;font:700 14px ui-monospace,monospace;color:#00161e;background:var(--cy);padding:10px 14px}
+.cx-type button[type=button]{background:transparent;color:var(--mu);border:1px solid #1b4256}

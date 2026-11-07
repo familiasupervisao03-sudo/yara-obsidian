@@ -1,5 +1,6 @@
 // TITAN Central: chamadas ao servidor (espelha apps/api/titan_api/routers/central.py).
 import { HttpError } from "../api";
+import { StreamingChat } from "../voice/browser";
 
 export interface GoalBrief { id: string; title: string; unit: string; current: number; target: number; pct: number | null }
 export interface TodoBrief { id: string; title: string; kind: string; due_at: string | null; done: boolean }
@@ -52,12 +53,36 @@ export const central = {
 interface Msg { id: string; role: string; content: string }
 interface PostResult { reply: Msg | null; model: { available: boolean; reason?: string | null; detail?: string } }
 let convId: string | null = null;
-export async function askTitan(text: string): Promise<string> {
+async function centralConversation(): Promise<string> {
   if (!convId) {
     const list = await req<{ items: { id: string; title: string }[] }>("GET", "/api/v1/conversations");
     convId = list.items.find((c) => c.title === "TITAN Central")?.id
       ?? (await req<{ id: string }>("POST", "/api/v1/conversations", { title: "TITAN Central" })).id;
   }
+  return convId;
+}
+
+/** Pergunta ao TITAN e recebe a resposta aos pedaços (onDelta) — para começar a falar logo. */
+export async function askTitanStream(text: string, onDelta: (t: string) => void, signal?: AbortSignal): Promise<string> {
+  const chat = new StreamingChat(centralConversation, "voice");
+  const rid = `central-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    const r = await chat.send(text, rid, signal ?? new AbortController().signal, onDelta);
+    return r.content;
+  } catch (e) {
+    if ((e as { reason?: string }).reason) return "O núcleo de IA está em pausa agora. Comandos da casa e lembretes continuam funcionando.";
+    throw e;
+  }
+}
+
+/** Cria um lembrete com hora (o mesmo do TITAN: aparece no Início e avisa no celular). */
+export const createReminder = (title: string, due: Date) =>
+  req<{ id: string }>("POST", "/api/v1/brain/todos", { title: title.slice(0, 200), kind: "lembrete", due_at: due.toISOString() });
+export const upcomingReminders = () =>
+  req<{ id: string; title: string; due_at: string }[]>("GET", "/api/v1/brain/reminders/upcoming");
+
+export async function askTitan(text: string): Promise<string> {
+  await centralConversation();
   const rid = `central-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const r = await req<PostResult>("POST", `/api/v1/conversations/${convId}/messages`,
     { content: text, client_request_id: rid, mode: "voice" });

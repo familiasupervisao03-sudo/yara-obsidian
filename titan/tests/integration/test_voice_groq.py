@@ -64,11 +64,11 @@ def test_groq_requires_explicit_authorization(make_settings):
     assert "gsk_teste" not in json.dumps(make_settings(**GROQ).public_view(), default=str)
 
 
-def test_groq_transcribes_once_at_the_end_with_vosk_partials(make_settings, monkeypatch):
+def test_groq_transcribes_once_at_the_end_without_live_vosk(make_settings, monkeypatch):
     sent = []
     svc = make(make_settings, monkeypatch, lambda wav: sent.append(wav) or groq_reply())
     partial, t = run(svc, speech())
-    assert partial == "parcial vosk"  # enquanto fala: Vosk, sem rede
+    assert partial == ""  # com a Groq, o Vosk não roda ao vivo (poupa o processador do notebook)
     assert t.engine == "groq" and t.verdict == "ok" and t.text.startswith("Olá TITAN")
     assert len(sent) == 1 and sent[0][:4] == b"RIFF"
     assert svc.cloud_stt.used_today() == 10  # mínimo cobrado por fala
@@ -254,3 +254,27 @@ def test_cli_testar_voz_with_file(tmp_path, monkeypatch, capsys):
     assert "Groq:" in out and "Capital da Austrália" in out
     with wave.open(__import__("io").BytesIO(sent[0])) as w:
         assert w.getframerate() == 16000 and w.getnchannels() == 1 and abs(w.getnframes() - 16000 * 16000 // 44100) <= 2
+
+
+def test_vocabulary_hint_goes_to_groq_and_live_vosk_optional(make_settings, monkeypatch):
+    """A dica (nomes dos aparelhos) vai junto do áudio; Vosk ao vivo só se pedir."""
+    got = []
+    svc = make(make_settings, monkeypatch, lambda wav, hint="": got.append(hint) or groq_reply())
+    uid = uuid.uuid4()
+    sid = svc.sessions.open(uid, "Ei, Titã. Liga o Nootebook.")
+    svc.sessions.feed(sid, uid, speech())
+    svc.sessions.finish(sid, uid)
+    assert got == ["Ei, Titã. Liga o Nootebook."]
+    assert "prompt" in svc.cloud_stt._form("x") and "prompt" not in svc.cloud_stt._form()
+    svc = make(make_settings, monkeypatch, lambda wav: groq_reply(), voice_local_partials=True)
+    assert run(svc, speech())[0] == "parcial vosk"
+
+
+def test_vosk_hears_everything_when_groq_fails_without_live(make_settings, monkeypatch):
+    """Sem Vosk ao vivo, se a Groq falhar o Vosk ouve a fala inteira no final (reserva)."""
+    def boom(wav):
+        raise OSError("sem internet")
+
+    svc = make(make_settings, monkeypatch, boom)
+    partial, t = run(svc, speech())
+    assert partial == "" and t.engine == "vosk" and t.text == "texto do vosk" and "Groq" in t.note

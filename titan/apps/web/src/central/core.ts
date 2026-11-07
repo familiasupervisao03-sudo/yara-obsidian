@@ -14,6 +14,7 @@ export class Core {
   devices: HoloDevice[] = [];
   onLite: (lite: boolean) => void = () => undefined;
   private ctx: CanvasRenderingContext2D;
+  private canvas: HTMLCanvasElement;
   private raf = 0;
   private level = 0;
   private expand = 1;
@@ -25,8 +26,11 @@ export class Core {
 
   constructor(canvas: HTMLCanvasElement, forcedLite: boolean | null = null) {
     this.ctx = canvas.getContext("2d")!;
+    this.canvas = canvas;
     this.forcedLite = forcedLite;
-    if (forcedLite) this.lite = true;
+    // notebook fraco (2 núcleos ou menos, como o Pentium T4500): já começa leve
+    const weak = typeof navigator !== "undefined" && (navigator.hardwareConcurrency ?? 4) <= 2;
+    if (forcedLite || (forcedLite === null && weak)) this.applyLite(true);
     this.makeParts();
     this.raf = requestAnimationFrame(this.frame);
   }
@@ -37,7 +41,16 @@ export class Core {
 
   setLite(v: boolean): void {
     if (this.lite === v) return;
-    this.lite = v; this.makeParts(); this.onLite(v);
+    this.applyLite(v); this.makeParts(); this.onLite(v);
+  }
+
+  /** Leve = desenha em meia resolução (4x menos pixels; a tela estica) e a 30 quadros/s. */
+  private applyLite(v: boolean): void {
+    this.lite = v;
+    const scale = v ? 0.5 : 1;
+    this.canvas.width = W * scale;
+    this.canvas.height = H * scale;
+    this.ctx.setTransform(scale, 0, 0, scale, 0, 0);
   }
 
   private makeParts(): void {
@@ -49,7 +62,7 @@ export class Core {
   private frame = (t: number) => {
     this.raf = requestAnimationFrame(this.frame);
     if (document.hidden) return;
-    if (this.lite && t - this.lastDraw < 33) return; // 30 quadros/s no modo leve
+    if (this.lite && t - this.lastDraw < (this.mode === "idle" && !this.holo ? 50 : 33)) return; // leve: 20–30 quadros/s
     // mede o desempenho nos primeiros segundos e de tempos em tempos
     this.frames.push(t); while (this.frames.length && t - this.frames[0] > 3000) this.frames.shift();
     if (this.forcedLite === null && !this.lite && this.frames.length > 10 && t > 4000) {

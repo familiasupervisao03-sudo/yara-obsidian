@@ -3,11 +3,12 @@
 // o modo noite e os ALERTAS CRÍTICOS do notebook. Tudo com os dados reais do TITAN.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HttpError } from "../api";
-import { ServerTts } from "../voice/browser";
-import { duckEnd, duckStart } from "../voice/duck";
+import { SpeechSegmenter } from "../voice/segmenter";
 import { casa, ICONS } from "../casa/api";
 import { Ear, type EarState } from "../casa/listen";
-import { askTitan, central, type Alert, type Overview, type Telemetry } from "./api";
+import { askTitan, askTitanStream, central, createReminder, upcomingReminders, type Alert, type Overview, type Telemetry } from "./api";
+import { parseReminder, whenText } from "./reminder";
+import { Speaker } from "./speaker";
 import { Core, drawAlertChart, drawSpark, type CoreMode } from "./core";
 import { plain, stripWake } from "./wake";
 
@@ -21,24 +22,14 @@ const store = { get: (k: string) => { try { return localStorage.getItem(k); } ca
 const NIGHT_FROM = 23, NIGHT_TO = 6;
 
 
-let tts: ServerTts | null = null;
-let speaking: { stop: () => void } | null = null;
-async function say(text: string, on: boolean, onStart?: () => void): Promise<void> {
+let voiceEnabled = true;
+const speaker = new Speaker(() => voiceEnabled);
+async function say(text: string, on: boolean): Promise<void> {
+  voiceEnabled = on;
   if (!on || !text) return;
-  speaking?.stop();
-  try {
-    tts ??= new ServerTts();
-    const clip = await tts.prepare(text.slice(0, 600), new AbortController().signal);
-    speaking = clip as unknown as { stop: () => void };
-    onStart?.(); await clip.play();
-  } catch {
-    try {
-      const u = new SpeechSynthesisUtterance(text); u.lang = "pt-BR"; u.pitch = 0.8; onStart?.();
-      await duckStart("tts-nav");
-      await new Promise<void>((ok) => { u.onend = () => ok(); u.onerror = () => ok(); speechSynthesis.speak(u); });
-      duckEnd("tts-nav");
-    } catch { /* sem voz */ }
-  }
+  speaker.stop();
+  speaker.say(text);
+  await speaker.done();
 }
 
 function beep(f = 880, d = 0.18) {
@@ -47,10 +38,16 @@ function beep(f = 880, d = 0.18) {
     o.start(); o.stop(a.currentTime + d); setTimeout(() => void a.close(), 600); } catch { /* sem som */ }
 }
 
-function useTyped(text: string, speed = 28): string {
+function useTyped(text: string, speed = 22): string {
   const [n, setN] = useState(0);
-  useEffect(() => { setN(0); if (!text) return; const id = window.setInterval(() => setN((v) => { if (v >= text.length) { clearInterval(id); return v; } return v + 1; }), speed);
-    return () => window.clearInterval(id); }, [text, speed]);
+  const prev = useRef("");
+  useEffect(() => {
+    if (!text.startsWith(prev.current)) setN(0);   // texto novo: começa do zero; se só cresceu, continua
+    prev.current = text;
+    if (!text) return;
+    const id = window.setInterval(() => setN((v) => { if (v >= text.length) { clearInterval(id); return v; } return v + 1; }), speed);
+    return () => window.clearInterval(id);
+  }, [text, speed]);
   return text.slice(0, n);
 }
 
@@ -72,6 +69,14 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
   const [lite, setLite] = useState(false);
   const [you, setYou] = useState("");
   const [ai, setAi] = useState("");
+  const [timing, setTiming] = useState("");
+  const [typing, setTyping] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [reminders, setReminders] = useState<{ id: string; title: string; due_at: string }[]>([]);
+  const [ringing, setRinging] = useState<{ id: string; title: string } | null>(null);
+  const tHeard = useRef(0);     // quando terminou de ouvir (começou a transcrever)
+  const tAsked = useRef(0);     // quando o texto chegou
+  const tFirst = useRef(0);     // primeira palavra da resposta
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [briefStep, setBriefStep] = useState(0);
   const [mission, setMission] = useState<{ end: number; total: number; label: string } | null>(null);
@@ -113,6 +118,22 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
 
   // relógio
   useEffect(() => { const id = window.setInterval(() => setNow(new Date()), 1000); return () => window.clearInterval(id); }, []);
+
+  // lembretes com hora: a Central avisa (tela + voz) na hora certa, mesmo criados pelo celular
+  const loadReminders = useCallback(() => { upcomingReminders().then(setReminders).catch(() => undefined); }, []);
+  useEffect(() => { loadReminders(); const id = window.setInterval(loadReminders, 30_000); return () => window.clearInterval(id); }, [loadReminders]);
+  useEffect(() => {
+    let done: string[] = [];
+    try { done = JSON.parse(store.get("titan.central.avisados") ?? "[]"); } catch { /* vazio */ }
+    const due = reminders.find((x) => Date.parse(x.due_at) <= now.getTime() && Date.parse(x.due_at) > now.getTime() - 10 * 60_000 && !done.includes(x.id));
+    if (!due) return;
+    store.set("titan.central.avisados", JSON.stringify([...done, due.id].slice(-50)));
+    setRinging({ id: due.id, title: due.title }); setNightAwake(Date.now());
+    beep(988, 0.12); setTimeout(() => beep(1318, 0.18), 160);
+    void say(`Lembrete: ${due.title}.`, voiceRef.current);
+    const t = window.setTimeout(() => setRinging((v) => (v?.id === due.id ? null : v)), 60_000);
+    return () => window.clearTimeout(t);
+  }, [now, reminders]);
 
   // dados do TITAN (resumo a cada 5 s; telemetria a cada 10 s)
   const loadOverview = useCallback(async () => {
@@ -169,8 +190,39 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
   // ---------- falar e entender ----------
   const reply = useCallback(async (text: string) => {
     setAi(text); setMode("speak");
+    if (!tFirst.current) tFirst.current = performance.now();
     await say(text, voiceRef.current);
     window.setTimeout(() => setMode((m) => (m === "speak" ? "idle" : m)), voiceRef.current ? 400 : 2500);
+  }, []);
+
+  // tempos de cada etapa (para achar onde está a demora): ouvir · pensar · voz
+  useEffect(() => {
+    speaker.onFirstAudio = () => {
+      const now = performance.now(), f = (ms: number) => `${(ms / 1000).toFixed(1).replace(".", ",")} s`;
+      if (!tAsked.current || now - tAsked.current > 30_000) return;  // fala que não é resposta (ex.: lembrete tocando)
+      const parts = [];
+      if (tHeard.current && tAsked.current) parts.push(`ouvir ${f(tAsked.current - tHeard.current)}`);
+      if (tAsked.current && tFirst.current) parts.push(`pensar ${f(tFirst.current - tAsked.current)}`);
+      if (tFirst.current) parts.push(`voz ${f(now - tFirst.current)}`);
+      setTiming(parts.join(" · "));
+    };
+  }, []);
+
+  /** Pergunta ao TITAN e já vai falando cada frase enquanto a resposta chega. */
+  const askAndSpeak = useCallback(async (text: string) => {
+    voiceEnabled = voiceRef.current;
+    speaker.stop();
+    const seg = new SpeechSegmenter();
+    let acc = "";
+    const full = await askTitanStream(text, (d) => {
+      if (!acc) { tFirst.current = performance.now(); setMode("speak"); }
+      acc += d; setAi(acc);
+      for (const sg of seg.push(d)) speaker.say(sg.text);
+    });
+    for (const sg of seg.flush()) speaker.say(sg.text);
+    if (!acc && full) { setAi(full); speaker.say(full); }
+    await speaker.done();
+    window.setTimeout(() => setMode((m) => (m === "speak" ? "idle" : m)), voiceRef.current ? 300 : 2500);
   }, []);
 
   const startMission = useCallback((min: number, label = "FOCO") => {
@@ -198,7 +250,9 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
     if (src === "voz" && alwaysRef.current && !woke) return;            // escuta contínua: só com "Ei, Titã"
     setNightAwake(Date.now()); if (overlay === "night") setOverlay(null);
     if (!text) { setYou("“Ei, Titã”"); void reply("Pode falar."); return; }
-    setYou(`“${text}”`); setAi(""); setMode("think");
+    setYou(`“${text}”`); setAi(""); setMode("think"); setTiming("");
+    tAsked.current = performance.now(); tFirst.current = 0;
+    if (src !== "voz") tHeard.current = 0;
     const n = plain(text);
     try {
       if (/^(sair|fechar|fecha|cancela|cancelar|voltar|volta)\b/.test(n)) {
@@ -213,6 +267,13 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
         const answer = await askTitan(`Explique de forma curta e clara, para mostrar numa tela grande: ${mt[1]}`);
         setShow({ title: mt[1].slice(0, 80), text: answer }); return void reply("Mostrando na tela.");
       }
+      // lembrete com hora: "me lembra de tirar o bolo às 2:30 da tarde" (sem IA, na hora)
+      const rem = parseReminder(text);
+      if (rem) {
+        await createReminder(rem.title, rem.due);
+        loadReminders(); void loadOverview();
+        return void reply(`Lembrete criado: ${rem.title}, ${whenText(rem.due)}. Te aviso na hora.`);
+      }
       const r = await casa.command(text, src, false);
       if (r.understood) {
         if (r.device && core.current) core.current.flash(r.device.id);
@@ -221,12 +282,13 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
         return void reply(r.reply);
       }
       if (/^bom dia\b/.test(n)) { setMode("idle"); return void briefing(); }
-      void reply(await askTitan(text));
+      await askAndSpeak(text);
     } catch (e) { fail(e); void reply("Não consegui agora."); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overlay, reply, startMission, fail, loadOverview]);
+  }, [overlay, reply, startMission, fail, loadOverview, loadReminders, askAndSpeak]);
 
   const earState = useCallback((s: EarState) => {
+    if (s === "thinking") tHeard.current = performance.now();
     setMode((m) => (s === "hearing" ? "listen" : s === "thinking" ? "think" : m === "listen" || m === "think" ? "idle" : m));
   }, []);
   const getEar = () => (ear.current ??= new Ear((t) => void handle(t, "voz"), earState, (p) => p && setYou(`“${p}”`), (m) => void reply(m)));
@@ -245,6 +307,7 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
   }, []);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.tagName === "INPUT") return;  // digitando: espaço é espaço
       if (e.key === " ") { e.preventDefault(); talk(); }
       else if (e.key === "Escape") { setOverlay(null); setHolo(false); setShow(null); setAlert(null); setMission(null); }
     };
@@ -340,7 +403,8 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
                   <div className="st">{d.on ? "LIGADO" : "DESLIGADO"}</div></button>))}</div>)}</div>
 
           <div className="cx-legend"><div className="you">{you && <><b>VOCÊ ›</b>{you}</>}</div>
-            <div className="ai">{ai && <><b>TITAN ›</b>{aiTyped}{aiTyped.length < ai.length && <span className="caret" />}</>}</div></div>
+            <div className="ai">{ai && <><b>TITAN ›</b>{aiTyped}{aiTyped.length < ai.length && <span className="caret" />}</>}</div>
+            {timing && <div className="tm">{timing}</div>}</div>
 
           <div className="cx-ticker"><div key={ticker}>{ticker}</div></div>
         </div>
@@ -372,6 +436,10 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
         {showNight && <div className="cx-ov cx-night" onClick={() => { setNightAwake(Date.now()); setOverlay(null); }}>
           <div className="t">{p2(now.getHours())}:{p2(now.getMinutes())}</div><div className="s">MODO NOITE · DIGA “EI, TITÃ” OU TOQUE PARA ACORDAR</div></div>}
 
+        {ringing && <div className="cx-remind" role="alert">
+          <div className="k">🔔 LEMBRETE</div><div className="v">{ringing.title}</div>
+          <button className="cx-remind-ok" onClick={() => setRinging(null)}>OK ✓</button></div>}
+
         {alert && <div className={`cx-ov cx-alert ${alert.level === "warn" ? "warn" : ""}`}><div className="band">
           <div className="k">{alert.level === "warn" ? "⚠ ATENÇÃO MÁXIMA ⚠" : "⚠ ALERTA CRÍTICO ⚠"}</div>
           <div className="row"><div><div className="tt">{alert.title}</div>
@@ -385,8 +453,14 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
         <div className="cx-scan" />
       </div>
 
-      <div className={`cx-dock ${dock ? "show" : ""}`}>
+      {typing && <form className="cx-type" onSubmit={(e) => { e.preventDefault(); const t = typed.trim(); if (t) { void handle(t, "texto"); setTyped(""); } }}>
+        <input autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Digite um comando: liga o ventilador · me lembra às 14:30 de…" aria-label="Comando para o TITAN" />
+        <button type="submit">ENVIAR</button>
+        <button type="button" onClick={() => setTyping(false)}>✕</button>
+      </form>}
+      <div className={`cx-dock ${dock || typing ? "show" : ""}`}>
         <button className="main" onClick={talk}>🎙 Falar</button>
+        <button onClick={() => setTyping((v) => !v)}>⌨ Digitar</button>
         <button onClick={() => void briefing()}>☀ Bom dia</button>
         <button onClick={() => setHolo((v) => !v)}>🧊 Holograma</button>
         <button onClick={() => startMission(25)}>⏱ Missão 25 min</button>

@@ -97,6 +97,9 @@ class Settings(BaseSettings):
     voice_xai_model: str = "grok-voice-transcribe-2.0"
     # Teto de minutos de áudio enviados por dia ao reconhecimento on-line (protege o custo).
     voice_cloud_max_minutes_day: int = Field(default=60, ge=1, le=1440)
+    # Com reconhecimento on-line ligado, rodar também o Vosk ao vivo (texto parcial na tela)?
+    # Pesa no processador de notebooks fracos; desligado, o Vosk só entra se o on-line falhar.
+    voice_local_partials: bool = False
 
     # Sócio (memória, lembretes, mensagens do TITAN). Modelo usado para "entender" as
     # conversas e escrever as mensagens; vazio = o mesmo das conversas. Recomendado: o

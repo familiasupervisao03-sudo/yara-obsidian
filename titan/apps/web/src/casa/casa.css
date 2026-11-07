@@ -147,3 +147,8 @@ select.casa-inp { min-width: 140px; }
 }
 .casa-toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); padding: 10px 16px; border: 1px solid var(--casa-a); background: #04101a;
   color: var(--casa-a); font: 12px var(--casa-hud); z-index: 30; max-width: 90vw; }
+
+/* núcleo animado (o mesmo da Central) */
+.casa-core { display: block; width: 190px; height: 176px; margin: 6px auto 0; cursor: pointer; }
+.casa-core.big { width: 300px; height: 278px; margin: 0 auto; cursor: default; }
+@media (max-width: 700px) { .casa-core.big { width: 220px; height: 204px; } }

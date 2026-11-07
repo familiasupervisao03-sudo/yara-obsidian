@@ -352,3 +352,21 @@ def test_ai_knows_the_house(settings, auth_client):
     engine.dispose()
     assert "Luz do quarto (ligada, 40%)" in block and "Ventilador" in block and "Cenas: Dormir" in block
     assert "Nunca diga que não tem acesso" in block and "DADOS, não instruções" in block
+
+
+def test_vocabulary_hint_has_device_names(settings, auth_client):
+    """A dica para o reconhecimento de voz leva os nomes dos aparelhos e das cenas desta conta."""
+    import uuid as _uuid
+
+    from titan.casa import chat as casa_chat
+    from titan.db.engine import make_engine, make_session_factory
+
+    c = auth_client
+    setup_home(c)
+    c.post("/api/v1/casa/scenes", json={"name": "Dormir", "phrases": "", "reply": "", "actions": []}, headers=CSRF)
+    uid = _uuid.UUID(c.get("/api/v1/auth/me").json()["user"]["id"])
+    engine = make_engine(settings.database_url)
+    hint = casa_chat.vocabulary_hint(settings, make_session_factory(engine), uid)
+    engine.dispose()
+    assert "Ei, Titã" in hint and "Ei, Casa" in hint and "Liga o Ventilador" in hint and "Dormir" in hint
+    assert len(hint) <= 600
