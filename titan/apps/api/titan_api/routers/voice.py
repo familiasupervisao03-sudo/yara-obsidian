@@ -9,6 +9,7 @@ interface).
 
 from __future__ import annotations
 
+import threading
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
@@ -23,6 +24,7 @@ from titan_api.schemas import ErrorResponse
 router = APIRouter(prefix="/api/v1/voice", tags=["voice"], responses={401: {"model": ErrorResponse}})
 
 MAX_CHUNK_BYTES = 256 * 1024  # ~8 s de áudio por pedaço
+_local_tts_lock = threading.Lock()
 
 
 def _err(status: int, code: str, message: str) -> JSONResponse:
@@ -39,6 +41,8 @@ class EngineOut(BaseModel):
 
 class VoiceStatusOut(BaseModel):
     engines: list[EngineOut]
+    # voz do TITAN em uso: "piper" (gerada no notebook: pesa no processador) ou "edge" (on-line)
+    tts_engine: str = "piper"
     sample_rate: int
     notes: list[str]
 
@@ -69,6 +73,7 @@ class SpeakIn(BaseModel):
 def voice_status(_: CurrentUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
     return VoiceStatusOut(
         engines=[EngineOut(**e.__dict__) for e in ctx.voice.status()],
+        tts_engine=ctx.voice.tts.name,
         sample_rate=16000,
         notes=[
             f"O reconhecimento é on-line ({ctx.voice.cloud_stt.label}): o áudio de cada fala sai do "
@@ -157,7 +162,13 @@ def speak(body: SpeakIn, cu: CurrentUser = Depends(current_user),
     with ctx.session_factory() as db:
         rate = user_prefs.get(db, cu.user.id)["voice_rate"]
     try:
-        audio = ctx.voice.tts.synthesize(body.text, rate=rate)
+        if ctx.voice.tts.name == "edge":
+            audio = ctx.voice.tts.synthesize(body.text, rate=rate)
+        else:
+            # Piper roda no próprio notebook: uma voz de cada vez (várias juntas travam o
+            # processador e o som sai picotado).
+            with _local_tts_lock:
+                audio = ctx.voice.tts.synthesize(body.text, rate=rate)
     except VoiceUnavailable as exc:
         return _err(503, "voice_unavailable", str(exc))
     return Response(audio, media_type=ctx.voice.tts.media_type, headers={"Cache-Control": "no-store"})

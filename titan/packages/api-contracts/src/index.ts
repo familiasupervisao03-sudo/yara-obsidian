@@ -223,6 +223,8 @@ export interface VoiceEngine {
 
 export interface VoiceStatus {
   engines: VoiceEngine[];
+  /** voz do TITAN em uso: "piper" (gerada no notebook) ou "edge" (on-line) */
+  tts_engine?: string;
   sample_rate: number;
   notes: string[];
 }

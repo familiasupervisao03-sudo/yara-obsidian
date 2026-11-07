@@ -1,5 +1,9 @@
-// Fala frase a frase: a 1ª frase começa a tocar enquanto a IA ainda escreve as outras,
-// e a próxima já vai sendo preparada (voz do servidor) enquanto a atual toca.
+// Fala as respostas do TITAN frase a frase, sem picotar.
+//
+// - Voz on-line (Edge): a próxima frase é preparada enquanto a atual toca (mais rápido).
+// - Voz gerada no notebook (Piper): NADA é gerado enquanto uma frase toca. Gerar voz ocupa o
+//   processador inteiro, e num notebook fraco o som que está tocando sai picotado/travando.
+//   Por isso as frases que chegam enquanto toca são juntadas num pedaço só, gerado depois.
 import { ServerTts } from "../voice/browser";
 import { duckEnd, duckStart } from "../voice/duck";
 
@@ -11,7 +15,8 @@ async function prepare(text: string, signal: AbortSignal): Promise<Clip> {
   try {
     tts ??= new ServerTts();
     return await tts.prepare(text, signal);
-  } catch {
+  } catch (e) {
+    if (signal.aborted) throw e;
     // sem voz do servidor: voz do navegador
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "pt-BR"; u.pitch = 0.8;
@@ -26,44 +31,84 @@ async function prepare(text: string, signal: AbortSignal): Promise<Clip> {
   }
 }
 
+const MAX_CHUNK = 320;  // caracteres por pedaço de voz
+
 export class Speaker {
-  private chain: Promise<void> = Promise.resolve();
+  /** true = voz on-line: pode preparar a próxima enquanto toca. */
+  overlap = false;
+  onFirstAudio: () => void = () => undefined;
+  private queue: string[] = [];
+  private running = false;
   private ctrl = new AbortController();
   private current: Clip | null = null;
   private started = false;
-  onFirstAudio: () => void = () => undefined;
+  private waiters: (() => void)[] = [];
   constructor(private enabled: () => boolean) {}
 
-  /** Põe uma frase na fila (já começa a preparar a voz dela). */
   say(text: string): void {
     const t = text.trim();
     if (!t || !this.enabled()) return;
+    this.queue.push(t);
+    if (!this.running) void this.run();
+  }
+
+  /** Junta as frases da fila num pedaço (até ~320 caracteres). */
+  private take(): string | null {
+    if (!this.queue.length) return null;
+    let out = this.queue.shift()!;
+    while (this.queue.length && out.length + 1 + this.queue[0].length <= MAX_CHUNK) out += " " + this.queue.shift()!;
+    return out.slice(0, 600);
+  }
+
+  private async run(): Promise<void> {
+    this.running = true;
     const signal = this.ctrl.signal;
-    const clip = prepare(t.slice(0, 400), signal);
-    clip.catch(() => undefined);
-    this.chain = this.chain.then(async () => {
-      if (signal.aborted) return;
-      try {
-        const c = await clip;
-        if (signal.aborted) return;
-        this.current = c;
-        if (!this.started) { this.started = true; this.onFirstAudio(); }
-        await c.play();
-      } catch { /* frase interrompida ou sem voz */ }
-      this.current = null;
-    });
+    void duckStart("fala");  // a música fica baixa a resposta inteira (não sobe entre as frases)
+    let next: Promise<Clip> | null = null;
+    try {
+      for (;;) {
+        if (signal.aborted) break;
+        const pending = next ?? (() => { const t = this.take(); return t ? prepare(t, signal) : null; })();
+        next = null;
+        if (!pending) {
+          // fila vazia: espera um instante por mais frases (a resposta ainda pode estar chegando)
+          await new Promise((ok) => setTimeout(ok, 120));
+          if (!this.queue.length) break;
+          continue;
+        }
+        let clip: Clip | null = null;
+        try { clip = await pending; } catch { clip = null; }
+        if (signal.aborted) break;
+        if (this.overlap) {  // voz on-line: já prepara a próxima enquanto esta toca
+          const t = this.take();
+          if (t) { next = prepare(t, signal); next.catch(() => undefined); }
+        }
+        if (clip) {
+          this.current = clip;
+          if (!this.started) { this.started = true; this.onFirstAudio(); }
+          try { await clip.play(); } catch { /* interrompida */ }
+          this.current = null;
+        }
+      }
+    } finally {
+      this.running = false;
+      duckEnd("fala");
+      const w = this.waiters; this.waiters = [];
+      w.forEach((f) => f());
+    }
   }
 
   /** Resolve quando tudo o que está na fila terminou de tocar. */
-  async done(): Promise<void> {
-    await this.chain;
+  done(): Promise<void> {
+    if (!this.running && !this.queue.length) return Promise.resolve();
+    return new Promise((ok) => this.waiters.push(ok));
   }
 
   stop(): void {
     this.ctrl.abort();
+    this.queue = [];
     this.current?.stop();
     this.ctrl = new AbortController();
-    this.chain = Promise.resolve();
     this.started = false;
   }
 

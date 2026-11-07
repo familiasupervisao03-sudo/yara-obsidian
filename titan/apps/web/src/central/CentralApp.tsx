@@ -195,6 +195,12 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
     window.setTimeout(() => setMode((m) => (m === "speak" ? "idle" : m)), voiceRef.current ? 400 : 2500);
   }, []);
 
+  // voz gerada no notebook (Piper)? então nada de gerar a próxima frase enquanto uma toca
+  useEffect(() => {
+    fetch("/api/v1/voice/status", { credentials: "same-origin" }).then((r) => r.ok ? r.json() : null)
+      .then((d) => { speaker.overlap = d?.tts_engine === "edge"; }).catch(() => undefined);
+  }, []);
+
   // tempos de cada etapa (para achar onde está a demora): ouvir · pensar · voz
   useEffect(() => {
     speaker.onFirstAudio = () => {

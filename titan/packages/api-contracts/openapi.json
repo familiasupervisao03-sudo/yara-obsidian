@@ -3690,6 +3690,11 @@
           "sample_rate": {
             "title": "Sample Rate",
             "type": "integer"
+          },
+          "tts_engine": {
+            "default": "piper",
+            "title": "Tts Engine",
+            "type": "string"
           }
         },
         "required": [

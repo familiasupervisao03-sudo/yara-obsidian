@@ -264,9 +264,11 @@ class BufferClip implements Clip {
     const go = duckStart("tts");
     return new Promise<void>((resolve, reject) => {
       this.reject = reject;
-      void go.then(() => {
+      void go.then(async () => {
         if (this.stopped) return;
-        void this.ctx.resume();
+        // espera o áudio "acordar" antes de tocar (senão o começo da frase pode sair cortado)
+        await this.ctx.resume().catch(() => undefined);
+        if (this.stopped) return;
         const src = this.ctx.createBufferSource();
         src.buffer = this.buffer;
         src.connect(this.gain);
