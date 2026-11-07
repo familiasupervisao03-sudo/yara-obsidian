@@ -67,9 +67,9 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         server = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_SERVER, null);
         alt = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_ALT, null);
-        // Casa: central da casa (tablet) — tela sempre acesa e em tela cheia.
+        // Casa e Central (tablet/TV): tela sempre acesa e em tela cheia.
         // As mensagens do TITAN (NotesJob) ficam só no app TITAN, para não avisar em dobro.
-        if (BuildConfig.CASA) {
+        if (BuildConfig.KIOSK) {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             fullscreen();
         } else {
@@ -92,7 +92,7 @@ public class MainActivity extends Activity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus && BuildConfig.CASA) fullscreen();
+        if (hasFocus && BuildConfig.KIOSK) fullscreen();
     }
 
     @Override
@@ -164,7 +164,7 @@ public class MainActivity extends Activity {
         if (Intent.ACTION_SEND.equals(i.getAction())) {
             String text = i.getStringExtra(Intent.EXTRA_TEXT);
             String title = i.getStringExtra(Intent.EXTRA_SUBJECT);
-            if (BuildConfig.CASA) return BuildConfig.HOME;
+            if (BuildConfig.KIOSK) return BuildConfig.HOME;
             return "/compartilhar?title=" + Uri.encode(title == null ? "" : title)
                     + "&text=" + Uri.encode(text == null ? "" : text) + "&url=";
         }
@@ -191,7 +191,7 @@ public class MainActivity extends Activity {
         box.setBackgroundColor(Color.parseColor("#03070c"));
 
         TextView title = new TextView(this);
-        title.setText(BuildConfig.CASA ? "T I T A N   C A S A" : "T I T A N");
+        title.setText(BuildConfig.TITLE);
         title.setTextColor(Color.parseColor("#3ee8ff"));
         title.setTextSize(30);
         title.setGravity(Gravity.CENTER);
@@ -495,7 +495,7 @@ public class MainActivity extends Activity {
         /** Tela acesa durante a conversa por voz. */
         @JavascriptInterface
         public void keepAwake(boolean on) {
-            if (BuildConfig.CASA) return; // a central da casa fica sempre acesa
+            if (BuildConfig.KIOSK) return; // Casa e Central ficam sempre acesas
             runOnUiThread(() -> {
                 if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);

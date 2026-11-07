@@ -114,6 +114,9 @@ def test_install_page_offers_the_app_when_built(tmp_path, monkeypatch):
     casa = tmp_path / "casa.apk"
     casa.write_bytes(b"PK\x03\x04 apk da casa")
     monkeypatch.setattr(mobile, "CASA_APK_FILE", casa)
+    central = tmp_path / "central.apk"
+    central.write_bytes(b"PK\x03\x04 apk da central")
+    monkeypatch.setattr(mobile, "CENTRAL_APK_FILE", central)
     ca, _crt, _key = mobile.make_certificates(["192.168.0.10"], tmp_path / "tls")
     srv = mobile.make_install_server(ca, "https://192.168.0.10:8000", ["127.0.0.1/32"], port=0, host="127.0.0.1")
     stop = threading.Event()
@@ -128,6 +131,9 @@ def test_install_page_offers_the_app_when_built(tmp_path, monkeypatch):
         assert "BAIXAR O TITAN CASA (APK)" in page and "titancasa://configurar?s=" in page
         code, ctype, body = _get(base + "/casa.apk")
         assert code == 200 and ctype == "application/vnd.android.package-archive" and body == casa.read_bytes()
+        assert "BAIXAR O TITAN CENTRAL (APK)" in page and "titancentral://configurar?s=" in page
+        code, ctype, body = _get(base + "/central.apk")
+        assert code == 200 and body == central.read_bytes()
     finally:
         stop.set()
         t.join(5)

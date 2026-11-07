@@ -496,6 +496,74 @@ def cmd_tuya_test(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_central_clima(args: argparse.Namespace) -> int:
+    """Cidade do clima do TITAN Central (Open-Meteo: grátis, sem chave)."""
+    from pathlib import Path
+
+    from titan.central import weather
+    from titan.envfile import read_env, update_env
+
+    env_path = Path(args.env_file)
+    if not env_path.exists():
+        print(f"{env_path} não existe. Rode primeiro scripts/setup.sh.", file=sys.stderr)
+        return 1
+    name = " ".join(args.cidade).strip() or _ask("Sua cidade (ex.: Fortaleza)")
+    if not name or len(name) > 80:
+        print("Cidade inválida. Nada foi alterado.", file=sys.stderr)
+        return 1
+    try:
+        found = weather.geocode(name)
+    except Exception as exc:
+        print(f"Não consegui procurar a cidade ({type(exc).__name__}). O notebook está com internet?", file=sys.stderr)
+        return 1
+    if not found:
+        print(f"Não achei \"{name}\". Tente o nome com o estado, ex.: \"Fortaleza Ceará\".", file=sys.stderr)
+        return 1
+    where = ", ".join(x for x in (found["name"], found["admin"], found["country"]) if x)
+    print(f"Achei: {where}  ({found['lat']:.3f}, {found['lon']:.3f})")
+    values = {"TITAN_CENTRAL_CITY": found["name"], "TITAN_CENTRAL_LAT": f"{found['lat']:.4f}",
+              "TITAN_CENTRAL_LON": f"{found['lon']:.4f}"}
+    if read_env(env_path).get("TITAN_LOCAL_ONLY", "true").lower() != "false":
+        print("\nO TITAN está em modo só-local (nada sai do notebook). Para o clima funcionar, o servidor")
+        print("consulta a Open-Meteo a cada 20 min mandando SÓ as coordenadas da cidade.")
+        if _ask("Digite AUTORIZO para permitir").strip().upper() != "AUTORIZO":
+            print("Não confirmado. Nada foi alterado.")
+            return 1
+        values["TITAN_LOCAL_ONLY"] = "false"
+    elif not args.sim and _ask("Usar esta cidade? (s/n)", "s").strip().lower() not in ("s", "sim"):
+        print("Nada foi alterado.")
+        return 1
+    backup = update_env(env_path, values)
+    print(f"Pronto: o TITAN Central vai mostrar o clima de {found['name']}. Cópia anterior do .env: {backup}")
+    print("Reinicie o servidor (Ctrl+C e .venv/bin/titan ligar).")
+    return 0
+
+
+def cmd_central(args: argparse.Namespace) -> int:
+    """Abre o TITAN Central em tela cheia (para o notebook ligado na TV pelo HDMI)."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    from titan.envfile import read_env
+
+    port = read_env(Path(args.env_file)).get("TITAN_PORT", "8000") if Path(args.env_file).exists() else "8000"
+    url = f"https://localhost:{port}/central"
+    for exe, flags in (("firefox", ["--kiosk"]), ("chromium", ["--kiosk"]), ("chromium-browser", ["--kiosk"]),
+                       ("google-chrome", ["--kiosk"])):
+        if shutil.which(exe):
+            subprocess.Popen([exe, *flags, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(f"TITAN Central abrindo em tela cheia ({exe}): {url}")
+            print("Para sair da tela cheia: Alt+F4. O servidor precisa estar ligado (.venv/bin/titan ligar).")
+            return 0
+    if shutil.which("xdg-open"):
+        subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"Abrindo {url} — aperte F11 para tela cheia.")
+        return 0
+    print(f"Abra no navegador: {url}  (F11 = tela cheia)")
+    return 0
+
+
 def cmd_enable_groq_stt(args: argparse.Namespace) -> int:
     return _enable_cloud_stt(args, "groq")
 
@@ -762,6 +830,7 @@ def cmd_ligar(args: argparse.Namespace) -> int:
     else:
         print(f"  CELULAR:   {lan_url}   (só na mesma Wi-Fi)")
     print(f"  TITAN CASA (tablet):  {lan_url}/casa")
+    print(f"  TITAN CENTRAL (TV):   {lan_url}/central   (notebook na TV pelo HDMI: titan central)")
     print("=" * 64)
     if not ts_url:
         print(TAILSCALE_HOWTO)
@@ -777,7 +846,7 @@ def cmd_ligar(args: argparse.Namespace) -> int:
             print(f"\nCelular novo? Aponte a câmera para o QR (ou abra {install_url}):")
             qr = mobile.qr_text(install_url)
             print(qr if qr else "(Para ver o QR code aqui: .venv/bin/pip install segno)")
-            print(f"Lá estão o cadeado, o app TITAN e o app TITAN Casa (APK). A página fecha sozinha em {mobile.INSTALL_MINUTES} minutos.")
+            print(f"Lá estão o cadeado e os apps TITAN, TITAN Casa e TITAN Central (APK). A página fecha sozinha em {mobile.INSTALL_MINUTES} minutos.")
             threading.Thread(target=mobile.serve_install_page, args=(server,), daemon=True).start()
 
     if not args.sem_navegador and shutil.which("xdg-open"):
@@ -1097,6 +1166,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--env-file", default=".env")
     p.set_defaults(fn=cmd_disable_tuya)
     sub.add_parser("tuya-teste", help="lista os aparelhos da conta Tuya (só leitura)").set_defaults(fn=cmd_tuya_test)
+    p = sub.add_parser("central-clima", help="cidade do clima no TITAN Central (Open-Meteo, grátis)")
+    p.add_argument("cidade", nargs="*")
+    p.add_argument("--env-file", default=".env")
+    p.add_argument("--sim", action="store_true", help="não pergunta de novo")
+    p.set_defaults(fn=cmd_central_clima)
+    p = sub.add_parser("central", help="abre o TITAN Central em tela cheia (notebook na TV pelo HDMI)")
+    p.add_argument("--env-file", default=".env")
+    p.set_defaults(fn=cmd_central)
     p = sub.add_parser("enable-web", help="liga a pesquisa na internet (a pergunta sai do notebook)")
     p.add_argument("--env-file", default=".env")
     p.add_argument("--searxng", help="endereço do SearXNG local, ex.: http://127.0.0.1:8888")

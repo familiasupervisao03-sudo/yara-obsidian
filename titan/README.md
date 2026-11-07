@@ -26,6 +26,8 @@ npm install && npm run build      # 3. interface (precisa de Node 20.19+, só pa
 
 **TITAN Casa (automação da casa, app irmão em /casa):** [`docs/casa.md`](docs/casa.md).
 
+**TITAN Central (a tela da nave na TV, app irmão em /central):** [`docs/central.md`](docs/central.md).
+
 **Sócio (memória, metas, lembretes, mensagens do TITAN):** [`docs/socio.md`](docs/socio.md).
 
 **Instalação no notebook, passo a passo:** [`docs/notebook-install.md`](docs/notebook-install.md).

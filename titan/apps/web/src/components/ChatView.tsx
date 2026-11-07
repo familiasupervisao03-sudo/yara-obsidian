@@ -9,6 +9,7 @@ import { notify } from "../notify";
 import { brain, fmtWhen, type Action } from "../brain";
 import { remindersChanged } from "../reminders";
 import { AiPaused } from "./AiPaused";
+import { central } from "../central/api";
 
 const LESSON_MARKER = "▶ Vídeo-aula: ";
 // Mesmo critério do servidor (titan/lessons/script.py): pedido explícito de vídeo-aula.
@@ -486,6 +487,7 @@ function Bubble({ m, onWatch }: { m: Message; onWatch: (id: string) => void }) {
         return (
           <>
             <p>{body}</p>
+            {m.role === "assistant" && m.status !== "interrupted" && body.trim() && <ToTv text={body} />}
             {sources.length > 0 && (
               <ol className="sources">
                 {sources.map((s) => (
@@ -501,5 +503,25 @@ function Bubble({ m, onWatch }: { m: Message; onWatch: (id: string) => void }) {
         );
       })()}
     </div>
+  );
+}
+
+/** 📺 Manda esta resposta para a TV (TITAN Central) desta mesma conta. */
+function ToTv({ text }: { text: string }) {
+  const [st, setSt] = useState<"idle" | "busy" | "ok" | "err">("idle");
+  const send = async () => {
+    setSt("busy");
+    try {
+      const title = text.split(/[.!?\n]/)[0].slice(0, 80) || "Do TITAN";
+      await central.show(title, text.slice(0, 6000));
+      setSt("ok");
+    } catch { setSt("err"); }
+    window.setTimeout(() => setSt("idle"), 3000);
+  };
+  return (
+    <button className="ghost small to-tv" onClick={() => void send()} disabled={st === "busy"}
+      title="Mostrar esta resposta na TV (TITAN Central)">
+      {st === "ok" ? "📺 Na TV ✓" : st === "err" ? "📺 Não foi" : "📺 Na TV"}
+    </button>
   );
 }

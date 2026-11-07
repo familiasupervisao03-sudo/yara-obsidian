@@ -31,6 +31,8 @@ TLS_DIR = Path("var/tls")
 APK_FILE = Path(__file__).resolve().parents[1] / "apps" / "web" / "public" / "titan.apk"
 # App TITAN Casa (central da casa no tablet): mesmo projeto Android, outro app.
 CASA_APK_FILE = APK_FILE.with_name("casa.apk")
+# App TITAN Central (a tela da nave na TV): também do mesmo projeto.
+CENTRAL_APK_FILE = APK_FILE.with_name("central.apk")
 TAILSCALE_NET = "100.64.0.0/10"
 INSTALL_PORT = 8001
 INSTALL_MINUTES = 15
@@ -176,7 +178,7 @@ def config_link(app_url: str, alt_url: Optional[str] = None, scheme: str = "tita
 
 
 def install_page(app_url: str, ca_name: str, has_apk: bool = False, alt_url: Optional[str] = None,
-                 has_casa_apk: bool = False) -> str:
+                 has_casa_apk: bool = False, has_central_apk: bool = False) -> str:
     u = html.escape(app_url)
     where = (f"<code>{u}</code> (funciona em qualquer lugar, pelo Tailscale) e, de reserva, "
              f"<code>{html.escape(alt_url)}</code> (Wi-Fi de casa)") if alt_url else f"<code>{u}</code>"
@@ -193,6 +195,12 @@ Faça os passos 1 e 2 (cadeado) também no tablet.</span>
 <a class="btn" href="/casa.apk" download>BAIXAR O TITAN CASA (APK)</a>
 <a class="btn" href="{html.escape(config_link(app_url, alt_url, "titancasa"))}">CONFIGURAR O CASA SOZINHO</a></div></div>"""
             if has_casa_apk else "")
+    central = (f"""<div class="step"><span class="n">6</span><div><b>TITAN Central na TV (opcional)</b>
+<span class="m">A tela da nave: núcleo, voz, casa, metas e alertas do notebook. Para TV com Android (ou TV box).
+Sem TV com Android? Ligue o notebook na TV pelo HDMI e rode <code>titan central</code>.</span>
+<a class="btn" href="/central.apk" download>BAIXAR O TITAN CENTRAL (APK)</a>
+<a class="btn" href="{html.escape(config_link(app_url, alt_url, "titancentral"))}">CONFIGURAR A CENTRAL SOZINHA</a></div></div>"""
+               if has_central_apk else "")
     return f"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Instalar o TITAN</title>
 <style>
@@ -221,6 +229,7 @@ O Android avisa que "a rede pode ser monitorada": é normal para cadeados instal
 <span class="m">Se aparecer "conexão não segura", o passo 2 não foi concluído: não continue, volte ao passo 2.</span></div></div>
 {apk}
 {casa}
+{central}
 <p class="m">Esta página fecha sozinha em {INSTALL_MINUTES} minutos.</p>
 </body></html>"""
 
@@ -230,8 +239,9 @@ def make_install_server(ca_crt: Path, app_url: str, allowed: list[str], port: in
     nets = [ipaddress.ip_network(n, strict=False) for n in allowed]
     apk = APK_FILE.read_bytes() if APK_FILE.is_file() else None
     casa_apk = CASA_APK_FILE.read_bytes() if CASA_APK_FILE.is_file() else None
+    central_apk = CENTRAL_APK_FILE.read_bytes() if CENTRAL_APK_FILE.is_file() else None
     page = install_page(app_url, ca_crt.name, has_apk=apk is not None, alt_url=alt_url,
-                        has_casa_apk=casa_apk is not None).encode()
+                        has_casa_apk=casa_apk is not None, has_central_apk=central_apk is not None).encode()
     cert = ca_crt.read_bytes()
 
     class Handler(BaseHTTPRequestHandler):
@@ -266,6 +276,9 @@ def make_install_server(ca_crt: Path, app_url: str, allowed: list[str], port: in
             if path == "/casa.apk" and casa_apk is not None:
                 return self._send(200, casa_apk, "application/vnd.android.package-archive",
                                   {"Content-Disposition": 'attachment; filename="titan-casa.apk"'})
+            if path == "/central.apk" and central_apk is not None:
+                return self._send(200, central_apk, "application/vnd.android.package-archive",
+                                  {"Content-Disposition": 'attachment; filename="titan-central.apk"'})
             return self._send(404, b"Nada aqui.", "text/plain; charset=utf-8")
 
         def log_message(self, *args):

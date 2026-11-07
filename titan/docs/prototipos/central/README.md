@@ -1,4 +1,6 @@
-# TITAN Central — plano guardado (ainda não implementado)
+# TITAN Central — plano e simulação originais
+
+> **Implementado**: ver [`docs/central.md`](../../central.md). Esta pasta guarda a simulação aprovada.
 
 App irmão do TITAN e do TITAN Casa ("mesma mãe"): a **tela da nave** na TV do quarto.
 Mesmo servidor, mesmo login, tudo interligado. Simulação aprovada: `simulacao.html`

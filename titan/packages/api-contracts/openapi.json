@@ -375,6 +375,43 @@
         "title": "CancelIn",
         "type": "object"
       },
+      "CasaBrief": {
+        "properties": {
+          "demo": {
+            "title": "Demo",
+            "type": "boolean"
+          },
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/DeviceBrief"
+            },
+            "title": "Devices",
+            "type": "array"
+          },
+          "last_event": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EventBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "on": {
+            "title": "On",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "demo",
+          "devices",
+          "on",
+          "last_event"
+        ],
+        "title": "CasaBrief",
+        "type": "object"
+      },
       "CatalogOut": {
         "properties": {
           "actions": {
@@ -745,6 +782,61 @@
         "title": "DeliveredIn",
         "type": "object"
       },
+      "DeviceBrief": {
+        "properties": {
+          "icon": {
+            "title": "Icon",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "on": {
+            "title": "On",
+            "type": "boolean"
+          },
+          "online": {
+            "title": "Online",
+            "type": "boolean"
+          },
+          "room": {
+            "title": "Room",
+            "type": "string"
+          },
+          "watts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watts"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "icon",
+          "room",
+          "on",
+          "online"
+        ],
+        "title": "DeviceBrief",
+        "type": "object"
+      },
       "DeviceOut": {
         "properties": {
           "aliases": {
@@ -991,6 +1083,64 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "EventBrief": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "device": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "scene": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "source",
+          "action",
+          "ok",
+          "device",
+          "scene"
+        ],
+        "title": "EventBrief",
+        "type": "object"
+      },
       "EventOut": {
         "properties": {
           "action": {
@@ -1118,6 +1268,52 @@
           "finished_at"
         ],
         "title": "ExecutionOut",
+        "type": "object"
+      },
+      "GoalBrief": {
+        "properties": {
+          "current": {
+            "title": "Current",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "pct": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pct"
+          },
+          "target": {
+            "title": "Target",
+            "type": "number"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "unit",
+          "current",
+          "target",
+          "pct"
+        ],
+        "title": "GoalBrief",
         "type": "object"
       },
       "GoalIn": {
@@ -2096,6 +2292,74 @@
         "title": "NoteOut",
         "type": "object"
       },
+      "Overview": {
+        "properties": {
+          "casa": {
+            "$ref": "#/components/schemas/CasaBrief"
+          },
+          "goals": {
+            "items": {
+              "$ref": "#/components/schemas/GoalBrief"
+            },
+            "title": "Goals",
+            "type": "array"
+          },
+          "greeting": {
+            "title": "Greeting",
+            "type": "string"
+          },
+          "now": {
+            "format": "date-time",
+            "title": "Now",
+            "type": "string"
+          },
+          "show": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShowItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "today": {
+            "items": {
+              "$ref": "#/components/schemas/TodoBrief"
+            },
+            "title": "Today",
+            "type": "array"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          },
+          "weather": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weather"
+          }
+        },
+        "required": [
+          "greeting",
+          "username",
+          "now",
+          "goals",
+          "today",
+          "casa",
+          "weather",
+          "show"
+        ],
+        "title": "Overview",
+        "type": "object"
+      },
       "PlanIn": {
         "properties": {
           "change_note": {
@@ -2497,6 +2761,57 @@
           "policies"
         ],
         "title": "SettingsOut",
+        "type": "object"
+      },
+      "ShowIn": {
+        "properties": {
+          "text": {
+            "maxLength": 6000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 160,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ShowIn",
+        "type": "object"
+      },
+      "ShowItem": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "text",
+          "at"
+        ],
+        "title": "ShowItem",
         "type": "object"
       },
       "SpeakIn": {
@@ -2991,6 +3306,48 @@
           "updated_at"
         ],
         "title": "TaskOut",
+        "type": "object"
+      },
+      "TodoBrief": {
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "boolean"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "kind",
+          "due_at",
+          "done"
+        ],
+        "title": "TodoBrief",
         "type": "object"
       },
       "TodoIn": {
@@ -5785,6 +6142,144 @@
         "summary": "Get Status",
         "tags": [
           "casa"
+        ]
+      }
+    },
+    "/api/v1/central/overview": {
+      "get": {
+        "operationId": "overview_api_v1_central_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Overview",
+        "tags": [
+          "central"
+        ]
+      }
+    },
+    "/api/v1/central/show": {
+      "delete": {
+        "operationId": "clear_show_api_v1_central_show_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Clear Show",
+        "tags": [
+          "central"
+        ]
+      },
+      "post": {
+        "description": "\"Mostra na tela\": o celular (ou o chat) manda um conteúdo para a TV desta conta.",
+        "operationId": "show_api_v1_central_show_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShowIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShowItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Show",
+        "tags": [
+          "central"
+        ]
+      }
+    },
+    "/api/v1/central/telemetry": {
+      "get": {
+        "operationId": "telemetry_view_api_v1_central_telemetry_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Telemetry View Api V1 Central Telemetry Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Telemetry View",
+        "tags": [
+          "central"
         ]
       }
     },

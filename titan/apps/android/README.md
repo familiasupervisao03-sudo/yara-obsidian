@@ -25,6 +25,13 @@ acesa — feito para o tablet que fica como central da casa. Não busca as mensa
 - Configurar sozinho: `titancasa://configurar?s=…` (botão "CONFIGURAR O CASA SOZINHO" na página do QR).
 - O tablet também precisa do **cadeado** instalado (passos 1 e 2 da página do QR).
 
+## TITAN Central (TV)
+
+Terceiro app do mesmo projeto: **TITAN Central** (`br.titan.central`), a tela da nave
+(ver `docs/central.md`). Abre em `/central`, tela cheia e sempre acesa, deitado, e aparece no
+menu de TVs com Android TV (leanback, com banner). APK em `apps/web/public/central.apk`
+(o TITAN serve em `/central.apk`); configurar sozinho: `titancentral://configurar?s=…`.
+
 ## O que o app faz
 
 - Só abre `https://`; certificado inválido **não abre** (nunca "continuar mesmo assim").
@@ -44,9 +51,10 @@ Precisa do Android SDK (platforms;android-34, build-tools;34.0.0), Java 17+ e Gr
 ```sh
 cd apps/android
 echo "sdk.dir=/caminho/do/android-sdk" > local.properties
-TITAN_KEYSTORE=/caminho/titan-release.jks TITAN_KEYSTORE_PASS=... gradle assembleRelease   # gera os dois apps: TITAN e TITAN Casa
+TITAN_KEYSTORE=/caminho/titan-release.jks TITAN_KEYSTORE_PASS=... gradle assembleRelease   # gera os três apps: TITAN, TITAN Casa e TITAN Central
 cp app/build/outputs/apk/titan/release/app-titan-release.apk ../web/public/titan.apk
 cp app/build/outputs/apk/casa/release/app-casa-release.apk ../web/public/casa.apk
+cp app/build/outputs/apk/central/release/app-central-release.apk ../web/public/central.apk
 ```
 
 **Chave de assinatura:** fica fora do repositório (`*.jks` está no `.gitignore`).

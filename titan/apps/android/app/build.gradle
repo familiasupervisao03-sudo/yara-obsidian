@@ -12,7 +12,7 @@ android {
         targetSdk 34
     }
     buildFeatures { buildConfig true }
-    // Um projeto, dois apps (mesma mãe): o TITAN e o TITAN Casa (central da casa no tablet).
+    // Um projeto, três apps (mesma mãe): o TITAN, o TITAN Casa (tablet) e o TITAN Central (TV).
     // Instalam lado a lado: cada um tem o seu applicationId.
     flavorDimensions "app"
     productFlavors {
@@ -23,7 +23,8 @@ android {
             versionName "1.5"
             buildConfigField "String", "HOME", '"/"'
             buildConfigField "String", "SCHEME", '"titan"'
-            buildConfigField "boolean", "CASA", "false"
+            buildConfigField "boolean", "KIOSK", "false"
+            buildConfigField "String", "TITLE", '"T I T A N"'
             manifestPlaceholders = [appLabel: "TITAN", scheme: "titan"]
         }
         casa {
@@ -33,8 +34,20 @@ android {
             versionName "1.0"
             buildConfigField "String", "HOME", '"/casa"'
             buildConfigField "String", "SCHEME", '"titancasa"'
-            buildConfigField "boolean", "CASA", "true"
+            buildConfigField "boolean", "KIOSK", "true"
+            buildConfigField "String", "TITLE", '"T I T A N   C A S A"'
             manifestPlaceholders = [appLabel: "TITAN Casa", scheme: "titancasa"]
+        }
+        central {
+            dimension "app"
+            applicationId "br.titan.central"
+            versionCode 1
+            versionName "1.0"
+            buildConfigField "String", "HOME", '"/central"'
+            buildConfigField "String", "SCHEME", '"titancentral"'
+            buildConfigField "boolean", "KIOSK", "true"
+            buildConfigField "String", "TITLE", '"T I T A N   C E N T R A L"'
+            manifestPlaceholders = [appLabel: "TITAN Central", scheme: "titancentral"]
         }
     }
     signingConfigs {

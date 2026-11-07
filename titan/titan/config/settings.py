@@ -114,6 +114,11 @@ class Settings(BaseSettings):
     tuya_region: str = "us"
     # Comandos por minuto por casa (proteção contra abuso e laços).
     casa_max_commands_per_minute: int = Field(default=40, ge=5, le=600)
+    # TITAN Central (tela da TV): clima da sua cidade (Open-Meteo, grátis e sem chave).
+    # Configure com: titan central-clima "Sua cidade". Vazio = sem cartão de clima.
+    central_city: str = ""
+    central_lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    central_lon: Optional[float] = Field(default=None, ge=-180, le=180)
 
     # Pesquisa na internet (opcional; ver docs/pesquisa-internet.md). Desligada por padrão:
     # a pergunta pesquisada sai do notebook para a fonte de busca e para os sites lidos.
@@ -397,6 +402,7 @@ class Settings(BaseSettings):
             "xai_api_key_configured": bool(self.xai_api_key.get_secret_value()),
             "casa_provider": self.casa_provider,
             "tuya_region": self.tuya_region,
+            "central_city": self.central_city,
             "voice_edge_voice": self.voice_edge_voice,
             "allow_external_voice": self.allow_external_voice,
             "web_enabled": self.web_enabled,

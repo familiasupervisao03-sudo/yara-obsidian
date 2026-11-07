@@ -729,3 +729,7 @@ details.card > summary::-webkit-details-marker, details.panel > summary::-webkit
 button.ghost.warn-btn { color: var(--warn); border-color: var(--warn); }
 .login-expired { display: grid; gap: 0.3rem; margin-bottom: 0.4rem; }
 .login-title { font-family: var(--mono); font-size: 1.15rem; letter-spacing: 0.12em; text-transform: uppercase; margin: 0; }
+
+/* 📺 mandar a resposta para a TV (TITAN Central) */
+.msg .to-tv { margin-top: 0.35rem; min-height: 28px; padding: 0.15rem 0.55rem; font-size: 0.78rem; opacity: 0.75; }
+.msg .to-tv:hover { opacity: 1; }
