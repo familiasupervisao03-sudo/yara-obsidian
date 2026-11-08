@@ -134,6 +134,7 @@ def post_message(
     reply_out = None
     rem = _reminder_answer(ctx, cu, conv.id, body.content)
     if rem is not None:  # lembrete na hora, sem IA
+        rem.pop("_action", None)
         db.expire_all()
         return MessagePostOut(user_message=MessageOut.model_validate(user_msg), reply=MessageOut(**rem),
                               model=ModelStatus(available=True, provider="titan", detail="lembrete"))
@@ -229,8 +230,11 @@ async def post_message_stream(
         # "me lembra às 14h de ...": lembrete na hora, sem IA
         rem_out = await run_in_threadpool(_reminder_answer, ctx, cu, conversation_id, body.content)
         if rem_out is not None:
+            action = rem_out.pop("_action")
             yield _sse("delta", {"text": rem_out["content"]})
             yield _sse("done", {"message": rem_out, "footer_chars": 0, "metrics": {"lembrete": True}})
+            # avisa o app: no celular, o lembrete é agendado no próprio aparelho na mesma hora
+            yield _sse("actions", {"message_id": user_out["id"], "actions": [action]})
             return
         if provider is None:
             detail, reason = model_error or ("reenvio sem resposta registrada", "unavailable")
@@ -314,10 +318,14 @@ def _reminder_answer(ctx: AppContext, cu: CurrentUser, conversation_id: uuid.UUI
         reply = f"Lembrete criado: {title}, {quick.when_text(due, brain_store.local_now())}. Te aviso na hora."
         msg = repo.add_message(db, conv, "assistant", reply, model_provider="titan", model_name="lembrete")
         db.flush()
-        brain_store.add_todo(db, cu.user.id, title, "lembrete", due_at=due, conversation_id=conv.id, message_id=msg.id)
+        todo = brain_store.add_todo(db, cu.user.id, title, "lembrete", due_at=due, conversation_id=conv.id,
+                                    message_id=msg.id)
         audit.record(db, "brain.todo.created", actor_type="user", actor_id=cu.user.id, entity_type="message",
                      entity_id=str(msg.id), data={"kind": "lembrete", "quick": True})
-        return MessageOut.model_validate(msg).model_dump(mode="json")
+        out = MessageOut.model_validate(msg).model_dump(mode="json")
+        out["_action"] = {"type": "lembrete", "id": str(todo.id), "title": todo.title,
+                          "due_at": todo.due_at.isoformat()}
+        return out
 
 
 def with_research(ctx: AppContext, cu: CurrentUser, body: MessageCreate, turns: list[ChatTurn],

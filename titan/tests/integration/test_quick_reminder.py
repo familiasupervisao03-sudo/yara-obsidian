@@ -43,8 +43,12 @@ def test_chat_creates_reminder_without_ai(auth_client):
     assert ev["done"]["metrics"]["lembrete"] is True
     ups = c.get("/api/v1/brain/reminders/upcoming").json()
     assert [u["title"] for u in ups] == ["Testar o TITAN"]
+    # o app recebe o aviso "actions" e agenda o lembrete no próprio celular na hora
+    assert ev["actions"]["actions"][0]["type"] == "lembrete" and ev["actions"]["actions"][0]["id"] == ups[0]["id"]
+    assert "_action" not in ev["done"]["message"]
     # também pela rota sem streaming (usada pela Central/Casa quando precisa)
     r = c.post(f"/api/v1/conversations/{cid}/messages", json={"content": "me avisa às 8 da noite de estudar"},
                headers=CSRF).json()
+    assert "_action" not in r["reply"]
     assert r["reply"]["content"].startswith("Lembrete criado: Estudar") and r["model"]["available"] is True
     assert len(c.get("/api/v1/brain/reminders/upcoming").json()) == 2
