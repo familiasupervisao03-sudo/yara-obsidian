@@ -19,8 +19,8 @@ android {
         titan {
             dimension "app"
             applicationId "br.titan.app"
-            versionCode 7
-            versionName "1.6"
+            versionCode 8
+            versionName "1.7"
             buildConfigField "String", "HOME", '"/"'
             buildConfigField "String", "SCHEME", '"titan"'
             buildConfigField "boolean", "KIOSK", "false"
@@ -30,8 +30,8 @@ android {
         casa {
             dimension "app"
             applicationId "br.titan.casa"
-            versionCode 2
-            versionName "1.1"
+            versionCode 3
+            versionName "1.2"
             buildConfigField "String", "HOME", '"/casa"'
             buildConfigField "String", "SCHEME", '"titancasa"'
             buildConfigField "boolean", "KIOSK", "true"
@@ -41,8 +41,8 @@ android {
         central {
             dimension "app"
             applicationId "br.titan.central"
-            versionCode 2
-            versionName "1.1"
+            versionCode 3
+            versionName "1.2"
             buildConfigField "String", "HOME", '"/central"'
             buildConfigField "String", "SCHEME", '"titancentral"'
             buildConfigField "boolean", "KIOSK", "true"

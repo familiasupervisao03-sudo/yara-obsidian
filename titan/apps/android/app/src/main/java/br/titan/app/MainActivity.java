@@ -74,6 +74,7 @@ public class MainActivity extends Activity {
             fullscreen();
         } else {
             NotesJob.ensure(this);
+            LiveService.start(this);   // recebe mensagens com o app fechado, como o WhatsApp
         }
         if (askConfigLink(getIntent())) return;
         if (server == null) showSetup(null);

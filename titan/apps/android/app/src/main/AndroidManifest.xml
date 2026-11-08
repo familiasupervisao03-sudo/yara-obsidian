@@ -12,6 +12,9 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Ficar "ligado" como o WhatsApp (receber mensagens com o app fechado). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
@@ -46,6 +49,8 @@
             </intent-filter>
         </receiver>
         <!-- Busca as mensagens do TITAN de tempos em tempos (com o app fechado). -->
+        <service android:name=".LiveService" android:exported="false"
+                 android:foregroundServiceType="dataSync" />
         <service android:name=".NotesJob" android:exported="false"
                  android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>

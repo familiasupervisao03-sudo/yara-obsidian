@@ -42,7 +42,7 @@ public class NotesJob extends JobService {
     @Override
     public boolean onStartJob(JobParameters params) {
         new Thread(() -> {
-            try { check(); } catch (Exception ignored) { /* notebook desligado ou sem sessão */ }
+            try { check(NotesJob.this); } catch (Exception ignored) { /* notebook desligado ou sem sessão */ }
             jobFinished(params, false);
         }, "titan-notes").start();
         return true;
@@ -51,22 +51,24 @@ public class NotesJob extends JobService {
     @Override
     public boolean onStopJob(JobParameters params) { return true; }
 
-    private void check() throws Exception {
-        android.content.SharedPreferences p = getSharedPreferences("titan", MODE_PRIVATE);
+    /** Uma checagem: mensagens novas + lembretes marcados (de qualquer lugar) agendados aqui. */
+    static synchronized void check(Context c) throws Exception {
+        android.content.SharedPreferences p = c.getSharedPreferences("titan", Context.MODE_PRIVATE);
         Exception last = null;
         for (String server : new String[]{p.getString("server", null), p.getString(MainActivity.KEY_ALT, null)}) {
             if (server == null || !server.startsWith("https://")) continue;
-            try { checkAt(server); return; } catch (Exception e) { last = e; } // tenta a reserva
+            try { checkAt(c, server); return; } catch (Exception e) { last = e; } // tenta a reserva
         }
         if (last != null) throw last;
     }
 
-    private void checkAt(String server) throws Exception {
+    private static void checkAt(Context c, String server) throws Exception {
         String cookie = CookieManager.getInstance().getCookie(server);
         if (cookie == null || cookie.isEmpty()) return;
+        syncReminders(c, server, cookie);
         JSONArray notes = new JSONArray(request(server + "/api/v1/brain/notes", "GET", cookie, null));
         if (notes.length() == 0) return;
-        Set<String> local = Reminders.scheduledIds(this);
+        Set<String> local = Reminders.scheduledIds(c);
         JSONArray ids = new JSONArray();
         for (int i = 0; i < notes.length() && i < 5; i++) {
             JSONObject n = notes.getJSONObject(i);
@@ -75,10 +77,39 @@ public class NotesJob extends JobService {
             if ("lembrete".equals(n.optString("kind")) && local.contains(todo)) continue; // já tocou aqui
             String conv = n.optString("conversation_id", "");
             String target = UUID.matcher(conv).matches() ? "titan://conversa/" + conv : "titan://acao/inicio";
-            Notifier.show(this, n.getString("id").hashCode(), n.optString("title", "TITAN"), n.optString("body", ""),
+            Notifier.show(c, n.getString("id").hashCode(), n.optString("title", "TITAN"), n.optString("body", ""),
                     target, "lembrete".equals(n.optString("kind")));
         }
         request(server + "/api/v1/brain/notes/delivered", "POST", cookie, new JSONObject().put("ids", ids).toString());
+    }
+
+    /**
+     * Lembretes criados em qualquer lugar (Central, Casa, chat no notebook) ficam agendados
+     * NO CELULAR também: tocam na hora certa mesmo com o app fechado.
+     */
+    private static void syncReminders(Context c, String server, String cookie) throws Exception {
+        JSONArray up = new JSONArray(request(server + "/api/v1/brain/reminders/upcoming", "GET", cookie, null));
+        JSONArray out = new JSONArray();
+        for (int i = 0; i < up.length(); i++) {
+            JSONObject r = up.getJSONObject(i);
+            long at = parseIso(r.optString("due_at", ""));
+            if (at > 0) out.put(new JSONObject().put("id", r.getString("id")).put("title", r.optString("title", "Lembrete")).put("at", at));
+        }
+        Reminders.scheduleIfChanged(c, out.toString());
+    }
+
+    /** "2026-11-08T17:30:00.123+00:00" → milissegundos (0 se não entender). */
+    static long parseIso(String s) {
+        try {
+            java.util.regex.Matcher m = Pattern.compile("^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})(?:\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})?$").matcher(s);
+            if (!m.matches()) return 0;
+            String zone = m.group(2) == null || m.group(2).equals("Z") ? "+0000" : m.group(2).replace(":", "");
+            java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", java.util.Locale.US);
+            java.util.Date d = f.parse(m.group(1) + zone);
+            return d == null ? 0 : d.getTime();
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private static String request(String url, String method, String cookie, String body) throws Exception {

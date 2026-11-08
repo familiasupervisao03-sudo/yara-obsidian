@@ -93,3 +93,6 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
   das conversas CASA e TITAN entregues ao Luiz · (só este caderno)
 - 2026-11-08 · CENTRAL · avisos do app Android com prioridade alta e visíveis na tela bloqueada (como
   WhatsApp), ícone branco na barra; APKs titan 1.6 / casa 1.1 / central 1.1 · (`apps/android/app/**`, APKs)
+- 2026-11-08 · CENTRAL · app TITAN fica "ligado" como WhatsApp (LiveService: checa mensagens e lembretes a
+  cada minuto com o app fechado, alarme reserva a cada 10 min; lembretes de qualquer lugar agendados no
+  celular); APKs titan 1.7 / casa 1.2 / central 1.2 · (`apps/android/app/**`, APKs)

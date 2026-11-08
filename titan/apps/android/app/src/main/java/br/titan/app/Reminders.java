@@ -51,6 +51,12 @@ public final class Reminders extends BroadcastReceiver {
         p.edit().putString(KEY_JSON, json).putStringSet(KEY_IDS, ids).apply();
     }
 
+    /** Agenda só se a lista mudou (a checagem roda a cada minuto). */
+    static void scheduleIfChanged(Context c, String json) {
+        String old = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_JSON, null);
+        if (!json.equals(old)) schedule(c, json);
+    }
+
     /** Lembretes já agendados aqui (o aviso do servidor para eles é ignorado, sem duplicar). */
     static Set<String> scheduledIds(Context c) {
         return c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getStringSet(KEY_IDS, new HashSet<>());
@@ -70,6 +76,16 @@ public final class Reminders extends BroadcastReceiver {
             String json = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_JSON, "[]");
             schedule(c, json);
             NotesJob.ensure(c);
+            if (!BuildConfig.KIOSK) LiveService.start(c);   // só no app TITAN
+            return;
+        }
+        if (LiveService.ACTION_CHECK.equals(action)) {      // reserva: acorda o celular a cada ~10 min
+            PendingResult r = goAsync();
+            new Thread(() -> {
+                try { NotesJob.check(c); } catch (Exception ignored) { /* notebook fora do ar */ }
+                LiveService.armBackup(c);
+                r.finish();
+            }, "titan-check").start();
             return;
         }
         if (!ACTION.equals(action)) return;
