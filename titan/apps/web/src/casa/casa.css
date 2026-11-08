@@ -155,3 +155,12 @@ select.casa-inp { min-width: 140px; }
 
 .casa-full { font-size: 18px; min-width: 44px; }
 .casa-always { margin: 10px auto 0; display: block; width: 100%; }
+
+/* diagnóstico da escuta contínua */
+.casa-diag { margin-top: 10px; padding: 10px; border: 1px dashed rgba(62, 232, 255, 0.35); font: 600 11px ui-monospace, monospace;
+  letter-spacing: 0.06em; color: var(--casa-mu, #86aebe); display: grid; gap: 6px; text-align: left; }
+.casa-diag b { color: var(--casa-a, #3ee8ff); }
+.casa-diag .bad { color: #ffb547; }
+.casa-meter { height: 6px; background: rgba(62, 232, 255, 0.12); overflow: hidden; }
+.casa-meter i { display: block; height: 100%; background: var(--casa-a, #3ee8ff); box-shadow: 0 0 8px var(--casa-a, #3ee8ff); transition: width 0.1s; }
+.casa-b.casa-always.p { background: var(--casa-a, #3ee8ff); color: #00161e; border-color: var(--casa-a, #3ee8ff); font-weight: 700; }

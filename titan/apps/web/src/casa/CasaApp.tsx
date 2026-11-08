@@ -31,6 +31,8 @@ export function CasaApp({ username, onExpired }: { username: string; onExpired: 
   const [always, setAlwaysState] = useState(() => { try { return localStorage.getItem("titan.casa.sempre") === "1"; } catch { return false; } });
   const setAlways = (v: boolean) => { setAlwaysState(v); try { localStorage.setItem("titan.casa.sempre", v ? "1" : "0"); } catch { /* ignora */ } };
   const [full, setFull] = useState(false);
+  // o que a escuta contínua está fazendo (aparece no painel, para saber se está ouvindo)
+  const [diag, setDiag] = useState<{ state: EarState; level: number; heard: string; error: string }>({ state: "off", level: 0, heard: "", error: "" });
   const [clock, setClock] = useState(() => new Date());
   const [offline, setOffline] = useState(false);
 
@@ -64,11 +66,14 @@ export function CasaApp({ username, onExpired }: { username: string; onExpired: 
     if (!always || voice) return;
     const bg = new Ear((text) => {
       const [t, woke] = stripWake(text, CASA_WAKE);
+      setDiag((d) => ({ ...d, heard: text, error: woke ? "" : "sem “Ei, Titã” no começo: ignorei" }));
       if (!woke) return;
       setPending(t || ""); setVoice(true);
-    }, () => undefined, () => undefined, () => undefined);
+    }, (st) => setDiag((d) => ({ ...d, state: st })), (p) => p && setDiag((d) => ({ ...d, heard: p })),
+    (m) => setDiag((d) => ({ ...d, error: m })));
+    bg.onLevel = (v) => setDiag((d) => (Math.abs(d.level - v) > 0.02 ? { ...d, level: v } : d));
     void bg.continuous();
-    return () => bg.stop();
+    return () => { bg.stop(); setDiag((d) => ({ ...d, state: "off", level: 0 })); };
   }, [always, voice]);
   useEffect(() => {
     const f = () => setFull(!!document.fullscreenElement);
@@ -118,7 +123,7 @@ export function CasaApp({ username, onExpired }: { username: string; onExpired: 
               )}
             </div>
             <VoicePanel events={events} onOpen={() => { setPending(null); setVoice(true); }} always={always}
-              onAlways={() => setAlways(!always)} />
+              onAlways={() => setAlways(!always)} diag={diag} />
           </section>
         )}
         {tab === "cenas" && <Scenes scenes={scenes} devices={devices} onChanged={load} onError={fail} say={say} />}
@@ -210,7 +215,8 @@ function Control({ d, act, onClose }: { d: Device; act: (d: Device, a: Action) =
 
 // --- voz -----------------------------------------------------------------------------
 
-function VoicePanel({ events, onOpen, always, onAlways }: { events: CasaEvent[]; onOpen: () => void; always: boolean; onAlways: () => void }) {
+function VoicePanel({ events, onOpen, always, onAlways, diag }: { events: CasaEvent[]; onOpen: () => void; always: boolean;
+  onAlways: () => void; diag: { state: EarState; level: number; heard: string; error: string } }) {
   return (
     <div className="casa-panel casa-side">
       <div className="casa-lbl">voz</div>
@@ -220,6 +226,14 @@ function VoicePanel({ events, onOpen, always, onAlways }: { events: CasaEvent[];
       <button className={`casa-b ${always ? "p" : ""} casa-always`} onClick={onAlways} aria-pressed={always}>
         👂 ESCUTA CONTÍNUA: {always ? "LIGADA" : "DESLIGADA"}</button>
       {always && <div className="casa-hint">Ouvindo… é só dizer “Ei, Titã” e o pedido.</div>}
+      {always && (
+        <div className="casa-diag" aria-live="polite">
+          <div className="casa-meter" title="volume do microfone"><i style={{ width: `${Math.round(diag.level * 100)}%` }} /></div>
+          <div>MICROFONE: <b>{diag.state === "off" ? "DESLIGADO" : diag.state === "hearing" ? "OUVINDO VOCÊ" : diag.state === "thinking" ? "ENTENDENDO…" : "ESPERANDO FALA"}</b></div>
+          {diag.heard && <div>OUVI: “{diag.heard}”</div>}
+          {diag.error && <div className="bad">{diag.error}</div>}
+        </div>
+      )}
       <div className="casa-log">
         {events.slice(0, 8).map((e, i) => (
           <div key={i}>&gt; <i>{e.source}</i> · {e.scene ? `cena ${e.scene}` : e.device ?? "?"} … <b className={e.ok ? "" : "bad"}>

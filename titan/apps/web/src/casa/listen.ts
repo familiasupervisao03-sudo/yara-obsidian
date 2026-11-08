@@ -22,6 +22,8 @@ export class Ear {
   private oneShot = false;
   private noSpeechTimer: number | null = null;
 
+  /** volume do microfone (0..1), para mostrar na tela se ele está te ouvindo */
+  onLevel: (v: number) => void = () => undefined;
   constructor(private onText: (text: string) => void, private onState: (s: EarState) => void,
               private onPartial: (t: string) => void = () => undefined, private onError: (m: string) => void = () => undefined) {}
 
@@ -57,8 +59,11 @@ export class Ear {
     }
   }
 
+  private lastLevel = 0;
   private frame(f: AudioFrame): void {
     if (this.stopped) return;
+    const now = performance.now();
+    if (now - this.lastLevel > 120) { this.lastLevel = now; this.onLevel(Math.min(1, f.rms / 0.25)); }
     const ev = this.vad.process(f.rms, performance.now());
     if (!this.stt) {
       this.pre.push(f);
@@ -85,7 +90,8 @@ export class Ear {
       void stt.end().then((r) => {
         const text = (typeof r === "string" ? r : r.verdict === "noise" ? "" : r.text).trim();
         if (text) this.onText(text);
-      }).catch(() => this.onError("Não entendi o áudio. Tente de novo.")).finally(() => {
+        else this.onError("(ouvi um som, mas não deu para entender palavras)");
+      }).catch((e) => this.onError(`Reconhecimento de voz falhou: ${(e as Error)?.message || "sem resposta do notebook"}`)).finally(() => {
         this.busy = false;
         if (this.oneShot) this.stop();
         else if (!this.stopped) { duckEnd("ouvir"); this.onState("waiting"); }
