@@ -91,3 +91,5 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
   `CLAUDE.md` e este caderno · (todos, antes de dividir)
 - 2026-11-07 · CENTRAL · a conversa original passa a ser a CENTRAL (sessão claude/g-ayvaxj); prompts
   das conversas CASA e TITAN entregues ao Luiz · (só este caderno)
+- 2026-11-08 · CENTRAL · avisos do app Android com prioridade alta e visíveis na tela bloqueada (como
+  WhatsApp), ícone branco na barra; APKs titan 1.6 / casa 1.1 / central 1.1 · (`apps/android/app/**`, APKs)
