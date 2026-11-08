@@ -100,7 +100,7 @@ export function CasaApp({ username, onExpired }: { username: string; onExpired: 
           ))}
         </nav>
         <span className="casa-meta">LIGADOS <b>{on}</b></span>
-        <span className="casa-clock">{clock.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+        <span className="casa-clock">{clock.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}</span>
         <button className="casa-nb casa-full" onClick={toggleFull} title={full ? "Sair da tela cheia" : "Tela cheia"}
           aria-label={full ? "Sair da tela cheia" : "Tela cheia"}>{full ? "✕" : "⛶"}</button>
       </header>

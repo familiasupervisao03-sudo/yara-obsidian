@@ -57,3 +57,11 @@ test("Casa atende por Ei, Titã e Ei, Casa; Central só por Ei, Titã", () => {
   assert.deepEqual(stripWake("Ei, Casa, liga a luz"), ["Ei, Casa, liga a luz", false]);
   assert.deepEqual(stripWake("casamento amanhã", CASA_WAKE), ["casamento amanhã", false]);
 });
+
+import { brt } from "../src/central/brt.ts";
+
+test("relógio no horário de Brasília (UTC−3), qualquer que seja o fuso do aparelho", () => {
+  const t = brt(new Date(Date.UTC(2026, 10, 8, 17, 5, 9)));   // 17:05 UTC
+  assert.deepEqual([t.h, t.m, t.s, t.day, t.month, t.year, t.dow], [14, 5, 9, 8, 10, 2026, 0]); // 14:05, domingo
+  assert.equal(brt(new Date(Date.UTC(2026, 10, 9, 1, 30))).h, 22);  // virada do dia em UTC: ainda dia 8 às 22h
+});

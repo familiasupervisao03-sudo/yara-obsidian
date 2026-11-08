@@ -11,6 +11,7 @@ import { parseReminder, whenText } from "./reminder";
 import { Speaker } from "./speaker";
 import { Core, drawAlertChart, drawSpark, type CoreMode } from "./core";
 import { plain, stripWake } from "./wake";
+import { brt } from "./brt";
 
 const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 const MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -183,7 +184,8 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
   useEffect(() => { if (sparkRef.current && tel?.history) drawSpark(sparkRef.current, tel.history.cpu.filter((v): v is number => v !== null)); }, [tel]);
 
   // modo noite automático (23h–6h), acorda por 10 min com voz, toque ou alerta
-  const nightHour = now.getHours() >= NIGHT_FROM || now.getHours() < NIGHT_TO;
+  const bt = brt(now);  // horário de Brasília
+  const nightHour = bt.h >= NIGHT_FROM || bt.h < NIGHT_TO;
   const nightAuto = nightHour && Date.now() - nightAwake > 10 * 60_000 && overlay !== "brief" && overlay !== "mission";
   const showNight = overlay === "night" || (nightAuto && overlay === null && !alert);
 
@@ -368,8 +370,8 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
           </div>
 
           <div className="cx-card cx-clock"><div className="cx-lbl">tempo de bordo</div>
-            <div className="t">{p2(now.getHours())}:{p2(now.getMinutes())}<span>{p2(now.getSeconds())}</span></div>
-            <div className="d">{DIAS[now.getDay()]} · {now.getDate()} {MES[now.getMonth()]} {now.getFullYear()}</div></div>
+            <div className="t">{p2(bt.h)}:{p2(bt.m)}<span>{p2(bt.s)}</span></div>
+            <div className="d">{DIAS[bt.dow]} · {bt.day} {MES[bt.month]} {bt.year}</div></div>
 
           <div className="cx-card cx-wx"><div className="cx-lbl">condições externas{w?.city ? ` · ${w.city}` : ""}</div>
             {w && w.temp != null ? (<><WeatherIcon icon={w.icon} /><div><div className="temp">{w.temp}°</div>
@@ -440,7 +442,7 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
             <div className="s">{mission.label} · DIGA “SAIR” PARA ENCERRAR</div></div></div>}
 
         {showNight && <div className="cx-ov cx-night" onClick={() => { setNightAwake(Date.now()); setOverlay(null); }}>
-          <div className="t">{p2(now.getHours())}:{p2(now.getMinutes())}</div><div className="s">MODO NOITE · DIGA “EI, TITÃ” OU TOQUE PARA ACORDAR</div></div>}
+          <div className="t">{p2(bt.h)}:{p2(bt.m)}</div><div className="s">MODO NOITE · DIGA “EI, TITÃ” OU TOQUE PARA ACORDAR</div></div>}
 
         {ringing && <div className="cx-remind" role="alert">
           <div className="k">🔔 LEMBRETE</div><div className="v">{ringing.title}</div>
