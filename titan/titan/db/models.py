@@ -504,6 +504,8 @@ class TitanNote(TimestampMixin, Base):
     # Dia local (AAAA-MM-DD) + tipo: impede repetir o bom-dia no mesmo dia.
     day: Mapped[str] = mapped_column(String(10), nullable=False)
     delivered_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+    # Aparelhos que já mostraram esta mensagem (",web-ab12,web-cd34,"): cada um recebe a sua cópia.
+    delivered_to: Mapped[str] = mapped_column(String(400), nullable=False, default="", server_default="")
 
 
 # --- TITAN Casa: casas, aparelhos, cenas e registro de comandos (multi-casa) ----------

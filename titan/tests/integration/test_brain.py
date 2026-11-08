@@ -298,3 +298,26 @@ def test_chat_ai_receives_the_house(chat, monkeypatch):
     assert len(styles) >= 2
     assert all("Casa do dono" in st and "Luz do quarto" in st for st in styles[:2])
     assert "Nunca diga que não tem acesso à casa" in styles[1]
+
+
+def test_each_device_gets_its_own_copy_of_titan_messages(chat):
+    """O notebook mostrar a mensagem não "gasta" a do celular (cada aparelho recebe a sua)."""
+    c, cid, s, uid = chat
+    from titan.brain import proactive
+    from titan.db.engine import make_engine, make_session_factory
+
+    engine = make_engine(s.database_url)
+    with make_session_factory(engine).begin() as db:
+        proactive.post_note(db, uid, "lembrete", "Testar o TITAN", with_conversation=False)
+    engine.dispose()
+    note = c.get("/api/v1/brain/notes?device=web-notebook").json()
+    assert [n["body"] for n in note] == ["Testar o TITAN"]
+    c.post("/api/v1/brain/notes/delivered", json={"ids": [note[0]["id"]], "device": "web-notebook"}, headers=CSRF)
+    assert c.get("/api/v1/brain/notes?device=web-notebook").json() == []          # já mostrou no notebook
+    assert len(c.get("/api/v1/brain/notes?device=web-celular").json()) == 1        # o celular ainda recebe
+    assert len(c.get("/api/v1/brain/notes").json()) == 1                           # e o aviso em 2º plano do Android
+    # o app Android marca "everywhere": o aviso em segundo plano não repete no mesmo celular
+    c.post("/api/v1/brain/notes/delivered", json={"ids": [note[0]["id"]], "device": "web-celular", "everywhere": True},
+           headers=CSRF)
+    assert c.get("/api/v1/brain/notes").json() == [] and c.get("/api/v1/brain/notes?device=web-celular").json() == []
+    assert c.get("/api/v1/brain/notes?device=x y").status_code == 422

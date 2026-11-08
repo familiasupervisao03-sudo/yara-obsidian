@@ -146,7 +146,8 @@ export function Shell({ session, onLogout, onExpired }: {
         if (visible) setToast(n);
         else notify(n.title.replace(/^TITAN · /, ""), n.body, `titan-${n.kind}`, url);
       }
-      await brain.delivered(notes.map((n) => n.id));
+      // no app Android, marca também a entrega geral: o aviso em segundo plano não repete no celular
+      await brain.delivered(notes.map((n) => n.id), androidApp() !== null);
       setHomeVersion((v) => v + 1);
     } catch {
       /* sem mensagens agora */

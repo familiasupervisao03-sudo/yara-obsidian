@@ -766,6 +766,18 @@
       },
       "DeliveredIn": {
         "properties": {
+          "device": {
+            "default": "",
+            "maxLength": 40,
+            "pattern": "^[A-Za-z0-9_\\-]*$",
+            "title": "Device",
+            "type": "string"
+          },
+          "everywhere": {
+            "default": false,
+            "title": "Everywhere",
+            "type": "boolean"
+          },
           "ids": {
             "items": {
               "format": "uuid",
@@ -4748,6 +4760,7 @@
     },
     "/api/v1/brain/notes": {
       "get": {
+        "description": "Mensagens ainda não mostradas. Com ``device``, cada aparelho tem a sua lista (o notebook\nmostrar não \"gasta\" a mensagem do celular). Sem ``device`` (app Android antigo, em segundo\nplano), vale a entrega geral.",
         "operationId": "notes_api_v1_brain_notes_get",
         "parameters": [
           {
@@ -4758,6 +4771,18 @@
               "default": true,
               "title": "Pending",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "device",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 40,
+              "pattern": "^[A-Za-z0-9_\\-]*$",
+              "title": "Device",
+              "type": "string"
             }
           }
         ],

@@ -499,12 +499,23 @@ class NoteOut(BaseModel):
 
 class DeliveredIn(BaseModel):
     ids: list[uuid.UUID] = Field(max_length=100)
+    # aparelho que mostrou (cada um tem a sua cópia); everywhere=true também marca a entrega geral
+    # (usado pelo app Android, para o aviso em segundo plano não repetir no mesmo celular)
+    device: str = Field(default="", max_length=40, pattern=r"^[A-Za-z0-9_\-]*$")
+    everywhere: bool = False
 
 
 @router.get("/notes", response_model=list[NoteOut])
-def notes(pending: bool = True, cu: CurrentUser = Depends(current_user), db: DBSession = Depends(get_db)):
+def notes(pending: bool = True, device: str = Query(default="", max_length=40, pattern=r"^[A-Za-z0-9_\-]*$"),
+          cu: CurrentUser = Depends(current_user), db: DBSession = Depends(get_db)):
+    """Mensagens ainda não mostradas. Com ``device``, cada aparelho tem a sua lista (o notebook
+    mostrar não "gasta" a mensagem do celular). Sem ``device`` (app Android antigo, em segundo
+    plano), vale a entrega geral."""
     stmt = select(TitanNote).where(TitanNote.user_id == cu.user.id)
-    if pending:
+    if pending and device:
+        stmt = stmt.where(~TitanNote.delivered_to.contains(f",{device},"),
+                          TitanNote.created_at >= utcnow() - timedelta(hours=12))
+    elif pending:
         stmt = stmt.where(TitanNote.delivered_at.is_(None),
                           TitanNote.created_at >= utcnow() - timedelta(days=2))
     rows = db.scalars(stmt.order_by(TitanNote.created_at.desc()).limit(50))
@@ -515,7 +526,13 @@ def notes(pending: bool = True, cu: CurrentUser = Depends(current_user), db: DBS
 @router.post("/notes/delivered", status_code=204)
 def notes_delivered(body: DeliveredIn, cu: CurrentUser = Depends(current_user), db: DBSession = Depends(get_db)):
     for n in db.scalars(select(TitanNote).where(TitanNote.user_id == cu.user.id, TitanNote.id.in_(body.ids))):
-        n.delivered_at = n.delivered_at or utcnow()
+        if body.device:
+            seen = [d for d in (n.delivered_to or "").strip(",").split(",") if d]
+            if body.device not in seen:
+                seen = (seen + [body.device])[-12:]
+                n.delivered_to = "," + ",".join(seen) + ","
+        if not body.device or body.everywhere:
+            n.delivered_at = n.delivered_at or utcnow()
     return Response(status_code=204)
 
 

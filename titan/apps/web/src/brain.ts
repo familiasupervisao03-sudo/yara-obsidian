@@ -97,8 +97,9 @@ export const brain = {
   skip: (key: string) => req<void>("POST", `/questions/${key}/skip`),
   summarize: (conversationId: string) => req<Memory>("POST", `/conversations/${conversationId}/summary`),
   actions: (conversationId: string) => req<Record<string, Action[]>>("GET", `/conversations/${conversationId}/actions`),
-  notes: () => req<Note[]>("GET", "/notes"),
-  delivered: (ids: string[]) => req<void>("POST", "/notes/delivered", { ids }),
+  // cada aparelho recebe a sua cópia das mensagens (o notebook não "gasta" a do celular)
+  notes: () => req<Note[]>("GET", `/notes?device=${deviceId()}`),
+  delivered: (ids: string[], everywhere = false) => req<void>("POST", "/notes/delivered", { ids, device: deviceId(), everywhere }),
   prefs: () => req<BrainPrefs>("GET", "/prefs"),
   savePrefs: (p: BrainPrefs) => req<BrainPrefs>("PUT", "/prefs", p),
 };
@@ -120,4 +121,14 @@ export function fmtWhen(iso: string | null): string {
 /** "luiz" → "Luiz" (só para exibir). */
 export function displayName(username: string): string {
   return username ? username.charAt(0).toUpperCase() + username.slice(1) : username;
+}
+
+/** Identificador deste aparelho/navegador (fica guardado; não tem nada pessoal). */
+export function deviceId(): string {
+  const k = "titan.device";
+  try {
+    let v = localStorage.getItem(k);
+    if (!v) { v = `web-${Math.random().toString(36).slice(2, 10)}`; localStorage.setItem(k, v); }
+    return v;
+  } catch { return "web-sem-armazenamento"; }
 }
