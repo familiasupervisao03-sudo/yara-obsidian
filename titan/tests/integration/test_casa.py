@@ -368,5 +368,5 @@ def test_vocabulary_hint_has_device_names(settings, auth_client):
     engine = make_engine(settings.database_url)
     hint = casa_chat.vocabulary_hint(settings, make_session_factory(engine), uid)
     engine.dispose()
-    assert "Ei, Titã" in hint and "Ei, Casa" in hint and "Liga o Ventilador" in hint and "Dormir" in hint
-    assert len(hint) <= 600
+    assert hint.startswith("Glossário:") and "Titã" in hint and "Ventilador" in hint and "Dormir" in hint
+    assert "Liga" not in hint and len(hint) <= 400   # só nomes: nada de frases que virariam comandos

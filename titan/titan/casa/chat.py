@@ -115,18 +115,18 @@ def context_block(settings, session_factory, user_id: uuid.UUID) -> str:
 
 
 def vocabulary_hint(settings, session_factory, user_id: uuid.UUID) -> str:
-    """Frases de exemplo com os nomes desta casa, para o reconhecimento de voz acertar os nomes."""
-    base = ("Ei, Titã. Ei, Casa. Liga a luz. Desliga o ventilador. Cria um lembrete às 14h30. "
-            "Me lembra amanhã às 7 horas. Modo missão 25 minutos. Bom dia.")
+    """Lista de nomes desta casa para o reconhecimento de voz acertar ("Titã, Ventilador, ...").
+
+    É uma LISTA, não frases: com áudio fraco o Whisper às vezes devolve o próprio texto da dica;
+    frases prontas ("Liga a luz") virariam comandos que você não falou."""
     with session_factory() as db:
         home = casa.home_for(db, user_id, settings.casa_provider)
         names = [d.name for d in casa.devices(db, home, True)][:20]
         scenes = [s.name for s in casa.scenes(db, home)][:10]
-    parts = [base]
-    if names:
-        parts.append(" ".join(f"Liga o {n}. Desliga o {n}." for n in names[:8]))
-        if len(names) > 8:
-            parts.append("Aparelhos: " + ", ".join(names[8:]) + ".")
-    if scenes:
-        parts.append("Cenas: " + ", ".join(scenes) + ".")
-    return " ".join(parts)[:600]
+    words = ["Titã", "TITAN", "Casa", "Central", "lembrete"] + names + scenes
+    seen, out = set(), []
+    for w in words:
+        if w.lower() not in seen:
+            seen.add(w.lower())
+            out.append(w)
+    return ("Glossário: " + ", ".join(out) + ".")[:400]

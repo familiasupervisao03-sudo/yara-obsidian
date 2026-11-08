@@ -278,3 +278,18 @@ def test_vosk_hears_everything_when_groq_fails_without_live(make_settings, monke
     svc = make(make_settings, monkeypatch, boom)
     partial, t = run(svc, speech())
     assert partial == "" and t.engine == "vosk" and t.text == "texto do vosk" and "Groq" in t.note
+
+
+def test_transcript_that_copies_the_hint_is_ignored(make_settings, monkeypatch):
+    """Com áudio fraco, o Whisper pode devolver a própria dica: isso não é o que a pessoa falou."""
+    hint = "Glossário: Titã, TITAN, Casa, Central, lembrete, Ventilador, Nootebook, Luz."
+    svc = make(make_settings, monkeypatch, lambda wav, hint="": groq_reply("Titã, Casa, Ventilador, Nootebook, Luz."))
+    uid = uuid.uuid4()
+    sid = svc.sessions.open(uid, hint)
+    svc.sessions.feed(sid, uid, speech())
+    assert svc.sessions.finish(sid, uid).verdict == "noise"
+    svc = make(make_settings, monkeypatch, lambda wav, hint="": groq_reply("Liga o ventilador"))
+    sid = svc.sessions.open(uid, hint)
+    svc.sessions.feed(sid, uid, speech())
+    t = svc.sessions.finish(sid, uid)
+    assert t.verdict == "ok" and t.text == "Liga o ventilador"   # comando de verdade passa

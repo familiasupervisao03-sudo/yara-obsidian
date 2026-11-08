@@ -41,13 +41,11 @@ Mexa o mouse (ou toque) para aparecer a barra de controles; ela some sozinha.
 - **Modo leve** automático: se o notebook não aguentar as animações, a Central diminui sozinha.
   Forçar: `/central?leve=1` (ou `?leve=0`).
 
-## Palavras de ativação (uma para cada app)
+## Palavra de ativação
 
-- **TITAN Central** (TV): **"Ei, Titã"**.
-- **TITAN Casa** (tablet): **"Ei, Casa"**.
-
-Assim, com os dois ouvindo no mesmo quarto, um não responde pelo outro. Com a escuta contínua
-desligada (tocar no núcleo / Espaço), não precisa da palavra.
+- **"Ei, Titã"** na Central e no TITAN Casa (a Casa também aceita "Ei, Casa").
+  Separar uma palavra para cada app fica para depois.
+- Com a escuta contínua desligada (tocar no núcleo / Espaço), não precisa da palavra.
 
 ## Lembretes pela Central
 
@@ -64,7 +62,7 @@ o pedido vai para a IA do TITAN.
   20–30 quadros/s).
 - Com a Groq ligada, o Vosk **não roda mais ao vivo** (poupa o processador); só entra se a
   Groq falhar. Para ver o texto parcial mesmo assim: `TITAN_VOICE_LOCAL_PARTIALS=true`.
-- A Groq recebe uma **dica de vocabulário** com os nomes dos seus aparelhos e cenas: acerta mais.
+- A Groq recebe uma **lista de nomes** (aparelhos, cenas, "Titã") para acertar mais; se ela só devolver a lista (áudio fraco), a fala é ignorada.
 - Embaixo da resposta aparece quanto tempo levou cada etapa (**ouvir · pensar · voz**), para
   achar onde está a demora.
 - **⌨ Digitar** na barra de baixo: escreve o comando em vez de falar.

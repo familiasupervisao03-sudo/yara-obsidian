@@ -352,7 +352,18 @@ class GroqSTT:
         low = text.lower()
         if not text or (no_speech and min(no_speech) > 0.6) or any(h in low for h in self.HALLUCINATIONS):
             return Transcript("", None, "noise", self.name)
+        if hint and _echoes_hint(text, hint):  # devolveu a própria dica (áudio fraco): não é o que você falou
+            return Transcript("", None, "noise", self.name)
         return Transcript(text, conf, judge_transcript(text, []).verdict, self.name)
+
+
+def _echoes_hint(text: str, hint: str) -> bool:
+    import re as _re
+
+    def words(x: str) -> list[str]:
+        return _re.findall(r"\w+", x.lower())
+    t, h = words(text), set(words(hint))
+    return len(t) >= 2 and sum(w in h for w in t) / len(t) >= 0.8
 
 
 class XaiSTT(GroqSTT):

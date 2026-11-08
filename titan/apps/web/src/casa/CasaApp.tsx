@@ -183,7 +183,7 @@ function VoicePanel({ events, onOpen }: { events: CasaEvent[]; onOpen: () => voi
     <div className="casa-panel casa-side">
       <div className="casa-lbl">voz</div>
       <CoreOrb mode="idle" className="casa-core" onClick={onOpen} label="Falar com o TITAN Casa" />
-      <div className="casa-say">“EI, CASA…”</div>
+      <div className="casa-say">“EI, TITÃ…”</div>
       <div className="casa-hint">Toque no núcleo para falar (ou digitar) um comando.</div>
       <div className="casa-log">
         {events.slice(0, 8).map((e, i) => (
@@ -238,9 +238,9 @@ function VoiceOverlay({ onClose, onResult, onError }: { onClose: () => void; onR
   alwaysRef.current = always;
 
   const run = useCallback(async (raw: string, src: "voz" | "texto") => {
-    // o tablet atende por "Ei, Casa" (a Central na TV atende por "Ei, Titã": um não responde pelo outro)
+    // atende por "Ei, Titã" (e também "Ei, Casa")
     const [t, woke] = stripWake(raw, CASA_WAKE);
-    if (src === "voz" && alwaysRef.current && !woke) { setHeard(`“${raw}”`); setReply("(sem “Ei, Casa”: ignorei)"); return; }
+    if (src === "voz" && alwaysRef.current && !woke) { setHeard(`“${raw}”`); setReply("(sem “Ei, Titã”: ignorei)"); return; }
     if (!t) { setReply("Pode falar."); return; }
     setHeard(`“${t}”`); setReply("…"); setResult(null);
     try {
@@ -274,7 +274,7 @@ function VoiceOverlay({ onClose, onResult, onError }: { onClose: () => void; onR
       <CoreOrb className="casa-core big" label="Núcleo do TITAN Casa"
         mode={state === "hearing" ? "listen" : state === "thinking" ? "think" : talking ? "speak" : "idle"} />
       <p className="casa-state-line">{state === "hearing" ? "OUVINDO…" : state === "thinking" ? "ENTENDENDO…"
-        : state === "waiting" ? (always ? "ESCUTA CONTÍNUA · diga “Ei, Casa…”" : "PODE FALAR") : "MICROFONE DESLIGADO"}</p>
+        : state === "waiting" ? (always ? "ESCUTA CONTÍNUA · diga “Ei, Titã…”" : "PODE FALAR") : "MICROFONE DESLIGADO"}</p>
       <div className="casa-you">{heard}</div>
       <div className="casa-reply" aria-live="polite">{reply}</div>
       {result && (
@@ -292,7 +292,7 @@ function VoiceOverlay({ onClose, onResult, onError }: { onClose: () => void; onR
       </form>
       <div className="casa-chips">{EXAMPLES.map((c) => <button key={c} className="casa-chip" onClick={() => void run(c, "texto")}>{c}</button>)}</div>
       <label className="casa-check"><input type="checkbox" checked={always} onChange={toggleAlways} />
-        Escuta contínua: fica ouvindo e só obedece quando você diz “Ei, Casa”</label>
+        Escuta contínua: fica ouvindo e só obedece quando você diz “Ei, Titã”</label>
       <button className="casa-b" onClick={onClose}>FECHAR</button>
     </div>
   );

@@ -50,9 +50,9 @@ function plainCmp(s: string) { return s.normalize("NFD").replace(/[̀-ͯ]/g, "")
 
 import { CASA_WAKE } from "../src/central/wake.ts";
 
-test("cada app com a sua palavra: Central = Ei, Titã · Casa = Ei, Casa", () => {
+test("Casa atende por Ei, Titã e Ei, Casa; Central só por Ei, Titã", () => {
   assert.deepEqual(stripWake("Ei, Casa, liga a luz", CASA_WAKE), ["liga a luz", true]);
-  assert.deepEqual(stripWake("Ei, Titã, liga a luz", CASA_WAKE), ["Ei, Titã, liga a luz", false]);
+  assert.deepEqual(stripWake("Ei, Titã, liga a luz", CASA_WAKE), ["liga a luz", true]);
   assert.deepEqual(stripWake("Ei, Casa, liga a luz"), ["Ei, Casa, liga a luz", false]);
   assert.deepEqual(stripWake("casamento amanhã", CASA_WAKE), ["casamento amanhã", false]);
 });

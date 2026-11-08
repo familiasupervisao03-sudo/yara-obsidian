@@ -5,10 +5,10 @@ export function plain(t: string): string {
   return t.split("").map((ch) => ch.normalize("NFD")[0]).join("").toLowerCase();
 }
 
-// Cada app tem a sua palavra, para um não responder no lugar do outro:
-//   TITAN Central → "Ei, Titã"     TITAN Casa (tablet) → "Ei, Casa"
+// Palavra de ativação: "Ei, Titã" (Central e Casa). A Casa também aceita "Ei, Casa".
+// (Separar uma palavra para cada app fica para depois.)
 export const CENTRAL_WAKE = ["titan", "tita", "tito"];
-export const CASA_WAKE = ["casa"];
+export const CASA_WAKE = ["titan", "tita", "tito", "casa"];
 
 /** "Ei, Titã, liga a luz" → ["liga a luz", true]; "liga a luz" → ["liga a luz", false]. */
 export function stripWake(t: string, names: string[] = CENTRAL_WAKE): [string, boolean] {
