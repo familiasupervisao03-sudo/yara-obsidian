@@ -99,3 +99,6 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
 - 2026-11-08 · CENTRAL · diagnóstico dos avisos no app (Sistema → Avisos, botão Testar aviso, pede para
   ligar avisos ao abrir); login renovado com o uso (12 h sem uso, máx. 30 dias); APKs titan 1.8 / casa 1.3 /
   central 1.3 · (`titan/auth/service.py`, `routers/auth.py`, `apps/android/app/**`, APKs)
+- 2026-11-08 · CENTRAL · Voz → "O que eu ouvi" (últimas 6 falas por conta, texto + áudio, só na memória
+  30 min; rotas /voice/heard) para diagnosticar o reconhecimento · (`titan/voice/engines.py`,
+  `routers/voice.py`, openapi)

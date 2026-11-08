@@ -2,7 +2,8 @@
 se autorizada, a voz natural on-line).
 
 O áudio chega como PCM 16 bits mono 16 kHz, é processado em memória e
-descartado. Nada é gravado em disco nem em logs. Uma transcrição é apenas
+descartado. Nada é gravado em disco nem em logs. ("O que eu ouvi": as últimas 6 falas de
+cada conta ficam SÓ na memória por até 30 min, para o dono conferir; somem ao reiniciar.) Uma transcrição é apenas
 texto do usuário: não autoriza nenhuma ação (aprovações continuam exigindo a
 interface).
 """
@@ -136,7 +137,7 @@ async def stt_finish(session_id: str, cu: CurrentUser = Depends(current_user),
 
     try:
         # Pode chamar a Groq (rede): fora do laço de eventos.
-        t = await run_in_threadpool(ctx.voice.sessions.finish, session_id, cu.user.id)
+        t, pcm = await run_in_threadpool(ctx.voice.sessions.finish_with_audio, session_id, cu.user.id)
     except KeyError:
         return _err(404, "not_found", "Sessão de reconhecimento expirada ou inexistente.")
     except VoiceUnavailable as exc:
@@ -144,8 +145,55 @@ async def stt_finish(session_id: str, cu: CurrentUser = Depends(current_user),
     with ctx.session_factory() as db:
         corrections = user_prefs.get(db, cu.user.id)["corrections"]
     text, applied = user_prefs.apply_corrections(t.text, corrections) if t.verdict != "noise" else (t.text, [])
+    ctx.voice.sessions.remember(cu.user.id, pcm, t, text)
     return SttTextOut(text=text, final=True, confidence=t.confidence, verdict=t.verdict,
                       corrections=applied, engine=t.engine, note=t.note)
+
+
+class HeardOut(BaseModel):
+    id: str
+    at: float
+    engine: str
+    text: str
+    final_text: str
+    verdict: str
+    confidence: Optional[float] = None
+    note: str = ""
+    seconds: float
+    level: int
+
+
+@router.get("/heard", response_model=list[HeardOut])
+def heard(cu: CurrentUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
+    """"O que eu ouvi": as últimas falas DESTA conta (mais nova primeiro), sem o áudio."""
+    return [HeardOut(**{k: v for k, v in e.items() if k != "pcm"})
+            for e in reversed(ctx.voice.sessions.heard(cu.user.id))]
+
+
+@router.get("/heard/{heard_id}/audio", responses={200: {"content": {"audio/wav": {}}}, 404: {"model": ErrorResponse}})
+def heard_audio(heard_id: str, cu: CurrentUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
+    """O áudio de uma fala (só da própria conta), para escutar como chegou ao notebook."""
+    import io
+    import wave
+
+    from titan.voice.engines import SAMPLE_RATE
+
+    for e in ctx.voice.sessions.heard(cu.user.id):
+        if e["id"] == heard_id:
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(SAMPLE_RATE)
+                w.writeframes(e["pcm"])
+            return Response(buf.getvalue(), media_type="audio/wav", headers={"Cache-Control": "no-store"})
+    return _err(404, "not_found", "Fala não encontrada (some depois de 30 min ou ao reiniciar).")
+
+
+@router.delete("/heard", status_code=204)
+def heard_clear(cu: CurrentUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)) -> Response:
+    ctx.voice.sessions.forget(cu.user.id)
+    return Response(status_code=204)
 
 
 @router.delete("/stt/sessions/{session_id}", status_code=204)

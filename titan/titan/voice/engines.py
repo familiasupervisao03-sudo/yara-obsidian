@@ -462,6 +462,9 @@ class SttSessions:
         self.max_bytes = max_seconds * SAMPLE_RATE * 2
         self._sessions: dict[str, SttSession] = {}
         self._lock = threading.Lock()
+        # "O que eu ouvi": as últimas falas de cada conta (texto + áudio), SÓ na memória,
+        # por no máximo HEARD_MINUTES; servem para conferir se o áudio chega bom.
+        self._heard: dict[uuid.UUID, list[dict]] = {}
 
     def _expire(self) -> None:
         now = time.monotonic()
@@ -483,7 +486,7 @@ class SttSessions:
         sid = uuid.uuid4().hex
         with self._lock:
             self._sessions[sid] = SttSession(sid, user_id, rec,
-                                             pcm=bytearray() if self.cloud is not None else None,
+                                             pcm=bytearray(),  # guardado para "o que eu ouvi"
                                              hint=hint, local_live=self.cloud is None or self.local_partials)
         return sid
 
@@ -518,7 +521,33 @@ class SttSessions:
         partial = json.loads(s.recognizer.PartialResult()).get("partial", "").strip()
         return " ".join([*s.finals, partial]).strip()
 
-    def finish(self, sid: str, user_id: uuid.UUID) -> Transcript:
+    HEARD_KEEP = 6
+    HEARD_MINUTES = 30
+
+    def remember(self, user_id: uuid.UUID, pcm: bytes, t: "Transcript", final_text: str) -> None:
+        entry = {"id": uuid.uuid4().hex, "at": time.time(), "engine": t.engine, "text": t.text,
+                 "final_text": final_text, "verdict": t.verdict, "confidence": t.confidence, "note": t.note,
+                 "seconds": round(len(pcm) / (SAMPLE_RATE * 2), 1), "level": round(speech_level(pcm)) if pcm else 0,
+                 "pcm": pcm}
+        with self._lock:
+            items = [e for e in self._heard.get(user_id, []) if time.time() - e["at"] < self.HEARD_MINUTES * 60]
+            self._heard[user_id] = (items + [entry])[-self.HEARD_KEEP:]
+
+    def heard(self, user_id: uuid.UUID) -> list[dict]:
+        with self._lock:
+            items = [e for e in self._heard.get(user_id, []) if time.time() - e["at"] < self.HEARD_MINUTES * 60]
+            self._heard[user_id] = items
+            return list(items)
+
+    def forget(self, user_id: uuid.UUID) -> None:
+        with self._lock:
+            self._heard.pop(user_id, None)
+
+    def finish(self, sid: str, user_id: uuid.UUID) -> "Transcript":
+        return self.finish_with_audio(sid, user_id)[0]
+
+    def finish_with_audio(self, sid: str, user_id: uuid.UUID) -> tuple["Transcript", bytes]:
+        """Devolve (transcrição, áudio da fala)."""
         s = self._get(sid, user_id)
         with self._lock:
             self._sessions.pop(sid, None)
@@ -542,18 +571,18 @@ class SttSessions:
 
         if self.cloud is not None:
             if len(pcm) < MIN_SPEECH_SECONDS * SAMPLE_RATE * 2 or speech_level(pcm) < MIN_SPEECH_LEVEL:
-                return Transcript("", None, "noise", self.cloud.name)  # silêncio: nada é enviado
+                return (Transcript("", None, "noise", self.cloud.name)), pcm  # silêncio: nada é enviado
             try:
-                return self.cloud.transcribe(pcm, s.hint)
+                return (self.cloud.transcribe(pcm, s.hint)), pcm
             except VoiceUnavailable as exc:
                 log.warning("Reconhecimento on-line falhou, usando o Vosk: %s", exc)
                 local = local_result()
                 if local is None:
                     raise
                 local.note = str(exc)
-                return local
+                return (local), pcm
         local = local_result()
-        return local if local is not None else Transcript("", None, "noise")
+        return (local if local is not None else Transcript("", None, "noise")), pcm
 
     def cancel(self, sid: str, user_id: uuid.UUID) -> None:
         with self._lock:

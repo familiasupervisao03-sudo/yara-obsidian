@@ -1627,6 +1627,70 @@
         "title": "HealthOut",
         "type": "object"
       },
+      "HeardOut": {
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "number"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          },
+          "final_text": {
+            "title": "Final Text",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "verdict": {
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "engine",
+          "text",
+          "final_text",
+          "verdict",
+          "seconds",
+          "level"
+        ],
+        "title": "HeardOut",
+        "type": "object"
+      },
       "HomeOut": {
         "properties": {
           "continue_conversation": {
@@ -8030,6 +8094,126 @@
           }
         },
         "summary": "Duck",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
+    "/api/v1/voice/heard": {
+      "delete": {
+        "operationId": "heard_clear_api_v1_voice_heard_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Heard Clear",
+        "tags": [
+          "voice"
+        ]
+      },
+      "get": {
+        "description": "\"O que eu ouvi\": as últimas falas DESTA conta (mais nova primeiro), sem o áudio.",
+        "operationId": "heard_api_v1_voice_heard_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HeardOut"
+                  },
+                  "title": "Response Heard Api V1 Voice Heard Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Heard",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
+    "/api/v1/voice/heard/{heard_id}/audio": {
+      "get": {
+        "description": "O áudio de uma fala (só da própria conta), para escutar como chegou ao notebook.",
+        "operationId": "heard_audio_api_v1_voice_heard__heard_id__audio_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "heard_id",
+            "required": true,
+            "schema": {
+              "title": "Heard Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "audio/wav": {}
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Heard Audio",
         "tags": [
           "voice"
         ]

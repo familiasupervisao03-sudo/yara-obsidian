@@ -6,6 +6,7 @@ import type { VoiceMetrics, VoiceState } from "../voice/session";
 import type { CorrectionSuggestion } from "../voice/corrections";
 import type { TtsEngine } from "../voice/player";
 import { Icon } from "./icons";
+import { HeardPanel } from "./HeardPanel";
 import { androidApp } from "../notify";
 import { duckEnd, duckStart } from "../voice/duck";
 import { fmtWhen, type Action } from "../brain";
@@ -317,6 +318,8 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
         </label>
       </div>
 
+      <HeardPanel />
+
       <details className="panel">
         <summary>Configurações e privacidade</summary>
         <fieldset disabled={active}>
@@ -362,7 +365,7 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
             Revisar o texto antes de enviar
           </label>
         </fieldset>
-        <p className="small muted">Voz em uso: {ttsEngineLabel}. Áudio não é gravado; é processado e descartado.</p>
+        <p className="small muted">Voz em uso: {ttsEngineLabel}. Áudio não vai para o disco: só as últimas falas ficam na memória do notebook por até 30 min ("O que eu ouvi").</p>
         <ul className="small muted">{status?.notes.map((n) => <li key={n}>{n}</li>)}</ul>
       </details>
 

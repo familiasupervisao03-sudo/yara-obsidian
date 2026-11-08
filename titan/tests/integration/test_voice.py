@@ -351,3 +351,29 @@ def test_users_corrections_are_applied_and_reported(settings, monkeypatch):
         sid = b.post("/api/v1/voice/stt/sessions", headers=CSRF).json()["session_id"]
         r = b.post(f"/api/v1/voice/stt/sessions/{sid}/finish", headers=CSRF).json()
         assert r["text"] == "a bia lista de tarefas pro tita" and r["corrections"] == []
+
+
+def test_heard_list_and_audio_are_private(settings, monkeypatch):
+    """"O que eu ouvi": cada conta vê e escuta só as próprias falas (só em memória)."""
+    from titan.voice import engines
+
+    monkeypatch.setattr(engines.VoskSTT, "recognizer", lambda self: FakeRecognizer())
+    create_user(settings, "alice")
+    create_user(settings, "bob")
+    with build_client(settings) as a, build_client(settings) as b:
+        login(a, "alice")
+        login(b, "bob")
+        sid = a.post("/api/v1/voice/stt/sessions", headers=CSRF).json()["session_id"]
+        a.post(f"/api/v1/voice/stt/sessions/{sid}/audio", content=b"\x10\x00" * 16000,
+               headers={**CSRF, "Content-Type": "application/octet-stream"})
+        a.post(f"/api/v1/voice/stt/sessions/{sid}/finish", headers=CSRF)
+        items = a.get("/api/v1/voice/heard").json()
+        assert len(items) == 1 and items[0]["engine"] == "vosk" and items[0]["seconds"] == 1.0
+        assert "pcm" not in items[0]
+        hid = items[0]["id"]
+        r = a.get(f"/api/v1/voice/heard/{hid}/audio")
+        assert r.status_code == 200 and r.headers["content-type"] == "audio/wav" and r.content[:4] == b"RIFF"
+        assert b.get("/api/v1/voice/heard").json() == []
+        assert b.get(f"/api/v1/voice/heard/{hid}/audio").status_code == 404
+        assert a.delete("/api/v1/voice/heard", headers=CSRF).status_code == 204
+        assert a.get("/api/v1/voice/heard").json() == []
