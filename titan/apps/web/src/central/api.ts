@@ -53,18 +53,25 @@ export const central = {
 interface Msg { id: string; role: string; content: string }
 interface PostResult { reply: Msg | null; model: { available: boolean; reason?: string | null; detail?: string } }
 let convId: string | null = null;
-async function centralConversation(): Promise<string> {
-  if (!convId) {
+const convIds: Record<string, string> = {};
+/** Conversa do TITAN usada por um app (Central ou Casa): uma para cada, achada pelo título. */
+async function appConversation(title: string): Promise<string> {
+  if (!convIds[title]) {
     const list = await req<{ items: { id: string; title: string }[] }>("GET", "/api/v1/conversations");
-    convId = list.items.find((c) => c.title === "TITAN Central")?.id
-      ?? (await req<{ id: string }>("POST", "/api/v1/conversations", { title: "TITAN Central" })).id;
+    convIds[title] = list.items.find((c) => c.title === title)?.id
+      ?? (await req<{ id: string }>("POST", "/api/v1/conversations", { title })).id;
   }
+  return convIds[title];
+}
+async function centralConversation(): Promise<string> {
+  convId = await appConversation("TITAN Central");
   return convId;
 }
 
 /** Pergunta ao TITAN e recebe a resposta aos pedaços (onDelta) — para começar a falar logo. */
-export async function askTitanStream(text: string, onDelta: (t: string) => void, signal?: AbortSignal): Promise<string> {
-  const chat = new StreamingChat(centralConversation, "voice");
+export async function askTitanStream(text: string, onDelta: (t: string) => void, signal?: AbortSignal,
+                                     title = "TITAN Central"): Promise<string> {
+  const chat = new StreamingChat(() => appConversation(title), "voice");
   const rid = `central-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   try {
     const r = await chat.send(text, rid, signal ?? new AbortController().signal, onDelta);

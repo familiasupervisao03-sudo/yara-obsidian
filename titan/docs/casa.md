@@ -48,6 +48,15 @@ funcionar com erro de permissão, é isso. Para vender em escala, contrata-se o 
 
 Voltar para a demonstração: `.venv/bin/titan disable-tuya`.
 
+## Escuta contínua, conversa e tela cheia
+
+- **👂 ESCUTA CONTÍNUA** (no painel, ao lado do núcleo): a Casa fica ouvindo mesmo com a janela de
+  voz fechada. Diga **"Ei, Titã"** e o pedido ("Ei, Titã, liga o ventilador"): ela abre sozinha e faz.
+  Falas sem "Ei, Titã" são ignoradas. A escolha fica salva.
+- **Conversa normal:** o que não for comando da casa vai para a IA do TITAN (conversa "TITAN Casa")
+  e a resposta é falada. Também cria lembretes ("me lembra às 14:30 de...").
+- **⛶** no topo: tela cheia (✕ sai).
+
 ## Nomes e voz
 
 - O nome que você deu no app (Smart Life) vira o nome sugerido e apelido de voz.

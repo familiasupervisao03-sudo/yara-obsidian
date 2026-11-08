@@ -9,6 +9,10 @@ import { Ear, type EarState } from "./listen";
 import { duckEnd, duckStart } from "../voice/duck";
 import { CoreOrb } from "../central/CoreOrb";
 import { CASA_WAKE, stripWake } from "../central/wake";
+import { askTitanStream, createReminder } from "../central/api";
+import { parseReminder, whenText } from "../central/reminder";
+import { Speaker } from "../central/speaker";
+import { SpeechSegmenter } from "../voice/segmenter";
 
 type Tab = "painel" | "cenas" | "ajustes";
 const EXAMPLES = ["Ei Titã, liga a luz do quarto", "desliga o ventilador", "põe o ar em 22", "luz em 30%",
@@ -23,6 +27,10 @@ export function CasaApp({ username, onExpired }: { username: string; onExpired: 
   const [toast, setToast] = useState<string | null>(null);
   const [control, setControl] = useState<string | null>(null);
   const [voice, setVoice] = useState(false);
+  const [pending, setPending] = useState<string | null>(null);  // o que foi dito junto do "Ei, Titã"
+  const [always, setAlwaysState] = useState(() => { try { return localStorage.getItem("titan.casa.sempre") === "1"; } catch { return false; } });
+  const setAlways = (v: boolean) => { setAlwaysState(v); try { localStorage.setItem("titan.casa.sempre", v ? "1" : "0"); } catch { /* ignora */ } };
+  const [full, setFull] = useState(false);
   const [clock, setClock] = useState(() => new Date());
   const [offline, setOffline] = useState(false);
 
@@ -50,6 +58,26 @@ export function CasaApp({ username, onExpired }: { username: string; onExpired: 
     catch (e) { upsert(d); fail(e); }
   };
 
+  // Escuta contínua com a janela de voz FECHADA: ouve sempre; quando a frase começa com
+  // "Ei, Titã", abre a janela e já faz o pedido.
+  useEffect(() => {
+    if (!always || voice) return;
+    const bg = new Ear((text) => {
+      const [t, woke] = stripWake(text, CASA_WAKE);
+      if (!woke) return;
+      setPending(t || ""); setVoice(true);
+    }, () => undefined, () => undefined, () => undefined);
+    void bg.continuous();
+    return () => bg.stop();
+  }, [always, voice]);
+  useEffect(() => {
+    const f = () => setFull(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", f); return () => document.removeEventListener("fullscreenchange", f);
+  }, []);
+  const toggleFull = () => {
+    (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => undefined);
+  };
+
   const on = devices.filter((d) => d.state.on).length;
   return (
     <div className="casa">
@@ -68,6 +96,8 @@ export function CasaApp({ username, onExpired }: { username: string; onExpired: 
         </nav>
         <span className="casa-meta">LIGADOS <b>{on}</b></span>
         <span className="casa-clock">{clock.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+        <button className="casa-nb casa-full" onClick={toggleFull} title={full ? "Sair da tela cheia" : "Tela cheia"}
+          aria-label={full ? "Sair da tela cheia" : "Tela cheia"}>{full ? "✕" : "⛶"}</button>
       </header>
 
       <main className="casa-main">
@@ -87,7 +117,8 @@ export function CasaApp({ username, onExpired }: { username: string; onExpired: 
                 </div>
               )}
             </div>
-            <VoicePanel events={events} onOpen={() => setVoice(true)} />
+            <VoicePanel events={events} onOpen={() => { setPending(null); setVoice(true); }} always={always}
+              onAlways={() => setAlways(!always)} />
           </section>
         )}
         {tab === "cenas" && <Scenes scenes={scenes} devices={devices} onChanged={load} onError={fail} say={say} />}
@@ -97,7 +128,8 @@ export function CasaApp({ username, onExpired }: { username: string; onExpired: 
       {control && devices.find((d) => d.id === control) && (
         <Control d={devices.find((d) => d.id === control)!} act={act} onClose={() => setControl(null)} />
       )}
-      {voice && <VoiceOverlay onClose={() => setVoice(false)} onResult={() => load()} onError={fail} />}
+      {voice && <VoiceOverlay onClose={() => { setVoice(false); setPending(null); }} onResult={() => load()} onError={fail}
+        initial={pending} always={always} setAlways={setAlways} />}
       {toast && <div className="casa-toast" role="status">{toast}</div>}
     </div>
   );
@@ -178,13 +210,16 @@ function Control({ d, act, onClose }: { d: Device; act: (d: Device, a: Action) =
 
 // --- voz -----------------------------------------------------------------------------
 
-function VoicePanel({ events, onOpen }: { events: CasaEvent[]; onOpen: () => void }) {
+function VoicePanel({ events, onOpen, always, onAlways }: { events: CasaEvent[]; onOpen: () => void; always: boolean; onAlways: () => void }) {
   return (
     <div className="casa-panel casa-side">
       <div className="casa-lbl">voz</div>
       <CoreOrb mode="idle" className="casa-core" onClick={onOpen} label="Falar com o TITAN Casa" />
       <div className="casa-say">“EI, TITÃ…”</div>
-      <div className="casa-hint">Toque no núcleo para falar (ou digitar) um comando.</div>
+      <div className="casa-hint">Toque no núcleo para falar (ou digitar). Pode mandar na casa e conversar.</div>
+      <button className={`casa-b ${always ? "p" : ""} casa-always`} onClick={onAlways} aria-pressed={always}>
+        👂 ESCUTA CONTÍNUA: {always ? "LIGADA" : "DESLIGADA"}</button>
+      {always && <div className="casa-hint">Ouvindo… é só dizer “Ei, Titã” e o pedido.</div>}
       <div className="casa-log">
         {events.slice(0, 8).map((e, i) => (
           <div key={i}>&gt; <i>{e.source}</i> · {e.scene ? `cena ${e.scene}` : e.device ?? "?"} … <b className={e.ok ? "" : "bad"}>
@@ -225,41 +260,72 @@ async function speak(text: string) {
   }
 }
 
-function VoiceOverlay({ onClose, onResult, onError }: { onClose: () => void; onResult: () => void; onError: (e: unknown) => void }) {
+const speaker = new Speaker(() => true);
+
+function VoiceOverlay({ onClose, onResult, onError, initial, always, setAlways }: {
+  onClose: () => void; onResult: () => void; onError: (e: unknown) => void;
+  initial: string | null; always: boolean; setAlways: (v: boolean) => void;
+}) {
   const [state, setState] = useState<EarState>("off");
   const [heard, setHeard] = useState("");
   const [reply, setReply] = useState("Toque em FALAR, ou digite um comando.");
   const [result, setResult] = useState<CommandResult | null>(null);
   const [text, setText] = useState("");
   const [talking, setTalking] = useState(false);
-  const [always, setAlways] = useState(() => localStorage.getItem("titan.casa.sempre") === "1");
   const ear = useRef<Ear | null>(null);
   const alwaysRef = useRef(always);
   alwaysRef.current = always;
 
-  const run = useCallback(async (raw: string, src: "voz" | "texto") => {
+  const run = useCallback(async (raw: string, src: "voz" | "texto", woken = false) => {
     // atende por "Ei, Titã" (e também "Ei, Casa")
-    const [t, woke] = stripWake(raw, CASA_WAKE);
+    const [t, woke] = woken ? [raw.trim(), true] : stripWake(raw, CASA_WAKE);
     if (src === "voz" && alwaysRef.current && !woke) { setHeard(`“${raw}”`); setReply("(sem “Ei, Titã”: ignorei)"); return; }
     if (!t) { setReply("Pode falar."); return; }
     setHeard(`“${t}”`); setReply("…"); setResult(null);
+    speaker.stop();
     try {
       const r = await casa.command(t, src, false);
-      setResult(r); setReply(r.reply); onResult();
-      setTalking(true); void speak(r.reply).finally(() => setTalking(false));
-    } catch (e) { onError(e); setReply("Não consegui agora."); }
+      if (r.understood) {
+        setResult(r); setReply(r.reply); onResult();
+        setTalking(true); void speak(r.reply).finally(() => setTalking(false));
+        return;
+      }
+      // lembrete com hora: "me lembra às 14:30 de..."
+      const rem = parseReminder(t);
+      if (rem) {
+        await createReminder(rem.title, rem.due);
+        const msg = `Lembrete criado: ${rem.title}, ${whenText(rem.due)}.`;
+        setReply(msg); setTalking(true); void speak(msg).finally(() => setTalking(false));
+        return;
+      }
+      // conversa normal: vai para a IA do TITAN e a resposta é falada frase a frase
+      const seg = new SpeechSegmenter();
+      let acc = "";
+      setTalking(true);
+      const full = await askTitanStream(t, (d) => {
+        acc += d; setReply(acc);
+        for (const sg of seg.push(d)) speaker.say(sg.text);
+      }, undefined, "TITAN Casa");
+      for (const sg of seg.flush()) speaker.say(sg.text);
+      if (!acc && full) { setReply(full); speaker.say(full); }
+      await speaker.done();
+      setTalking(false);
+    } catch (e) { onError(e); setReply("Não consegui agora."); setTalking(false); }
   }, [onError, onResult]);
 
   useEffect(() => {
     ear.current = new Ear((t) => void run(t, "voz"), setState, (p) => p && setHeard(`“${p}”`), (m) => setReply(m));
-    if (always) void ear.current.continuous(); else void ear.current.once();
-    return () => ear.current?.stop();
+    if (initial !== null) {
+      // aberto pelo "Ei, Titã" com a janela fechada: já faz o pedido (ou espera a próxima fala)
+      if (initial) void run(initial, "voz", true).finally(() => { if (always) void ear.current?.continuous(); });
+      else void ear.current.once();
+    } else if (always) void ear.current.continuous(); else void ear.current.once();
+    return () => { ear.current?.stop(); speaker.stop(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const toggleAlways = () => {
     const v = !always;
     setAlways(v);
-    try { localStorage.setItem("titan.casa.sempre", v ? "1" : "0"); } catch { /* ignora */ }
     if (v) void ear.current?.continuous(); else ear.current?.stop();
   };
   const undo = async () => {

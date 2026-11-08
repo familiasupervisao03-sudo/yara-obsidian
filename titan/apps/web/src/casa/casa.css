@@ -152,3 +152,6 @@ select.casa-inp { min-width: 140px; }
 .casa-core { display: block; width: 190px; height: 176px; margin: 6px auto 0; cursor: pointer; }
 .casa-core.big { width: 300px; height: 278px; margin: 0 auto; cursor: default; }
 @media (max-width: 700px) { .casa-core.big { width: 220px; height: 204px; } }
+
+.casa-full { font-size: 18px; min-width: 44px; }
+.casa-always { margin: 10px auto 0; display: block; width: 100%; }
