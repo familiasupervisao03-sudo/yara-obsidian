@@ -9,6 +9,11 @@ interface AndroidBridge {
   canNotify(): boolean;
   askNotify(): void;
   notify(title: string, body: string, path: string): void;
+  // app 1.8+: diagnóstico dos avisos
+  notifyStatus?(): string;
+  testNotify?(): void;
+  openNotifySettings?(): void;
+  openBatterySettings?(): void;
 }
 
 export function androidApp(): AndroidBridge | null {

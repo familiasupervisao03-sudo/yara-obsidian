@@ -51,6 +51,15 @@ public final class Reminders extends BroadcastReceiver {
         p.edit().putString(KEY_JSON, json).putStringSet(KEY_IDS, ids).apply();
     }
 
+    /** Teste: um lembrete daqui a ``ms`` milissegundos, agendado só no celular. */
+    static void testIn(Context c, long ms) {
+        AlarmManager am = c.getSystemService(AlarmManager.class);
+        PendingIntent pi = pending(c, "teste-titan", "Teste: este aviso veio com o app fechado. Está funcionando!", true);
+        long at = System.currentTimeMillis() + ms;
+        if (Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+        else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+    }
+
     /** Agenda só se a lista mudou (a checagem roda a cada minuto). */
     static void scheduleIfChanged(Context c, String json) {
         String old = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_JSON, null);

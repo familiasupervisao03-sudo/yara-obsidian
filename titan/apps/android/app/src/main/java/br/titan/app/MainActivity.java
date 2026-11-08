@@ -2,7 +2,9 @@ package br.titan.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlarmManager;
 import android.app.AlertDialog;
+import android.app.NotificationManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -75,10 +77,57 @@ public class MainActivity extends Activity {
         } else {
             NotesJob.ensure(this);
             LiveService.start(this);   // recebe mensagens com o app fechado, como o WhatsApp
+            ensureNotifications();
         }
         if (askConfigLink(getIntent())) return;
         if (server == null) showSetup(null);
         else openTitan(pathFor(getIntent()));
+    }
+
+    boolean notificationsOn() {
+        boolean perm = Build.VERSION.SDK_INT < 33
+                || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+        return perm && getSystemService(NotificationManager.class).areNotificationsEnabled();
+    }
+
+    boolean batteryFree() {
+        android.os.PowerManager pm = getSystemService(android.os.PowerManager.class);
+        return pm.isIgnoringBatteryOptimizations(getPackageName());
+    }
+
+    void openNotificationSettings() {
+        try {
+            Intent i = new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName());
+            startActivity(i);
+        } catch (Exception e) {
+            openAppSettings();
+        }
+    }
+
+    void openAppSettings() {
+        try {
+            startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + getPackageName())));
+        } catch (Exception ignored) { /* sem tela de configurações */ }
+    }
+
+    /** Ao abrir: se os avisos estão desligados, pede para ligar (sem isso nada chega). */
+    private void ensureNotifications() {
+        if (notificationsOn()) return;
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                && !getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean("asked_notify", false)) {
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean("asked_notify", true).apply();
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 11);
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Avisos do TITAN desligados")
+                .setMessage("Sem isso os lembretes e mensagens não aparecem na tela nem com o celular bloqueado. Ligar agora?")
+                .setPositiveButton("Ligar", (d, w) -> openNotificationSettings())
+                .setNegativeButton("Agora não", null)
+                .show();
     }
 
     /** Esconde as barras do sistema (deslizar da borda mostra de novo por um instante). */
@@ -505,8 +554,57 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public boolean canNotify() {
-            return Build.VERSION.SDK_INT < 33
-                    || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+            return notificationsOn();
+        }
+
+        /** Diagnóstico dos avisos (Sistema → Avisos): o que está ligado e a última checagem. */
+        @JavascriptInterface
+        public String notifyStatus() {
+            try {
+                android.content.SharedPreferences st = getSharedPreferences("titan-status", MODE_PRIVATE);
+                AlarmManager am = getSystemService(AlarmManager.class);
+                return new org.json.JSONObject()
+                        .put("enabled", notificationsOn())
+                        .put("version", BuildConfig.VERSION_NAME)
+                        .put("android", Build.VERSION.RELEASE)
+                        .put("exact", Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms())
+                        .put("battery", batteryFree())
+                        .put("reminders", Reminders.scheduledIds(MainActivity.this).size())
+                        .put("lastAt", st.getLong("at", 0))
+                        .put("last", st.getString("text", "ainda não conferiu"))
+                        .toString();
+            } catch (Exception e) {
+                return "{}";
+            }
+        }
+
+        /** Mostra um aviso agora e marca outro para daqui a 1 minuto (feche o app e espere). */
+        @JavascriptInterface
+        public void testNotify() {
+            Notifier.show(MainActivity.this, 777, "TITAN · Teste", "Aviso de teste: se você está vendo isto, os avisos estão ligados.",
+                    "titan://acao/inicio", false);
+            Reminders.testIn(MainActivity.this, 60_000);
+            new Thread(() -> {
+                try { NotesJob.check(MainActivity.this); } catch (Exception ignored) { /* aparece no status */ }
+            }, "titan-check-now").start();
+        }
+
+        /** Abre a tela do Android com os avisos deste app. */
+        @JavascriptInterface
+        public void openNotifySettings() {
+            runOnUiThread(() -> openNotificationSettings());
+        }
+
+        /** Abre a tela para tirar o app da economia de bateria. */
+        @JavascriptInterface
+        public void openBatterySettings() {
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                } catch (Exception e) {
+                    openAppSettings();
+                }
+            });
         }
 
         @JavascriptInterface

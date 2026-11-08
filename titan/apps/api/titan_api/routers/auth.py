@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session as DBSession
 
 from titan.audit import log as audit
-from titan.auth.service import AuthError, LoginLocked
+from titan.auth.service import MAX_SESSION_AGE, AuthError, LoginLocked
 from titan_api.deps import (
     SESSION_COOKIE,
     AppContext,
@@ -60,7 +60,8 @@ def login(
     response.set_cookie(
         SESSION_COOKIE,
         issued.token,
-        max_age=int(ctx.auth.ttl.total_seconds()),
+        # o cookie dura o máximo; quem decide se ainda vale é o servidor (vencimento renovado com o uso)
+        max_age=int(max(MAX_SESSION_AGE, ctx.auth.ttl).total_seconds()),
         httponly=True,
         samesite="strict",
         secure=ctx.settings.secure_cookies,

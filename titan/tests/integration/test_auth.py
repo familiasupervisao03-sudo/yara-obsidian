@@ -92,3 +92,33 @@ def test_failed_login_is_audited_without_password(settings):
         assert len(evs) == 1
         assert "senha-tentada-123" not in str(evs[0].data)
     engine.dispose()
+
+
+def test_session_renewed_while_used_up_to_30_days(settings):
+    """Celular conferindo mensagens a cada minuto: o login não vence em 12 h enquanto é usado,
+    mas vence 30 dias depois de entrar, mesmo em uso."""
+    from datetime import timedelta
+
+    from titan.db.engine import make_engine, make_session_factory
+    from titan.db.models import Session, utcnow
+
+    create_user(settings)
+    with build_client(settings) as c:
+        login(c)
+        engine = make_engine(settings.database_url)
+        sf = make_session_factory(engine)
+        with sf.begin() as db:  # quase vencendo, último uso há 5 min
+            for sess in db.query(Session).all():
+                sess.expires_at = utcnow() + timedelta(minutes=2)
+                sess.last_seen_at = utcnow() - timedelta(minutes=5)
+        assert c.get("/api/v1/auth/me").status_code == 200
+        with sf.begin() as db:
+            sess = db.query(Session).one()
+            assert sess.expires_at > utcnow() + timedelta(hours=11)  # renovado
+            sess.created_at = utcnow() - timedelta(days=30, minutes=1)  # entrou há mais de 30 dias
+            sess.expires_at = utcnow() + timedelta(minutes=2)
+            sess.last_seen_at = utcnow() - timedelta(minutes=5)
+        assert c.get("/api/v1/auth/me").status_code == 200
+        with sf.begin() as db:
+            assert db.query(Session).one().expires_at < utcnow() + timedelta(minutes=3)  # não renova mais
+        engine.dispose()

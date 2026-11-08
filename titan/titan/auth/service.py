@@ -23,6 +23,9 @@ from titan.auth.passwords import (
 from titan.db.models import Session, User, utcnow
 
 LAST_SEEN_EVERY = timedelta(minutes=1)
+# Login "lembrado" enquanto o aparelho usa: cada uso empurra o vencimento (ttl sem uso).
+# Mesmo em uso, o login vence MAX_SESSION_AGE depois de entrar (aí pede a senha de novo).
+MAX_SESSION_AGE = timedelta(days=30)
 
 
 class AuthError(Exception):
@@ -146,6 +149,8 @@ class AuthService:
         # aqui e disputava a trava do banco sob uso simultâneo (simulação contínua).
         if session.last_seen_at is None or now - session.last_seen_at >= LAST_SEEN_EVERY:
             session.last_seen_at = now
+            limit = (session.created_at or now) + max(MAX_SESSION_AGE, self.ttl)
+            session.expires_at = max(session.expires_at, min(now + self.ttl, limit))
         return session, user
 
     @staticmethod

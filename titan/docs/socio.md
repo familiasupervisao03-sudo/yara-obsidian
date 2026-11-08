@@ -46,8 +46,10 @@ incluem a memória.
 ## Avisos no celular
 - **Lembretes com hora**: o app Android (1.1+) agenda no próprio celular — toca na hora
   mesmo com o notebook desligado, e volta a agendar depois de reiniciar o aparelho.
-- **Mensagens do TITAN**: o servidor cria (agendador a cada minuto) e o app busca a cada
-  ~15 min, mesmo fechado. Precisa do notebook ligado, rede (Wi-Fi ou Tailscale) e
-  login válido no app. O login dura `TITAN_SESSION_TTL_HOURS` (padrão 12 h; pode subir
-  até 720 = 30 dias).
-- Ative em **Sistema → Avisos**.
+- **Mensagens do TITAN**: o servidor cria (agendador a cada minuto) e o app (1.7+) confere a
+  cada minuto, mesmo fechado (aviso fixo "TITAN conectado"; alarme reserva a cada ~10 min).
+  Precisa do notebook ligado, rede (Wi-Fi ou Tailscale) e login válido no app.
+- **Login**: vence depois de `TITAN_SESSION_TTL_HOURS` (padrão 12 h) **sem uso**; cada uso renova.
+  Mesmo em uso, pede a senha de novo 30 dias depois de entrar.
+- **Sistema → Avisos** (app 1.8+): mostra o que está ligado/desligado, a última conferência com o
+  notebook e tem o botão **Testar aviso**.

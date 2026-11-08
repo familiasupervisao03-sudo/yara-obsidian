@@ -96,3 +96,6 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
 - 2026-11-08 · CENTRAL · app TITAN fica "ligado" como WhatsApp (LiveService: checa mensagens e lembretes a
   cada minuto com o app fechado, alarme reserva a cada 10 min; lembretes de qualquer lugar agendados no
   celular); APKs titan 1.7 / casa 1.2 / central 1.2 · (`apps/android/app/**`, APKs)
+- 2026-11-08 · CENTRAL · diagnóstico dos avisos no app (Sistema → Avisos, botão Testar aviso, pede para
+  ligar avisos ao abrir); login renovado com o uso (12 h sem uso, máx. 30 dias); APKs titan 1.8 / casa 1.3 /
+  central 1.3 · (`titan/auth/service.py`, `routers/auth.py`, `apps/android/app/**`, APKs)

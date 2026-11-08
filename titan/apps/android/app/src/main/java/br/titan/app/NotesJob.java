@@ -59,14 +59,25 @@ public class NotesJob extends JobService {
             if (server == null || !server.startsWith("https://")) continue;
             try { checkAt(c, server); return; } catch (Exception e) { last = e; } // tenta a reserva
         }
-        if (last != null) throw last;
+        if (last != null) {
+            status(c, "notebook não respondeu (" + last.getClass().getSimpleName() + ")");
+            throw last;
+        }
+        status(c, "sem endereço do notebook salvo");
+    }
+
+    /** Guarda o resultado da última checagem (aparece em Sistema → Avisos). */
+    static void status(Context c, String text) {
+        c.getSharedPreferences("titan-status", Context.MODE_PRIVATE).edit()
+                .putLong("at", System.currentTimeMillis()).putString("text", text).apply();
     }
 
     private static void checkAt(Context c, String server) throws Exception {
         String cookie = CookieManager.getInstance().getCookie(server);
-        if (cookie == null || cookie.isEmpty()) return;
+        if (cookie == null || cookie.isEmpty()) { status(c, "sem login guardado (abra o app e entre de novo)"); return; }
         syncReminders(c, server, cookie);
         JSONArray notes = new JSONArray(request(server + "/api/v1/brain/notes", "GET", cookie, null));
+        status(c, "ok, conectado ao notebook");
         if (notes.length() == 0) return;
         Set<String> local = Reminders.scheduledIds(c);
         JSONArray ids = new JSONArray();
