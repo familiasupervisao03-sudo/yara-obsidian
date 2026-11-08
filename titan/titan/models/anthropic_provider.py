@@ -1,0 +1,257 @@
+"""Adaptador da API da Anthropic (Claude). EXTERNO e PAGO.
+
+Só é construído quando a configuração contém todas as autorizações explícitas
+(ver ``Settings._enforce_policies``). Antes de cada chamada o orçamento diário
+reserva o custo máximo possível; sem orçamento, nada é enviado.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from collections.abc import Iterator
+from typing import Any, Optional
+
+from titan.config.settings import Settings
+from titan.models.providers import ChatTurn, ModelReply, ModelUnavailable
+from titan.policies.budget import BudgetExceeded, BudgetGuard
+from titan.policies.model_gate import ProviderBlocked, ProviderInfo
+
+log = logging.getLogger("titan.models.anthropic")
+
+SYSTEM_PROMPT = (
+    "Você é o TITAN, assistente pessoal do usuário, rodando a partir do notebook dele. "
+    "Responda em português do Brasil, de forma clara e direta. Seja honesto: se não "
+    "souber algo ou não puder fazer algo, diga. Você não executa programas nem acessa "
+    "arquivos do computador nesta versão; não afirme ter feito ações que não fez.\n\n"
+    "O que o TITAN FAZ (fale disso com naturalidade, nunca diga que não pode):\n"
+    "- Lembretes e tarefas: quando o usuário pede (\"me lembra às 14h de...\"), o TITAN anota "
+    "sozinho logo depois da sua resposta e avisa na hora certa (no app, no celular e na tela da "
+    "Central). Confirme o que entendeu: o quê e quando. Se faltar o horário, pergunte.\n"
+    "- Mensagens por conta própria: o TITAN manda bom dia, boa noite, lembretes e acompanha "
+    "assuntos em aberto (o usuário ajusta em Sistema → Mensagens do TITAN).\n"
+    "- Metas e memória: guarda o que é importante (com aprovação do usuário na aba Memória).\n"
+    "- Casa: liga e desliga os aparelhos pelo TITAN Casa (os comandos são executados antes de "
+    "você responder)."
+)
+
+# Modelos que aceitam o fallback automático do servidor no modo "default".
+FALLBACK_MODELS = {"claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"}
+FALLBACK_BETA = "server-side-fallback-2026-07-01"
+
+# Modelos em que o raciocínio interno pode ser desligado (effort <= high).
+# Desligar deixa o chat bem mais rápido; no Opus 5.5 isso não é permitido.
+THINKING_OFF_MODELS = {"claude-haiku-5-5"}
+
+# Estimativa conservadora: ~3 caracteres por token (português tende a ~4).
+CHARS_PER_TOKEN = 3
+MAX_HISTORY_MESSAGES = 40
+
+
+def to_api_messages(history: list[ChatTurn]) -> list[dict[str, str]]:
+    """Converte o histórico em turnos alternados user/assistant, começando por user."""
+    msgs: list[dict[str, str]] = []
+    for turn in history[-MAX_HISTORY_MESSAGES:]:
+        if turn.role not in ("user", "assistant") or not turn.content.strip():
+            continue
+        if msgs and msgs[-1]["role"] == turn.role:
+            msgs[-1]["content"] += "\n\n" + turn.content
+        else:
+            msgs.append({"role": turn.role, "content": turn.content})
+    while msgs and msgs[0]["role"] != "user":
+        msgs.pop(0)
+    return msgs
+
+
+def estimate_input_tokens(messages: list[dict[str, str]]) -> int:
+    chars = len(SYSTEM_PROMPT) + sum(len(m["content"]) + 16 for m in messages)
+    return chars // CHARS_PER_TOKEN + 64
+
+
+class AnthropicProvider:
+    info = ProviderInfo(name="anthropic", local=False, paid=True)
+
+    def __init__(self, settings: Settings, budget: BudgetGuard, client: Any = None) -> None:
+        self.settings = settings
+        self.budget = budget
+        self.model = settings.model_name
+        self._client = client  # injetável nos testes (nenhuma chamada real)
+
+    def _get_client(self) -> Any:
+        if self._client is None:
+            try:
+                import anthropic
+            except ImportError as exc:  # pragma: no cover - depende da instalação
+                raise ModelUnavailable(
+                    "Biblioteca 'anthropic' não instalada. Rode: "
+                    ".venv/bin/pip install -e '.[anthropic]'"
+                ) from exc
+            kwargs: dict[str, Any] = {}
+            if self.settings.network_force_ipv4:
+                import httpx2
+
+                # local_address="0.0.0.0" faz a conexão usar somente IPv4.
+                kwargs["http_client"] = anthropic.DefaultHttpxClient(
+                    transport=httpx2.HTTPTransport(local_address="0.0.0.0")
+                )
+            self._client = anthropic.Anthropic(
+                api_key=self.settings.anthropic_api_key.get_secret_value(),
+                timeout=anthropic.Timeout(
+                    float(self.settings.model_timeout_seconds),
+                    connect=float(self.settings.model_connect_timeout_seconds),
+                ),
+                max_retries=0,  # sem reenvios automáticos: cada envio é contabilizado
+                **kwargs,
+            )
+        return self._client
+
+    def _prepare(self, history: list[ChatTurn], style: str = "", max_out: Optional[int] = None,
+                 extra_input_chars: int = 0):
+        messages = to_api_messages(history)
+        system = SYSTEM_PROMPT + (f"\n\n{style}" if style else "")
+        if not messages:
+            raise ModelUnavailable("Nenhuma mensagem do usuário para enviar.")
+        max_out = max_out or self.settings.model_max_output_tokens
+        try:
+            reservation = self.budget.reserve(
+                "anthropic", self.model, estimate_input_tokens(messages) + (len(style) + extra_input_chars) // CHARS_PER_TOKEN,
+                max_out
+            )
+        except BudgetExceeded as exc:
+            raise ProviderBlocked(str(exc)) from exc
+        params: dict[str, Any] = dict(
+            model=self.model,
+            max_tokens=max_out,
+            system=system,
+            messages=messages,
+            output_config={"effort": self.settings.model_effort},
+        )
+        if self.model in THINKING_OFF_MODELS and self.settings.model_effort in ("low", "medium", "high"):
+            params["thinking"] = {"type": "disabled"}
+        if self.settings.anthropic_fallbacks and self.model in FALLBACK_MODELS:
+            params.update(betas=[FALLBACK_BETA], fallbacks="default")
+        return reservation, params
+
+    def _finish(self, response: Any, reservation, started: float) -> ModelReply:
+        usage = response.usage
+        served_by = getattr(response, "model", None) or self.model
+        cost = self.budget.finalize(
+            reservation, served_by,
+            int(getattr(usage, "input_tokens", 0) or 0)
+            + int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+            + int(getattr(usage, "cache_read_input_tokens", 0) or 0),
+            int(getattr(usage, "output_tokens", 0) or 0),
+            getattr(response, "_request_id", None),
+        )
+        log.info("anthropic: modelo=%s duração=%.1fs custo=R$ %.4f stop=%s", served_by,
+                 time.monotonic() - started, cost, response.stop_reason)
+
+        if response.stop_reason == "refusal":
+            details = getattr(response, "stop_details", None)
+            category = getattr(details, "category", None) if details else None
+            return ModelReply(
+                content="[A Anthropic recusou esta solicitação"
+                        + (f" — categoria: {category}" if category else "") + ".]",
+                provider="anthropic", model=served_by,
+            )
+        text = "".join(b.text for b in response.content if getattr(b, "type", "") == "text").strip()
+        if response.stop_reason == "max_tokens":
+            text += "\n\n[Resposta interrompida pelo limite TITAN_MODEL_MAX_OUTPUT_TOKENS.]"
+        if not text:
+            raise ModelUnavailable(
+                f"A API respondeu sem texto (stop_reason={response.stop_reason})."
+            )
+        return ModelReply(content=text, provider="anthropic", model=served_by)
+
+    def chat(self, history: list[ChatTurn], style: str = "") -> ModelReply:
+        reservation, params = self._prepare(history, style)
+        client = self._get_client()
+        started = time.monotonic()
+        try:
+            api = client.beta.messages if "betas" in params else client.messages
+            response = api.create(**params)
+        except Exception as exc:
+            self._handle_error(exc, reservation)  # registra e levanta ModelUnavailable
+        return self._finish(response, reservation, started)
+
+    def chat_json(self, history: list[ChatTurn], style: str = "", schema: Optional[dict] = None,
+                  max_tokens: int = 4096) -> tuple[dict, ModelReply]:
+        """Resposta no formato JSON ``schema`` (saída estruturada da API)."""
+        import json
+
+        # O formato JSON também conta como entrada: entra na reserva do orçamento.
+        reservation, params = self._prepare(history, style, max_out=max_tokens,
+                                            extra_input_chars=len(json.dumps(schema or {})))
+        params["output_config"] = {**params["output_config"],
+                                   "format": {"type": "json_schema", "schema": schema}}
+        client = self._get_client()
+        started = time.monotonic()
+        try:
+            api = client.beta.messages if "betas" in params else client.messages
+            response = api.create(**params)
+        except Exception as exc:
+            self._handle_error(exc, reservation)
+        reply = self._finish(response, reservation, started)  # registra o custo real
+        if response.stop_reason == "refusal":
+            raise ModelUnavailable(reply.content)
+        if response.stop_reason == "max_tokens":
+            raise ModelUnavailable("O conteúdo ficou longo demais e foi cortado. Peça um assunto menor.")
+        text = next((b.text for b in response.content if getattr(b, "type", "") == "text"), "")
+        try:
+            data = json.loads(text)
+        except ValueError as exc:
+            raise ModelUnavailable("A IA respondeu num formato inválido. Tente de novo.") from exc
+        if not isinstance(data, dict):
+            raise ModelUnavailable("A IA respondeu num formato inválido. Tente de novo.")
+        return data, reply
+
+    def chat_stream(self, history: list[ChatTurn], style: str = "") -> Iterator[tuple[str, Any]]:
+        """Gera ("delta", texto) à medida que chega e, no fim, ("done", ModelReply).
+
+        Se o consumidor fechar o gerador (usuário interrompeu), a conexão com a API é
+        encerrada e a reserva do orçamento fica contada como gasto (conservador).
+        """
+        reservation, params = self._prepare(history, style)
+        client = self._get_client()
+        started = time.monotonic()
+        finished = False
+        try:
+            api = client.beta.messages if "betas" in params else client.messages
+            with api.stream(**params) as stream:
+                for text in stream.text_stream:
+                    if text:
+                        yield "delta", text
+                response = stream.get_final_message()
+            finished = True
+        except GeneratorExit:
+            self.budget.fail(reservation, "interrompido pelo usuário durante o streaming",
+                             billed_unknown=True)
+            log.info("anthropic: streaming interrompido pelo usuário após %.1fs",
+                     time.monotonic() - started)
+            raise
+        except Exception as exc:
+            self._handle_error(exc, reservation)
+        if finished:
+            yield "done", self._finish(response, reservation, started)
+
+    def _handle_error(self, exc: Exception, reservation) -> None:
+        name = type(exc).__name__
+        # Erros HTTP com status (4xx/5xx) chegam antes da geração: não há cobrança.
+        status: Optional[int] = getattr(exc, "status_code", None)
+        billed_unknown = status is None  # timeout/conexão: incerto, mantém a reserva
+        self.budget.fail(reservation, f"{name} status={status}", billed_unknown=billed_unknown)
+        messages = {
+            401: "Chave da Anthropic inválida (ANTHROPIC_API_KEY).",
+            403: "A chave da Anthropic não tem permissão para este modelo.",
+            404: f"Modelo '{self.model}' não encontrado na Anthropic.",
+            429: "Limite de uso da Anthropic atingido (ou créditos esgotados). Tente mais tarde.",
+            400: "A Anthropic recusou a requisição (400). Verifique créditos e o modelo.",
+        }
+        if status in messages:
+            detail = messages[status]
+        elif status is not None and status >= 500:
+            detail = f"Erro no servidor da Anthropic ({status}). Tente mais tarde."
+        else:
+            detail = f"Falha de conexão com a Anthropic ({name}). Verifique a internet."
+        log.warning("anthropic: erro %s status=%s", name, status)
+        raise ModelUnavailable(detail) from exc

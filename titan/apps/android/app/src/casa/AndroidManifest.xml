@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- TITAN Casa: central da casa (tablet). Abre direto em /casa, tela sempre acesa. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application />
+</manifest>

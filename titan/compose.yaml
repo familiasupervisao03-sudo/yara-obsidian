@@ -1,0 +1,18 @@
+# OPCIONAL. O TITAN não exige Docker: o padrão é SQLite, sem serviços extras.
+# Use apenas se a auditoria indicar RAM suficiente e você preferir PostgreSQL.
+# O banco fica acessível só pelo próprio notebook (127.0.0.1).
+#   POSTGRES_PASSWORD deve vir do seu .env local (nunca versionado).
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: titan
+      POSTGRES_USER: titan
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    command: ["postgres", "-c", "shared_buffers=32MB", "-c", "max_connections=20"]
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ./var/postgres:/var/lib/postgresql/data
+    mem_limit: 256m

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sem conexões sem cadeado. Confia nos certificados do sistema e no "cadeado do TITAN"
+     que o usuário instala em Configurações (titan ligar-celular gera um só deste notebook). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

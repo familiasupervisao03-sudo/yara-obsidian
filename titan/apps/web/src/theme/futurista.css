@@ -1,0 +1,83 @@
+/* Tema FUTURISTA (padrão): HUD neon ciano, painéis de vidro com cantos cortados,
+   grade hexagonal e linhas de varredura. Rosa para a voz/mensagens do usuário,
+   âmbar para alertas, verde para "tudo ok".
+   Contraste (WCAG) sobre --bg: texto ~17:1, secundário ~7:1, destaque ~13:1.
+   Para criar outro tema, veja src/theme/README.md. */
+:root, :root[data-theme="futurista"] {
+  --bg: #03070c; --surface: #07141e; --surface-2: #0b1d2a; --surface-3: #102636;
+  --line: #12303f; --line-strong: #2f6478; --line-hover: #3f8aa3;
+  --text: #dff7ff; --muted: #86aebe;
+  --accent: #3ee8ff; --accent-rgb: 62, 232, 255; --accent-strong: #8ff3ff; --accent-ink: #00141c;
+  --user: #ff4fae; --user-rgb: 255, 79, 174; --user-bg: rgba(255, 79, 174, 0.08); --user-line: rgba(255, 79, 174, 0.45);
+  --ok: #3dffa8; --warn: #ffb547; --bad: #ff6b81; --info: #3ee8ff;
+  --warn-bg: #1f1607; --bad-bg: #24090f;
+  --font-ui: "Rajdhani", "Exo 2", system-ui, -apple-system, "Segoe UI", Roboto, "DejaVu Sans", sans-serif;
+  --font-hud: "JetBrains Mono", ui-monospace, "DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace;
+  --radius: 2px; --radius-sm: 2px;
+  --clip: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+  --clip-sm: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  --glow: 0 0 16px rgba(62, 232, 255, 0.55);
+  --glow-text: 0 0 10px rgba(62, 232, 255, 0.75), 0 0 26px rgba(62, 232, 255, 0.3);
+  --app-bg:
+    radial-gradient(900px 520px at 85% -10%, rgba(26, 166, 255, 0.22), transparent 70%),
+    radial-gradient(700px 600px at -10% 110%, rgba(255, 62, 165, 0.1), transparent 70%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='48' viewBox='0 0 28 48'><path d='M14 0 28 8v16L14 32 0 24V8z M14 32v16' fill='none' stroke='%233ee8ff' stroke-opacity='.07' stroke-width='1'/></svg>"),
+    linear-gradient(180deg, #04101a, #03070c 60%);
+  --bar-bg: rgba(3, 7, 12, 0.82); --nav-bg: rgba(3, 7, 12, 0.88);
+  --scan: 1;
+  --panel-bg: linear-gradient(145deg, rgba(26, 166, 255, 0.08), rgba(7, 20, 30, 0.72));
+  --panel-stripe: 40px;
+  --brand-spacing: 0.42em;
+}
+
+/* --- Decorações só deste tema ------------------------------------------------- */
+
+/* Títulos de painel com prefixo de terminal */
+:root[data-theme="futurista"] .eyebrow::before,
+:root[data-theme="futurista"] .card-title::before { content: "// "; opacity: 0.7; }
+
+/* Abas: brilho e traço de energia */
+:root[data-theme="futurista"] .tab { text-transform: uppercase; letter-spacing: 0.12em; font-family: var(--font-hud); font-size: 0.62rem; }
+:root[data-theme="futurista"] .tab.active { text-shadow: var(--glow-text); }
+:root[data-theme="futurista"] .tab.active::before { box-shadow: var(--glow); }
+@media (min-width: 900px) {
+  :root[data-theme="futurista"] .tab { font-size: 0.78rem; }
+}
+
+/* Mensagens: as suas em rosa (à direita), as do TITAN com filete ciano */
+:root[data-theme="futurista"] .msg { border-radius: 0; }
+:root[data-theme="futurista"] .msg-user { border: 0; border-right: 2px solid var(--user); background: var(--user-bg); }
+:root[data-theme="futurista"] .msg-assistant { border: 0; border-left: 2px solid var(--accent); background: rgba(7, 20, 30, 0.75); }
+:root[data-theme="futurista"] .msg-meta { letter-spacing: 0.18em; text-transform: uppercase; }
+
+/* Voz: o orbe vira um "reator" de energia com anéis */
+:root[data-theme="futurista"] .orb {
+  width: 150px; height: 150px; border: 0; position: relative;
+  background: radial-gradient(circle, #e8fdff 0, #7ff3ff 16%, #1aa6ff 42%, rgba(26, 166, 255, 0.12) 66%, transparent 70%);
+  box-shadow: 0 0 50px rgba(62, 232, 255, 0.55), 0 0 110px rgba(26, 166, 255, 0.3);
+}
+:root[data-theme="futurista"] .orb::before,
+:root[data-theme="futurista"] .orb::after { content: ""; position: absolute; border-radius: 50%; pointer-events: none; }
+:root[data-theme="futurista"] .orb::before { inset: -26px; border: 3px solid transparent;
+  border-top-color: var(--accent); border-bottom-color: var(--accent); filter: drop-shadow(0 0 6px var(--accent));
+  animation: titan-spin 6s linear infinite; }
+:root[data-theme="futurista"] .orb::after { inset: -44px; border: 1px dashed rgba(62, 232, 255, 0.35);
+  animation: titan-spin 18s linear infinite reverse; }
+:root[data-theme="futurista"] .state-user_speaking .orb::before { border-left-color: var(--user); animation-duration: 2s; }
+:root[data-theme="futurista"] .state-speaking .orb::before { animation-duration: 3s; }
+:root[data-theme="futurista"] .state-idle .orb { filter: saturate(0.35) brightness(0.7); }
+:root[data-theme="futurista"] .orb-label { text-transform: uppercase; letter-spacing: 0.3em; color: var(--accent); text-shadow: var(--glow-text); }
+@keyframes titan-spin { to { transform: rotate(360deg); } }
+
+/* Vídeo-aula: o mesmo HUD (painéis cortados, brilho) por cima das cores do assunto */
+:root[data-theme="futurista"] .lesson { border-radius: 4px; clip-path: var(--clip); }
+:root[data-theme="futurista"] .lesson .lcard,
+:root[data-theme="futurista"] .lesson .compare-col,
+:root[data-theme="futurista"] .lesson .callout,
+:root[data-theme="futurista"] .lesson .quiz-opt,
+:root[data-theme="futurista"] .lesson .result-row,
+:root[data-theme="futurista"] .lesson-controls button { border-radius: 0; clip-path: var(--clip-sm); }
+:root[data-theme="futurista"] .lesson-title, :root[data-theme="futurista"] .lesson-count { font-family: var(--font-hud); letter-spacing: 0.04em; }
+:root[data-theme="futurista"] .lesson-controls .primary-play { box-shadow: 0 0 18px rgba(var(--la-rgb), 0.7); }
+:root[data-theme="futurista"] .lesson-overlay:not([class*="theme-"]),
+:root[data-theme="futurista"] .lesson-overlay.theme-outro { --la: #3ee8ff; --la-rgb: 62, 232, 255; }

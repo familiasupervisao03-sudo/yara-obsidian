@@ -1,0 +1,299 @@
+"""Adaptador Anthropic com cliente FALSO: nenhuma chamada de rede ou cobrança real."""
+
+from types import SimpleNamespace
+
+import pytest
+
+from titan.db.engine import make_engine, make_session_factory
+from titan.db.models import ModelUsage
+from titan.models.anthropic_provider import AnthropicProvider, to_api_messages
+from titan.models.providers import ChatTurn, ModelUnavailable
+from titan.policies.budget import BudgetGuard, cost_brl
+from titan.policies.model_gate import ProviderBlocked
+
+KEY = "sk-ant-teste-chave-falsa-0123456789abcdef"
+
+
+class FakeAPIError(Exception):
+    def __init__(self, status_code):
+        super().__init__(f"erro {status_code}")
+        self.status_code = status_code
+
+
+class FakeClient:
+    def __init__(self, response=None, error=None):
+        self.calls = []
+        self.response = response
+        self.error = error
+        create = self._create
+        self.messages = SimpleNamespace(create=create)
+        self.beta = SimpleNamespace(messages=SimpleNamespace(create=create))
+
+    def _create(self, **kw):
+        self.calls.append(kw)
+        if self.error:
+            raise self.error
+        return self.response
+
+
+def response(text="Olá!", stop="end_turn", inp=100, out=50, model="claude-opus-5-5"):
+    return SimpleNamespace(
+        content=[SimpleNamespace(type="thinking", thinking=""), SimpleNamespace(type="text", text=text)],
+        stop_reason=stop, stop_details=None, model=model, _request_id="req_teste",
+        usage=SimpleNamespace(input_tokens=inp, output_tokens=out,
+                              cache_creation_input_tokens=0, cache_read_input_tokens=0),
+    )
+
+
+@pytest.fixture
+def paid_settings(make_settings):
+    from titan.db.migrate import upgrade_head
+
+    s = make_settings(model_provider="anthropic", model_name="claude-opus-5-5", local_only=False,
+                      allow_external_models=True, allow_paid_apis=True,
+                      daily_paid_budget_brl=2.0, usd_brl_rate=5.0, anthropic_api_key=KEY,
+                      model_max_output_tokens=1000)
+    upgrade_head(s.database_url)
+    return s
+
+
+@pytest.fixture
+def factory(paid_settings):
+    engine = make_engine(paid_settings.database_url)
+    yield make_session_factory(engine)
+    engine.dispose()
+
+
+def rows(factory):
+    with factory() as db:
+        return db.query(ModelUsage).all()
+
+
+def test_successful_call_records_real_cost(paid_settings, factory):
+    client = FakeClient(response(inp=1000, out=500))
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client)
+    reply = p.chat([ChatTurn("user", "oi")])
+    assert reply.content == "Olá!" and reply.provider == "anthropic"
+    call = client.calls[0]
+    assert call["model"] == "claude-opus-5-5"
+    assert call["max_tokens"] == 1000
+    assert call["messages"] == [{"role": "user", "content": "oi"}]
+    assert call["fallbacks"] == "default"  # fallback do servidor ativado por padrão
+    assert KEY not in str(call)
+    (row,) = rows(factory)
+    assert row.status == "FINAL"
+    # 1000 * $4/M + 500 * $20/M = $0.014 -> R$ 0.07
+    assert row.cost_brl == pytest.approx(0.07)
+    assert row.cost_brl == pytest.approx(cost_brl(paid_settings, "claude-opus-5-5", 1000, 500))
+
+
+def test_budget_blocks_before_sending(make_settings):
+    from titan.db.migrate import upgrade_head
+
+    s = make_settings(model_provider="anthropic", model_name="claude-opus-5-5", local_only=False,
+                      allow_external_models=True, allow_paid_apis=True,
+                      daily_paid_budget_brl=0.01, usd_brl_rate=5.0, anthropic_api_key=KEY)
+    upgrade_head(s.database_url)
+    engine = make_engine(s.database_url)
+    f = make_session_factory(engine)
+    client = FakeClient(response())
+    p = AnthropicProvider(s, BudgetGuard(s, f), client=client)
+    with pytest.raises(ProviderBlocked, match="NÃO foi enviada"):
+        p.chat([ChatTurn("user", "oi")])
+    assert client.calls == []  # nada foi enviado
+    assert rows(f) == []
+    engine.dispose()
+
+
+def test_daily_budget_accumulates(paid_settings, factory):
+    # 1ª chamada gasta R$ 1,90 de R$ 2,00; a reserva de pior caso da 2ª não cabe.
+    client = FakeClient(response(inp=20_000, out=15_000))
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client)
+    p.chat([ChatTurn("user", "1")])
+    assert BudgetGuard(paid_settings, factory).spent_today() == pytest.approx(1.90)
+    with pytest.raises(ProviderBlocked):
+        p.chat([ChatTurn("user", "2")])
+    assert len(client.calls) == 1
+
+
+def test_auth_error_is_reported_and_not_charged(paid_settings, factory):
+    client = FakeClient(error=FakeAPIError(401))
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client)
+    with pytest.raises(ModelUnavailable, match="Chave da Anthropic inválida"):
+        p.chat([ChatTurn("user", "oi")])
+    (row,) = rows(factory)
+    assert row.status == "FAILED" and row.cost_brl == 0.0
+
+
+def test_connection_error_keeps_conservative_reservation(paid_settings, factory):
+    client = FakeClient(error=TimeoutError("sem resposta"))
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client)
+    with pytest.raises(ModelUnavailable, match="conexão"):
+        p.chat([ChatTurn("user", "oi")])
+    (row,) = rows(factory)
+    assert row.status == "FAILED" and row.cost_brl > 0  # incerto: conta como gasto
+
+
+def test_refusal_is_reported_honestly(paid_settings, factory):
+    client = FakeClient(response(text="", stop="refusal"))
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client)
+    assert "recusou" in p.chat([ChatTurn("user", "x")]).content
+
+
+def test_empty_reply_is_an_error_not_success(paid_settings, factory):
+    client = FakeClient(response(text="", stop="end_turn"))
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client)
+    with pytest.raises(ModelUnavailable):
+        p.chat([ChatTurn("user", "x")])
+
+
+def test_history_is_normalized():
+    msgs = to_api_messages([
+        ChatTurn("assistant", "sobra"), ChatTurn("user", "a"), ChatTurn("user", "b"),
+        ChatTurn("system", "ignorar"), ChatTurn("assistant", "c"),
+    ])
+    assert msgs == [{"role": "user", "content": "a\n\nb"}, {"role": "assistant", "content": "c"}]
+
+
+def test_unknown_model_priced_at_worst_case(paid_settings):
+    assert cost_brl(paid_settings, "modelo-novo", 1_000_000, 0) == pytest.approx(50.0)
+
+
+def test_haiku_runs_without_thinking_for_speed(make_settings):
+    from titan.db.migrate import upgrade_head
+
+    s = make_settings(model_provider="anthropic", model_name="claude-haiku-5-5", local_only=False,
+                      allow_external_models=True, allow_paid_apis=True,
+                      daily_paid_budget_brl=2.0, usd_brl_rate=5.0, anthropic_api_key=KEY)
+    upgrade_head(s.database_url)
+    engine = make_engine(s.database_url)
+    client = FakeClient(response(model="claude-haiku-5-5"))
+    AnthropicProvider(s, BudgetGuard(s, make_session_factory(engine)), client=client).chat(
+        [ChatTurn("user", "oi")])
+    assert client.calls[0]["thinking"] == {"type": "disabled"}
+    assert "fallbacks" not in client.calls[0]
+    engine.dispose()
+
+
+def test_opus_keeps_default_thinking(paid_settings, factory):
+    client = FakeClient(response())
+    AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client).chat(
+        [ChatTurn("user", "oi")])
+    assert "thinking" not in client.calls[0]  # Opus 5.5 recusa thinking disabled
+
+
+def test_real_client_forces_ipv4_and_short_connect_timeout(paid_settings, factory):
+    """Constrói o cliente real (sem enviar nada) e confere IPv4 e timeout de conexão."""
+    pytest.importorskip("anthropic")
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory))
+    client = p._get_client()
+    assert client.timeout.connect == 10.0
+    pool = client._client._transport._pool
+    assert pool._local_address == "0.0.0.0"
+
+
+class FakeStream:
+    def __init__(self, chunks, final):
+        self.chunks, self.final, self.closed = chunks, final, False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        self.closed = True
+
+    @property
+    def text_stream(self):
+        yield from self.chunks
+
+    def get_final_message(self):
+        return self.final
+
+
+class FakeStreamingClient(FakeClient):
+    def __init__(self, chunks, final):
+        super().__init__(final)
+        self.stream_obj = FakeStream(chunks, final)
+        stream = self._stream
+        self.messages.stream = stream
+        self.beta.messages.stream = stream
+
+    def _stream(self, **kw):
+        self.calls.append(kw)
+        return self.stream_obj
+
+
+def test_stream_yields_deltas_and_records_cost(paid_settings, factory):
+    client = FakeStreamingClient(["Olá", ", tudo", " bem?"], response(text="Olá, tudo bem?"))
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client)
+    events = list(p.chat_stream([ChatTurn("user", "oi")]))
+    assert [e[1] for e in events[:-1]] == ["Olá", ", tudo", " bem?"]
+    assert events[-1][0] == "done" and events[-1][1].content == "Olá, tudo bem?"
+    (row,) = rows(factory)
+    assert row.status == "FINAL"
+
+
+def test_stream_interrupted_closes_connection_and_keeps_reservation(paid_settings, factory):
+    client = FakeStreamingClient(["um", " dois", " três"], response())
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client)
+    gen = p.chat_stream([ChatTurn("user", "oi")])
+    assert next(gen) == ("delta", "um")
+    gen.close()  # usuário interrompeu
+    assert client.stream_obj.closed is True
+    (row,) = rows(factory)
+    assert row.status == "FAILED" and row.cost_brl > 0  # conservador: conta a reserva
+
+
+def test_stream_budget_blocks_before_opening_stream(make_settings):
+    from titan.db.migrate import upgrade_head
+
+    s = make_settings(model_provider="anthropic", model_name="claude-haiku-5-5", local_only=False,
+                      allow_external_models=True, allow_paid_apis=True,
+                      daily_paid_budget_brl=0.0001, usd_brl_rate=5.0, anthropic_api_key=KEY)
+    upgrade_head(s.database_url)
+    engine = make_engine(s.database_url)
+    client = FakeStreamingClient(["x"], response())
+    p = AnthropicProvider(s, BudgetGuard(s, make_session_factory(engine)), client=client)
+    with pytest.raises(ProviderBlocked):
+        list(p.chat_stream([ChatTurn("user", "oi")]))
+    assert client.calls == []
+    engine.dispose()
+
+
+def test_style_is_appended_to_the_system_prompt(paid_settings, factory):
+    from titan.models.anthropic_provider import SYSTEM_PROMPT
+    from titan.memory.style import VOICE
+
+    client = FakeClient(response())
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=client)
+    p.chat([ChatTurn("user", "oi")])
+    p.chat([ChatTurn("user", "oi")], style=VOICE)
+    assert client.calls[0]["system"] == SYSTEM_PROMPT  # sem estilo: igual a antes
+    assert client.calls[1]["system"] == SYSTEM_PROMPT + "\n\n" + VOICE
+
+
+def test_chat_json_uses_structured_output_and_budget(paid_settings, factory):
+    import json
+
+    from titan.lessons.script import SCHEMA
+
+    fake = FakeClient(response(text=json.dumps({"titulo": "T", "cenas": []}), model="claude-opus-5-5"))
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=fake)
+    data, reply = p.chat_json([ChatTurn("user", "aula")], style="x", schema=SCHEMA, max_tokens=3000)
+    assert data == {"titulo": "T", "cenas": []}
+    kw = fake.calls[0]
+    assert kw["output_config"]["format"] == {"type": "json_schema", "schema": SCHEMA}
+    assert kw["output_config"]["effort"] == paid_settings.model_effort and kw["max_tokens"] == 3000
+    [row] = rows(factory)
+    assert row.status == "FINAL" and row.cost_brl == cost_brl(paid_settings, "claude-opus-5-5", 100, 50)
+
+
+@pytest.mark.parametrize("text,stop,msg", [("{", "end_turn", "formato inválido"),
+                                           ('{"a"', "max_tokens", "longo demais"),
+                                           ("[1]", "end_turn", "formato inválido")])
+def test_chat_json_bad_output_is_reported_and_still_billed(paid_settings, factory, text, stop, msg):
+    fake = FakeClient(response(text=text, stop=stop))
+    p = AnthropicProvider(paid_settings, BudgetGuard(paid_settings, factory), client=fake)
+    with pytest.raises(ModelUnavailable, match=msg):
+        p.chat_json([ChatTurn("user", "aula")], schema={"type": "object"})
+    assert [r.status for r in rows(factory)] == ["FINAL"]  # a chamada foi cobrada e registrada

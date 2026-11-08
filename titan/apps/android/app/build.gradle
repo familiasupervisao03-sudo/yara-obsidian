@@ -1,0 +1,73 @@
+plugins { id "com.android.application" }
+
+// Assinatura: chave fora do repositório (ver apps/android/README.md).
+def ks = System.getenv("TITAN_KEYSTORE")
+
+android {
+    namespace "br.titan.app"
+    compileSdk 34
+    defaultConfig {
+        applicationId "br.titan.app"
+        minSdk 24          // Android 7+ (o Galaxy A20 tem Android 9–11)
+        targetSdk 34
+    }
+    buildFeatures { buildConfig true }
+    // Um projeto, três apps (mesma mãe): o TITAN, o TITAN Casa (tablet) e o TITAN Central (TV).
+    // Instalam lado a lado: cada um tem o seu applicationId.
+    flavorDimensions "app"
+    productFlavors {
+        titan {
+            dimension "app"
+            applicationId "br.titan.app"
+            versionCode 9
+            versionName "1.8"
+            buildConfigField "String", "HOME", '"/"'
+            buildConfigField "String", "SCHEME", '"titan"'
+            buildConfigField "boolean", "KIOSK", "false"
+            buildConfigField "String", "TITLE", '"T I T A N"'
+            manifestPlaceholders = [appLabel: "TITAN", scheme: "titan"]
+        }
+        casa {
+            dimension "app"
+            applicationId "br.titan.casa"
+            versionCode 4
+            versionName "1.3"
+            buildConfigField "String", "HOME", '"/casa"'
+            buildConfigField "String", "SCHEME", '"titancasa"'
+            buildConfigField "boolean", "KIOSK", "true"
+            buildConfigField "String", "TITLE", '"T I T A N   C A S A"'
+            manifestPlaceholders = [appLabel: "TITAN Casa", scheme: "titancasa"]
+        }
+        central {
+            dimension "app"
+            applicationId "br.titan.central"
+            versionCode 4
+            versionName "1.3"
+            buildConfigField "String", "HOME", '"/central"'
+            buildConfigField "String", "SCHEME", '"titancentral"'
+            buildConfigField "boolean", "KIOSK", "true"
+            buildConfigField "String", "TITLE", '"T I T A N   C E N T R A L"'
+            manifestPlaceholders = [appLabel: "TITAN Central", scheme: "titancentral"]
+        }
+    }
+    signingConfigs {
+        if (ks) {
+            release {
+                storeFile file(ks)
+                storePassword System.getenv("TITAN_KEYSTORE_PASS")
+                keyAlias "titan"
+                keyPassword System.getenv("TITAN_KEYSTORE_PASS")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (ks) signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

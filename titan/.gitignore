@@ -1,0 +1,29 @@
+# Segredos e dados locais
+.env
+.env.*
+!.env.example
+var/
+*.db
+*.db-wal
+*.db-shm
+backups/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+build/
+
+# Node
+node_modules/
+apps/web/dist/
+*.tsbuildinfo
+
+# App Android: saídas de compilação e caminho local do SDK
+apps/android/.gradle/
+apps/android/app/build/
+apps/android/build/
+apps/android/local.properties
+*.jks
