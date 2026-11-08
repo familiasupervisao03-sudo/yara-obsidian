@@ -34,6 +34,7 @@ test("lembretes falados viram título + hora", () => {
     ["me lembra às 8 da noite de estudar", "Estudar", "7 20:00"],
     ["me lembra às 9 de comprar o microfone", "Comprar o microfone", "7 21:00"], // 9h já passou → 21h
     ["me lembra às 7 da manhã de acordar cedo", "Acordar cedo", "8 7:00"],          // 7h já passou → amanhã
+    ["Ei Titã, me lembra daqui a 2 minutos de testar o TITAN", "Testar o TITAN", "7 10:02"],
   ];
   for (const [text, title, when] of cases) {
     const r = parseReminder(text, now);

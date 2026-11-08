@@ -29,7 +29,15 @@ function num(s: string | undefined): number | null {
 
 const TRIGGER = /\b(lembrete|lembra|lembre|lembrar|avisa|avise|avisar|alarme|alerta)\b/;
 
+/** Pedido simples (uma frase curta)? Vários pedidos juntos ficam com a IA, que separa tudo. */
+export function simpleRequest(text: string): boolean {
+  const t = text.trim();
+  const parts = t.split(/[.!?;]+\s+/).filter((p) => p.trim());
+  return t.length <= 140 && parts.length <= 1 && !/\b(e anota|anota|e tambem|e mais)\b/.test(plain(t));
+}
+
 export function parseReminder(text: string, now: Date = new Date()): ParsedReminder | null {
+  if (!simpleRequest(text)) return null;
   const orig = text.replace(/[,.!?]/g, " ").replace(/\s+/g, " ").trim();
   const t = plain(orig);  // mesmo tamanho e mesmas palavras do original, sem acento
   if (!TRIGGER.test(t)) return null;
@@ -88,7 +96,7 @@ export function parseReminder(text: string, now: Date = new Date()): ParsedRemin
 
   // o que sobra é o assunto
   const title = rest
-    .replace(/\b(ei |hey |ok )?tita[n]?\b/g, " ")
+    .replace(/^\s*(ei |hey |ok )?tita[no]?\b/, " ")   // só o "Ei, Titã" do começo
     .replace(/\b(cria|crie|criar|faz|faca|fazer|coloca|coloque|bota|poe|marca|marque|agenda|agende|adiciona|adicione)\b/g, " ")
     .replace(/\b(um|uma|o|a)? ?(lembrete|alarme|alerta)\b/g, " ")
     .replace(/\b(pra|para|por favor|favor|pfv|que|voce|vc)\b/g, " ")

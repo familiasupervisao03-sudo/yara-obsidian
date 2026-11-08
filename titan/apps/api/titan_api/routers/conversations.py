@@ -132,6 +132,11 @@ def post_message(
     db.commit()
 
     reply_out = None
+    rem = _reminder_answer(ctx, cu, conv.id, body.content)
+    if rem is not None:  # lembrete na hora, sem IA
+        db.expire_all()
+        return MessagePostOut(user_message=MessageOut.model_validate(user_msg), reply=MessageOut(**rem),
+                              model=ModelStatus(available=True, provider="titan", detail="lembrete"))
     try:
         provider = get_provider(ctx.settings, ctx.session_factory)
         turns = turns_for_model(repo.history(db, conv.id))
@@ -221,6 +226,12 @@ async def post_message_stream(
             yield _sse("delta", {"text": casa_out["content"]})
             yield _sse("done", {"message": casa_out, "footer_chars": 0, "metrics": {"casa": True}})
             return
+        # "me lembra às 14h de ...": lembrete na hora, sem IA
+        rem_out = await run_in_threadpool(_reminder_answer, ctx, cu, conversation_id, body.content)
+        if rem_out is not None:
+            yield _sse("delta", {"text": rem_out["content"]})
+            yield _sse("done", {"message": rem_out, "footer_chars": 0, "metrics": {"lembrete": True}})
+            return
         if provider is None:
             detail, reason = model_error or ("reenvio sem resposta registrada", "unavailable")
             yield _sse("error", {"detail": detail, "model_available": False, "reason": reason})
@@ -286,6 +297,26 @@ def _casa_answer(ctx: AppContext, cu: CurrentUser, conversation_id: uuid.UUID, t
         conv = repo.get_conversation(db, cu.user.id, conversation_id)
         msg = repo.add_message(db, conv, "assistant", reply, model_provider="titan", model_name="casa")
         db.flush()
+        return MessageOut.model_validate(msg).model_dump(mode="json")
+
+
+def _reminder_answer(ctx: AppContext, cu: CurrentUser, conversation_id: uuid.UUID, text: str):
+    """"Me lembra às 14h30 de..." vira lembrete NA HORA (sem IA, funciona com a IA em pausa)."""
+    from titan.brain import quick
+    from titan.brain import store as brain_store
+
+    parsed = quick.parse_reminder(text, brain_store.local_now())
+    if parsed is None:
+        return None
+    title, due = parsed
+    with ctx.session_factory.begin() as db:
+        conv = repo.get_conversation(db, cu.user.id, conversation_id)
+        reply = f"Lembrete criado: {title}, {quick.when_text(due, brain_store.local_now())}. Te aviso na hora."
+        msg = repo.add_message(db, conv, "assistant", reply, model_provider="titan", model_name="lembrete")
+        db.flush()
+        brain_store.add_todo(db, cu.user.id, title, "lembrete", due_at=due, conversation_id=conv.id, message_id=msg.id)
+        audit.record(db, "brain.todo.created", actor_type="user", actor_id=cu.user.id, entity_type="message",
+                     entity_id=str(msg.id), data={"kind": "lembrete", "quick": True})
         return MessageOut.model_validate(msg).model_dump(mode="json")
 
 
