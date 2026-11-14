@@ -21,6 +21,7 @@
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <application
+        android:name=".TitanApp"
         android:label="${appLabel}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"

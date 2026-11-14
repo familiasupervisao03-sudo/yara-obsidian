@@ -78,13 +78,44 @@ public class MainActivity extends Activity {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             fullscreen();
         } else {
-            NotesJob.ensure(this);
-            LiveService.start(this);   // recebe mensagens com o app fechado, como o WhatsApp
-            ensureNotifications();
+            // Cada recurso extra protegido: se um falhar neste celular, o app abre mesmo assim.
+            safely("mensagens", () -> NotesJob.ensure(this));
+            safely("ficar ligado", () -> LiveService.start(this));   // recebe mensagens com o app fechado
+            safely("avisos", this::ensureNotifications);
         }
+        if (showLastCrash()) return;
         if (askConfigLink(getIntent())) return;
         if (server == null) showSetup(null);
         else openTitan(pathFor(getIntent()));
+    }
+
+    private void safely(String what, Runnable r) {
+        try { r.run(); } catch (Throwable e) { android.util.Log.w("TITAN", "Falhou: " + what, e); }
+    }
+
+    /** O app fechou sozinho da última vez? Mostra o motivo (para tirar print) e segue. */
+    private boolean showLastCrash() {
+        android.content.SharedPreferences p = getSharedPreferences(TitanApp.CRASH_PREFS, MODE_PRIVATE);
+        String err = p.getString("ultimo", null);
+        if (err == null) return false;
+        p.edit().remove("ultimo").apply();
+        TextView tv = new TextView(this);
+        tv.setText(err);
+        tv.setTextIsSelectable(true);
+        tv.setTextSize(11);
+        tv.setPadding(32, 24, 32, 24);
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(tv);
+        new AlertDialog.Builder(this)
+                .setTitle("O TITAN fechou sozinho da última vez")
+                .setMessage("Tire um print desta tela e mande para o Claude. Depois toque em Continuar.")
+                .setView(sv)
+                .setPositiveButton("Continuar", (d, w) -> {
+                    if (server == null) showSetup(null); else openTitan(pathFor(getIntent()));
+                })
+                .setCancelable(false)
+                .show();
+        return true;
     }
 
     // --- "Ligar TITAN" -------------------------------------------------------------------
@@ -403,6 +434,23 @@ public class MainActivity extends Activity {
                 if (sameServer(u)) return false;
                 // Fontes, links das aulas etc.: abrem no navegador, fora do app.
                 try { startActivity(new Intent(Intent.ACTION_VIEW, u)); } catch (Exception ignored) { }
+                return true;
+            }
+
+            /** A tela interna (WebView) travou: abre de novo em vez de fechar o app inteiro. */
+            @Override
+            public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
+                ui.post(() -> {
+                    if (web == view) {
+                        android.view.ViewParent parent = view.getParent();
+                        if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(view);
+                        view.destroy();
+                        web = null;
+                        openTitan(BuildConfig.HOME);
+                    } else {
+                        view.destroy();
+                    }
+                });
                 return true;
             }
 

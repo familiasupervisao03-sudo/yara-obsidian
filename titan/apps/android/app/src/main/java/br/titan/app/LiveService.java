@@ -38,11 +38,17 @@ public class LiveService extends Service {
     };
 
     static void start(Context c) {
+        Intent i = new Intent(c, LiveService.class);
         try {
-            Intent i = new Intent(c, LiveService.class);
-            if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i); else c.startService(i);
-        } catch (Exception ignored) {
-            // o Android não deixou agora (app em segundo plano): o alarme reserva continua checando
+            // Com o app na tela, um início normal basta (o próprio serviço vira "ligado");
+            // assim o Android não exige prazo e não fecha o app se algo falhar.
+            c.startService(i);
+        } catch (Throwable notNow) {
+            try {
+                if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i);
+            } catch (Throwable ignored) {
+                // o Android não deixou agora (app em segundo plano): o alarme reserva continua checando
+            }
         }
         armBackup(c);
     }
@@ -59,6 +65,15 @@ public class LiveService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        try {
+            begin();
+        } catch (Throwable e) {   // algum celular não deixou: sem o modo "ligado", o app segue normal
+            android.util.Log.w("TITAN", "Modo ligado indisponível", e);
+            stopSelf();
+        }
+    }
+
+    private void begin() {
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL) == null) {
             NotificationChannel ch = new NotificationChannel(CHANNEL, "TITAN conectado (fixo)", NotificationManager.IMPORTANCE_MIN);

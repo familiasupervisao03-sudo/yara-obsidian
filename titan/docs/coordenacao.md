@@ -105,3 +105,6 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
 - 2026-11-14 · CENTRAL · "Ligar TITAN": ícone próprio na tela inicial (activity-alias no app titan) → tela de
   chamada estilo WhatsApp (`/?acao=ligar`, `components/CallScreen.tsx`), som no ouvido e sensor de proximidade;
   APKs titan 1.9 / casa 1.4 / central 1.4 · (`App.tsx`, `Shell.tsx`, `notify.ts`, `apps/android/app/**`, APKs)
+- 2026-11-14 · CENTRAL · app fechava ao abrir no celular novo: recursos extras protegidos (abre mesmo se
+  falharem), WebView travada reabre em vez de fechar o app, erro guardado e mostrado na próxima abertura;
+  APKs titan 1.9.1 / casa 1.4.1 / central 1.4.1 · (`apps/android/app/**`, APKs)
