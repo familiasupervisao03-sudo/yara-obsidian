@@ -13,7 +13,9 @@ export function App() {
   const [intro, setIntro] = useState(false);
   const [expired, setExpired] = useState(false);
   const endIntro = useCallback(() => setIntro(false), []);
-  const enter = useCallback((s: SessionInfo) => { setSession(s); setExpired(false); setIntro(true); }, []);
+  // "Ligar TITAN" (ícone da tela inicial): vai direto para a chamada, sem a animação de abertura.
+  const calling = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("acao") === "ligar";
+  const enter = useCallback((s: SessionInfo) => { setSession(s); setExpired(false); setIntro(!calling); }, [calling]);
 
   useEffect(() => {
     api

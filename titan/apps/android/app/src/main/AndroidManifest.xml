@@ -6,6 +6,8 @@
     <!-- Microfone (modo voz) e câmera: o Android pergunta na primeira vez; só o TITAN recebe. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Ligar TITAN: sensor de proximidade apaga a tela no ouvido. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Lembretes na hora certa (agendados no celular) e de volta depois de reiniciar. -->

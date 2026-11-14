@@ -102,3 +102,6 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
 - 2026-11-08 · CENTRAL · Voz → "O que eu ouvi" (últimas 6 falas por conta, texto + áudio, só na memória
   30 min; rotas /voice/heard) para diagnosticar o reconhecimento · (`titan/voice/engines.py`,
   `routers/voice.py`, openapi)
+- 2026-11-14 · CENTRAL · "Ligar TITAN": ícone próprio na tela inicial (activity-alias no app titan) → tela de
+  chamada estilo WhatsApp (`/?acao=ligar`, `components/CallScreen.tsx`), som no ouvido e sensor de proximidade;
+  APKs titan 1.9 / casa 1.4 / central 1.4 · (`App.tsx`, `Shell.tsx`, `notify.ts`, `apps/android/app/**`, APKs)

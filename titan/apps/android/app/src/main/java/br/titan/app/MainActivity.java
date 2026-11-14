@@ -5,6 +5,9 @@ import android.app.Activity;
 import android.app.AlarmManager;
 import android.app.AlertDialog;
 import android.app.NotificationManager;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
+import android.os.PowerManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -82,6 +85,66 @@ public class MainActivity extends Activity {
         if (askConfigLink(getIntent())) return;
         if (server == null) showSetup(null);
         else openTitan(pathFor(getIntent()));
+    }
+
+    // --- "Ligar TITAN" -------------------------------------------------------------------
+    private PowerManager.WakeLock proximity;
+    private boolean inCall;
+
+    /** Liga o modo ligação: áudio de chamada (ouvido), tela acesa e sensor de proximidade. */
+    private void setCallMode(boolean on) {
+        AudioManager am = getSystemService(AudioManager.class);
+        if (on) {
+            if (inCall) return;
+            inCall = true;
+            am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+            setVolumeControlStream(AudioManager.STREAM_VOICE_CALL);   // botões de volume = volume da ligação
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            routeSpeaker(false);
+        } else {
+            if (!inCall) return;
+            inCall = false;
+            releaseProximity();
+            if (Build.VERSION.SDK_INT >= 31) am.clearCommunicationDevice();
+            else am.setSpeakerphoneOn(false);
+            am.setMode(AudioManager.MODE_NORMAL);   // som volta ao normal (música, vídeos)
+            setVolumeControlStream(AudioManager.USE_DEFAULT_STREAM_TYPE);
+            if (!BuildConfig.KIOSK) getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void routeSpeaker(boolean speaker) {
+        if (!inCall) return;
+        AudioManager am = getSystemService(AudioManager.class);
+        if (Build.VERSION.SDK_INT >= 31) {
+            int want = speaker ? AudioDeviceInfo.TYPE_BUILTIN_SPEAKER : AudioDeviceInfo.TYPE_BUILTIN_EARPIECE;
+            for (AudioDeviceInfo d : am.getAvailableCommunicationDevices()) {
+                if (d.getType() == want) { am.setCommunicationDevice(d); break; }
+            }
+        } else {
+            am.setSpeakerphoneOn(speaker);
+        }
+        // No ouvido: encostou, a tela apaga e os toques travam (o rosto não desliga a ligação).
+        // No viva-voz o celular fica longe do rosto: sem sensor.
+        if (speaker) releaseProximity(); else acquireProximity();
+    }
+
+    private void acquireProximity() {
+        if (proximity != null) return;
+        PowerManager pm = getSystemService(PowerManager.class);
+        if (pm == null || !pm.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) return;
+        proximity = pm.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "titan:ligacao");
+        proximity.setReferenceCounted(false);
+        proximity.acquire(2 * 60 * 60 * 1000L);   // no máximo 2 h (nunca fica preso)
+    }
+
+    private void releaseProximity() {
+        if (proximity == null) return;
+        try {
+            if (proximity.isHeld()) proximity.release(PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY);
+        } catch (RuntimeException ignored) { /* já solto */ }
+        proximity = null;
     }
 
     boolean notificationsOn() {
@@ -197,11 +260,13 @@ public class MainActivity extends Activity {
     /** Converte atalho / compartilhamento no caminho da interface do TITAN. */
     private String pathFor(Intent i) {
         if (i == null) return BuildConfig.HOME;
+        // Ícone "Ligar TITAN" da tela inicial: abre direto a tela de chamada.
+        if (i.getComponent() != null && i.getComponent().getClassName().endsWith(".LigarTitan")) return "/?acao=ligar";
         if (isConfigure(i)) return BuildConfig.HOME;
         Uri d = i.getData();
         if (d != null && "titan".equals(d.getScheme()) && "acao".equals(d.getHost())) {
             String acao = d.getLastPathSegment();
-            if ("voz".equals(acao) || "conversa".equals(acao) || "aula".equals(acao) || "aprovacoes".equals(acao)
+            if ("voz".equals(acao) || "ligar".equals(acao) || "conversa".equals(acao) || "aula".equals(acao) || "aprovacoes".equals(acao)
                     || "inicio".equals(acao) || "memoria".equals(acao)) {
                 return "/?acao=" + acao;
             }
@@ -530,6 +595,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        setCallMode(false);   // nunca deixa o modo ligação / sensor presos
         ui.removeCallbacks(timeout);
         if (errorView != null) errorView.destroy();
         if (web != null) web.destroy();
@@ -550,6 +616,18 @@ public class MainActivity extends Activity {
                 if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             });
+        }
+
+        /** "Ligar TITAN": som pelo alto-falante de ouvido e sensor de proximidade (liga/desliga). */
+        @JavascriptInterface
+        public void callMode(boolean on) {
+            runOnUiThread(() -> setCallMode(on));
+        }
+
+        /** Botão alto-falante da ligação: viva-voz (sem sensor) ou ouvido (com sensor). */
+        @JavascriptInterface
+        public void setSpeaker(boolean on) {
+            runOnUiThread(() -> routeSpeaker(on));
         }
 
         @JavascriptInterface

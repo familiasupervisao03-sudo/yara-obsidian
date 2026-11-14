@@ -11,5 +11,18 @@
             </intent-filter>
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
+        <!-- Ícone separado na tela inicial: "Ligar TITAN" abre direto a tela de chamada. -->
+        <activity-alias
+            android:name=".LigarTitan"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:label="Ligar TITAN"
+            android:icon="@mipmap/ic_ligar"
+            android:roundIcon="@mipmap/ic_ligar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
     </application>
 </manifest>

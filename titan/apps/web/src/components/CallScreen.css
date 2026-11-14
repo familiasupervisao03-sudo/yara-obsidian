@@ -1,0 +1,50 @@
+/* "Ligar TITAN": tela de chamada no estilo do WhatsApp. Animações leves (notebook/celular fracos). */
+.call-screen {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; flex-direction: column; align-items: center;
+  padding: max(48px, env(safe-area-inset-top)) 20px max(32px, env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, #1f2c34, #0b141a);
+  color: #e9edef; font-family: system-ui, sans-serif; text-align: center;
+  user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.call-screen.dial { background: #0b141a; }
+.call-back {
+  position: absolute; top: max(14px, env(safe-area-inset-top)); left: 12px;
+  background: none; border: 0; color: #8696a0; font-size: 34px; line-height: 1; padding: 4px 12px;
+}
+.call-avatar {
+  width: 132px; height: 132px; border-radius: 50%; margin-top: 28px; overflow: hidden;
+  border: 3px solid rgba(62, 232, 255, 0.35); background: #05101a;
+}
+.call-avatar img { width: 100%; height: 100%; display: block; }
+.ringing .call-avatar { animation: call-ring 1.2s ease-in-out infinite; }
+.call-avatar.talking { box-shadow: 0 0 0 6px rgba(62, 232, 255, 0.18); }
+@keyframes call-ring {
+  50% { box-shadow: 0 0 0 14px rgba(62, 232, 255, 0.12), 0 0 0 28px rgba(62, 232, 255, 0.06); }
+}
+.call-name { font-size: 28px; font-weight: 500; margin-top: 18px; letter-spacing: 0.04em; }
+.call-sub { color: #8696a0; font-size: 14px; margin-top: 6px; }
+.call-status { color: #d1d7db; font-size: 16px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.call-online { margin-top: 12px; font-size: 14px; color: #8696a0; }
+.call-online.on { color: #25d366; }
+.call-online.off { color: #ff6b6b; }
+.call-line { margin-top: 26px; max-width: 520px; font-size: 16px; line-height: 1.45; color: #d1d7db; }
+.call-line b { color: #3ee8ff; font-weight: 600; }
+.call-notice { margin-top: 12px; font-size: 14px; color: #ffd27a; max-width: 520px; }
+.call-actions { margin-top: auto; width: 100%; display: flex; justify-content: center; }
+.call-dial { display: flex; flex-direction: column; align-items: center; gap: 12px; color: #8696a0; font-size: 14px; }
+.call-row { display: flex; gap: 34px; align-items: flex-start; }
+.call-opt { display: flex; flex-direction: column; align-items: center; gap: 6px; color: #8696a0; font-size: 12px; }
+/* .call-screen na frente: o visual geral dos botões do TITAN (ciano, cantos cortados) não vale aqui */
+.call-screen .call-btn {
+  border: 0; border-radius: 50%; display: grid; place-items: center; color: #fff; cursor: pointer;
+  touch-action: manipulation; clip-path: none; box-shadow: none; padding: 0; min-height: 0; transition: none;
+}
+.call-screen .call-back { clip-path: none; box-shadow: none; min-height: 0; }
+.call-screen .call-back:hover { background: none; }
+.call-screen .call-btn:disabled { opacity: 0.45; cursor: default; }
+.call-screen .call-green, .call-screen .call-green:hover:not(:disabled) { width: 88px; height: 88px; background: #25d366; color: #0b141a; box-shadow: 0 0 22px rgba(37, 211, 102, 0.45); }
+.call-screen .call-red, .call-screen .call-red:hover:not(:disabled) { width: 72px; height: 72px; background: #f15c6d; }
+.call-red svg { transform: rotate(135deg); }
+.call-screen .call-round, .call-screen .call-round:hover:not(:disabled) { width: 58px; height: 58px; background: #2a3942; font-size: 22px; }
+.call-screen .call-round.on, .call-screen .call-round.on:hover:not(:disabled) { background: #e9edef; }

@@ -14,6 +14,9 @@ interface AndroidBridge {
   testNotify?(): void;
   openNotifySettings?(): void;
   openBatterySettings?(): void;
+  // app 1.9+: "Ligar TITAN" (alto-falante de ouvido, sensor de proximidade)
+  callMode?(on: boolean): void;
+  setSpeaker?(on: boolean): void;
 }
 
 export function androidApp(): AndroidBridge | null {

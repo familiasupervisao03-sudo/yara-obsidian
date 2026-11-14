@@ -3,6 +3,7 @@ import type { SessionInfo, SettingsView, SystemStatus } from "@titan/api-contrac
 import { api, HttpError } from "../api";
 import { ChatView } from "./ChatView";
 import { VoiceView } from "./VoiceView";
+import { CallScreen } from "./CallScreen";
 import { TasksView } from "./TasksView";
 import { SystemView } from "./SystemView";
 import { Home } from "./Home";
@@ -27,7 +28,7 @@ export interface ChatIntent {
 }
 
 /** Atalhos do ícone (manifest) e "Compartilhar → TITAN" chegam pelo endereço. */
-function readLaunch(): { view?: View; intent?: ChatIntent; shared?: Shared; conversation?: string } {
+function readLaunch(): { view?: View; intent?: ChatIntent; shared?: Shared; conversation?: string; call?: boolean } {
   const q = new URLSearchParams(window.location.search);
   const acao = q.get("acao");
   const conversa = q.get("conversa");
@@ -38,6 +39,7 @@ function readLaunch(): { view?: View; intent?: ChatIntent; shared?: Shared; conv
     const shared = { title: q.get("title") ?? "", text: q.get("text") ?? "", url: q.get("url") ?? "" };
     if (shared.title || shared.text || shared.url) return { shared };
   }
+  if (acao === "ligar") return { call: true };  // ícone "Ligar TITAN" da tela inicial
   if (acao === "voz") return { view: "voice" };
   if (acao === "conversa") return { view: "chat", intent: { newConversation: true } };
   if (acao === "aula") return { view: "chat", intent: { lesson: true } };
@@ -72,6 +74,7 @@ export function Shell({ session, onLogout, onExpired }: {
   const [view, setView] = useState<View>(() => launch.view ?? loadView());
   const [chatIntent, setChatIntent] = useState<ChatIntent | null>(launch.intent ? { ...launch.intent, at: Date.now() } : null);
   const [shared, setShared] = useState<Shared | null>(launch.shared ?? null);
+  const [calling, setCalling] = useState(Boolean(launch.call));
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const [offline, setOffline] = useState(false);
@@ -173,6 +176,10 @@ export function Shell({ session, onLogout, onExpired }: {
 
   const hybrid = status?.external_provider_active
     || status?.services.some((s) => s.name === "internet" && s.state === "online");
+
+  if (calling) {
+    return <CallScreen username={session.user.username} onClose={() => { setCalling(false); go("home"); }} />;
+  }
 
   return (
     <div className="app">
