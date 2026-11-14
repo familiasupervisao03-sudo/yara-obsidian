@@ -61,6 +61,45 @@ def cmd_create_user(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_set_password(args: argparse.Namespace) -> int:
+    """Esqueceu a senha? Troca pelo terminal do notebook (só quem está no notebook consegue)."""
+    from titan.audit import log as audit
+    from titan.auth.service import AuthError, AuthService
+    from titan.db.engine import make_engine, make_session_factory
+
+    s = _settings()
+    engine = make_engine(s.database_url)
+    try:
+        with make_session_factory(engine)() as db:
+            from sqlalchemy import select
+
+            from titan.db.models import User
+            names = list(db.scalars(select(User.username)))
+        username = args.username
+        if not username:
+            if len(names) == 1:
+                username = names[0]
+            else:
+                print("Contas: " + ", ".join(names))
+                username = input("Qual conta? ").strip()
+        print(f"Nova senha para '{username}' (não aparece na tela enquanto digita).")
+        password = getpass.getpass("Nova senha: ")
+        if password != getpass.getpass("Confirme a nova senha: "):
+            print("As senhas não conferem. Nada foi trocado.", file=sys.stderr)
+            return 1
+        with make_session_factory(engine).begin() as db:
+            user = AuthService.set_password(db, username, password)
+            audit.record(db, "user.password_changed", entity_type="user", entity_id=str(user.id),
+                         data={"username": user.username, "via": "cli"})
+    except AuthError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        engine.dispose()
+    print(f"Senha de '{username}' trocada. Entre de novo nos aparelhos com a senha nova.")
+    return 0
+
+
 def cmd_audit_verify(_: argparse.Namespace) -> int:
     from titan.audit.log import verify_chain
     from titan.db.engine import make_engine, make_session_factory
@@ -1213,6 +1252,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("username")
     p.add_argument("--role", choices=["owner", "member"], default="owner")
     p.set_defaults(fn=cmd_create_user)
+    p = sub.add_parser("trocar-senha", help="esqueceu a senha? troca a senha de uma conta (pelo notebook)")
+    p.add_argument("username", nargs="?", default="")
+    p.set_defaults(fn=cmd_set_password)
     sub.add_parser("audit-verify", help="verifica a integridade da auditoria").set_defaults(fn=cmd_audit_verify)
     p = sub.add_parser("enable-anthropic", help="liga a API da Anthropic (externa e paga) com orçamento")
     p.add_argument("--env-file", default=".env")

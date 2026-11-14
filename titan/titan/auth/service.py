@@ -100,6 +100,21 @@ class AuthService:
         db.flush()
         return user
 
+    @staticmethod
+    def set_password(db: DBSession, username: str, password: str) -> User:
+        """Troca a senha (pelo terminal do notebook) e encerra todos os logins abertos dessa conta."""
+        user = db.scalar(select(User).where(User.username == username.strip()))
+        if user is None:
+            raise AuthError("Usuário não encontrado.")
+        if len(password) < MIN_PASSWORD_LENGTH:
+            raise AuthError(f"A senha deve ter ao menos {MIN_PASSWORD_LENGTH} caracteres.")
+        user.password_hash = hash_password(password)
+        now = utcnow()
+        for sess in db.scalars(select(Session).where(Session.user_id == user.id, Session.revoked_at.is_(None))):
+            sess.revoked_at = now
+        db.flush()
+        return user
+
     # --- sessões ------------------------------------------------------------
 
     def login(

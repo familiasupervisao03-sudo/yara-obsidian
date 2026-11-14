@@ -122,3 +122,22 @@ def test_session_renewed_while_used_up_to_30_days(settings):
         with sf.begin() as db:
             assert db.query(Session).one().expires_at < utcnow() + timedelta(minutes=3)  # não renova mais
         engine.dispose()
+
+
+def test_trocar_senha_pelo_notebook(settings, monkeypatch):
+    """Esqueceu a senha: `titan trocar-senha` troca pelo terminal e derruba os logins antigos."""
+    from titan import cli
+
+    create_user(settings)
+    with build_client(settings) as c:
+        assert login(c).status_code == 200
+        monkeypatch.setattr(cli, "_settings", lambda: settings)
+        answers = iter(["senha-nova-bem-grande", "outra-coisa"])
+        monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": next(answers))
+        assert cli.main(["trocar-senha", "operador"]) == 1          # não conferem: nada muda
+        assert c.get("/api/v1/auth/me").status_code == 200
+        answers = iter(["senha-nova-bem-grande", "senha-nova-bem-grande"])
+        assert cli.main(["trocar-senha"]) == 0                       # uma conta só: escolhe sozinho
+        assert c.get("/api/v1/auth/me").status_code == 401           # login antigo encerrado
+        assert login(c).status_code == 401                           # senha antiga não vale mais
+        assert login(c, password="senha-nova-bem-grande").status_code == 200

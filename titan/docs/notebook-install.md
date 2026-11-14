@@ -136,4 +136,4 @@ Integridade da auditoria: `.venv/bin/titan audit-verify`
   Me envie a mensagem; compilar dependências (ex.: pydantic-core em Rust)
   num notebook antigo é pesado e só faremos com sua autorização.
 - **Porta 8000 ocupada:** mude `TITAN_PORT` no `.env`.
-- **Esqueceu a senha:** crie outro usuário com `create-user`.
+- **Esqueceu a senha:** `.venv/bin/titan trocar-senha` (no notebook; pede a nova senha sem mostrar na tela e encerra os logins antigos).
