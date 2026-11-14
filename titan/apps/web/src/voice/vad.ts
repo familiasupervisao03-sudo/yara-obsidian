@@ -189,6 +189,8 @@ const CONTINUES = new Set([
   "e", "mas", "ou", "que", "porque", "porquê", "pra", "para", "pro", "de", "do", "da", "dos", "das",
   "com", "sem", "tipo", "então", "aí", "quando", "se", "o", "a", "os", "as", "um", "uma", "no", "na",
   "em", "mais", "também", "como", "onde", "qual", "quem", "até", "sobre", "pelo", "pela", "meu", "minha",
+  // pensando em voz alta ("é…", "hum…", "é o seguinte…", "tipo assim…")
+  "é", "eh", "hum", "hm", "hmm", "ahn", "ah", "assim", "seguinte", "sabe",
 ]);
 
 export function looksIncomplete(text: string): boolean {

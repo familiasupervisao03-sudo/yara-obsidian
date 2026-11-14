@@ -167,6 +167,70 @@ public class MainActivity extends Activity {
     // --- "Ligar TITAN" -------------------------------------------------------------------
     private PowerManager.WakeLock proximity;
     private boolean inCall;
+    private boolean wantSpeaker;
+    private android.hardware.SensorEventListener nearListener;
+    private Boolean wasNear;
+
+    /**
+     * O navegador interno muda a saída de som sozinho quando o microfone abre (põe no viva-voz).
+     * Durante a ligação, confere a cada 0,7 s e devolve o som para onde você escolheu.
+     */
+    private final Runnable keepRoute = new Runnable() {
+        @Override public void run() {
+            if (!inCall) return;
+            AudioManager am = getSystemService(AudioManager.class);
+            if (am.getMode() != AudioManager.MODE_IN_COMMUNICATION) am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+            if (onSpeaker(am) != wantSpeaker) applyRoute(am, wantSpeaker);
+            ui.postDelayed(this, 700);
+        }
+    };
+
+    @SuppressWarnings("deprecation")
+    private boolean onSpeaker(AudioManager am) {
+        if (Build.VERSION.SDK_INT >= 31) {
+            AudioDeviceInfo d = am.getCommunicationDevice();
+            return d != null && d.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;
+        }
+        return am.isSpeakerphoneOn();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void applyRoute(AudioManager am, boolean speaker) {
+        if (Build.VERSION.SDK_INT >= 31) {
+            int want = speaker ? AudioDeviceInfo.TYPE_BUILTIN_SPEAKER : AudioDeviceInfo.TYPE_BUILTIN_EARPIECE;
+            for (AudioDeviceInfo d : am.getAvailableCommunicationDevices()) {
+                if (d.getType() == want) { am.setCommunicationDevice(d); break; }
+            }
+        } else {
+            am.setSpeakerphoneOn(speaker);
+        }
+    }
+
+    /** Avisa a tela quando o celular encosta/sai do ouvido (mexer no celular não corta o TITAN). */
+    private void watchNear(boolean on) {
+        android.hardware.SensorManager sm = getSystemService(android.hardware.SensorManager.class);
+        if (sm == null) return;
+        if (!on) {
+            if (nearListener != null) sm.unregisterListener(nearListener);
+            nearListener = null;
+            wasNear = null;
+            return;
+        }
+        android.hardware.Sensor sensor = sm.getDefaultSensor(android.hardware.Sensor.TYPE_PROXIMITY);
+        if (sensor == null || nearListener != null) return;
+        final float max = sensor.getMaximumRange();
+        nearListener = new android.hardware.SensorEventListener() {
+            @Override public void onSensorChanged(android.hardware.SensorEvent e) {
+                boolean near = e.values.length > 0 && e.values[0] < Math.min(5f, max);
+                if (wasNear != null && wasNear == near) return;
+                wasNear = near;
+                if (web != null) web.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('titan:proximidade',{detail:" + near + "}))", null);
+            }
+            @Override public void onAccuracyChanged(android.hardware.Sensor s, int a) { }
+        };
+        sm.registerListener(nearListener, sensor, android.hardware.SensorManager.SENSOR_DELAY_NORMAL);
+    }
 
     /** Liga o modo ligação: áudio de chamada (ouvido), tela acesa e sensor de proximidade. */
     private void setCallMode(boolean on) {
@@ -178,9 +242,14 @@ public class MainActivity extends Activity {
             setVolumeControlStream(AudioManager.STREAM_VOICE_CALL);   // botões de volume = volume da ligação
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             routeSpeaker(false);
+            watchNear(true);
+            ui.removeCallbacks(keepRoute);
+            ui.postDelayed(keepRoute, 700);
         } else {
             if (!inCall) return;
             inCall = false;
+            ui.removeCallbacks(keepRoute);
+            watchNear(false);
             releaseProximity();
             if (Build.VERSION.SDK_INT >= 31) am.clearCommunicationDevice();
             else am.setSpeakerphoneOn(false);
@@ -190,18 +259,10 @@ public class MainActivity extends Activity {
         }
     }
 
-    @SuppressWarnings("deprecation")
     private void routeSpeaker(boolean speaker) {
         if (!inCall) return;
-        AudioManager am = getSystemService(AudioManager.class);
-        if (Build.VERSION.SDK_INT >= 31) {
-            int want = speaker ? AudioDeviceInfo.TYPE_BUILTIN_SPEAKER : AudioDeviceInfo.TYPE_BUILTIN_EARPIECE;
-            for (AudioDeviceInfo d : am.getAvailableCommunicationDevices()) {
-                if (d.getType() == want) { am.setCommunicationDevice(d); break; }
-            }
-        } else {
-            am.setSpeakerphoneOn(speaker);
-        }
+        wantSpeaker = speaker;
+        applyRoute(getSystemService(AudioManager.class), speaker);
         // No ouvido: encostou, a tela apaga e os toques travam (o rosto não desliga a ligação).
         // No viva-voz o celular fica longe do rosto: sem sensor.
         if (speaker) releaseProximity(); else acquireProximity();

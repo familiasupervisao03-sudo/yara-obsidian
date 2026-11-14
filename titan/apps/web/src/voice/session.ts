@@ -139,6 +139,8 @@ export class VoiceSession {
   private transcriptAt = 0;
   private gotText = false;
   private turnSeq = 0;
+  /** Até quando o TITAN não pode ser interrompido por som (ex.: logo depois de trocar ouvido/viva-voz). */
+  private noBargeUntil = 0;
 
   constructor(deps: VoiceDeps, events: VoiceEvents, opts: VoiceOptions) {
     this.deps = deps;
@@ -227,6 +229,11 @@ export class VoiceSession {
     this.player?.setVolume(v);
   }
 
+  /** Por um tempo, barulho não interrompe a fala do TITAN (trocar ouvido ↔ viva-voz, mexer no celular). */
+  suppressBargeIn(ms: number): void {
+    this.noBargeUntil = Math.max(this.noBargeUntil, this.deps.now() + ms);
+  }
+
   setMuted(m: boolean): void {
     this.player?.setMuted(m);
   }
@@ -249,6 +256,7 @@ export class VoiceSession {
     const listensWhileTranscribing = this.state === "transcribing" && this.deps.stt.overlap === true;
     if ((this.state === "transcribing" && !listensWhileTranscribing) || this.state === "review") return;
 
+    if (playback && this.deps.now() < this.noBargeUntil) return;  // não corta a fala do TITAN agora
     const event = this.vad.process(energy, this.deps.now(), playback);
     if (!event) return;
     if (event.type === "speech_start") this.onSpeechStart(event.atMs);

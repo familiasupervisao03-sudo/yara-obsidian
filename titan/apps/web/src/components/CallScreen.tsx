@@ -177,7 +177,13 @@ export function CallScreen({ username, onClose }: { username: string; onClose: (
         onNotice: setNotice,
         onError: setNotice,
       },
-      { confirmBeforeSend: false, ttsEnabled: Boolean(tts) },
+      {
+        confirmBeforeSend: false, ttsEnabled: Boolean(tts),
+        // Ligação: responde rápido quando a frase acabou (0,75 s de silêncio), mas espera bem mais
+        // quando você está pensando ("é…", "tipo assim…", "e…"). Para cortar o TITAN no meio,
+        // precisa falar de verdade (0,6 s), não basta barulho de mexer no celular.
+        vad: { silenceEndMs: 750, incompleteHoldFactor: 2.6, minBargeInMs: 600, playbackFactor: 3 },
+      },
     );
     sessionRef.current = session;
     await session.start();
@@ -211,8 +217,16 @@ export function CallScreen({ username, onClose }: { username: string; onClose: (
   function toggleSpeaker() {
     const s = !speaker;
     setSpeaker(s);
+    sessionRef.current?.suppressBargeIn(3000);   // a troca não interrompe o que o TITAN está falando
     bridge()?.setSpeaker?.(s);
   }
+
+  // O app avisa quando o celular sai/entra no ouvido: mexer no celular não corta a fala do TITAN.
+  useEffect(() => {
+    const moved = () => sessionRef.current?.suppressBargeIn(2500);
+    window.addEventListener("titan:proximidade", moved);
+    return () => window.removeEventListener("titan:proximidade", moved);
+  }, []);
 
   const status = phase === "ringing" ? "chamando…" : phase === "talk" ? `em ligação · ${clock(now - startedAt)}`
     : phase === "ended" ? "ligação encerrada" : "";

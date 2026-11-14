@@ -111,3 +111,6 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
 - 2026-11-14 · CENTRAL · Realme C61 em loop (WebView travando): 1ª trava reabre em modo leve (`?leve=1`, sem
   abertura animada), 2ª trava para o loop e mostra tela com "Atualizar WebView"; APKs titan 1.9.2 / casa 1.4.2 /
   central 1.4.2 · (`theme/themes.ts`, `App.tsx`, `apps/android/app/**`, APKs)
+- 2026-11-14 · CENTRAL · Ligação mais natural: responde após 0,75 s de silêncio mas espera ao "pensar em voz
+  alta"; som fica no ouvido/viva-voz escolhido (app corrige a cada 0,7 s); trocar/mexer no celular não corta o
+  TITAN; APKs titan 1.9.3 / casa 1.4.3 / central 1.4.3 · (`voice/vad.ts`, `voice/session.ts`, `apps/android/app/**`)

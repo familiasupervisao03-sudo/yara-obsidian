@@ -588,3 +588,27 @@ test("modo revisão: editar o texto sugere a correção, e o dicionário aplicad
   await flush();
   assert.ok(notices.some((n) => n.includes("Corrigido pelo seu dicionário: vós → voz")));
 });
+
+test("ligação: logo depois de trocar ouvido/viva-voz, barulho não corta a fala do TITAN", async () => {
+  const t = setup();
+  await t.s.start();
+  await t.speak();
+  assert.equal(t.s.state, "speaking");
+  const playing = t.tts.clips[0];
+  t.s.suppressBargeIn(2000);
+  for (let i = 0; i < 25; i++) t.frame(0.5); // 0,5 s de barulho forte (mexendo no celular)
+  await flush();
+  assert.ok(!playing.stopped, "continua falando");
+  assert.equal(t.s.state, "speaking");
+  for (let i = 0; i < 100; i++) t.frame(0.003); // passou o tempo: volta a poder interromper
+  for (let i = 0; i < 25; i++) t.frame(0.5);
+  await flush();
+  assert.ok(playing.stopped, "depois do tempo, falar por cima interrompe de novo");
+});
+
+test("pensando em voz alta ('é o seguinte', 'tipo assim') conta como frase incompleta", () => {
+  assert.ok(looksIncomplete("é o seguinte"));
+  assert.ok(looksIncomplete("tipo assim"));
+  assert.ok(looksIncomplete("eu queria hum"));
+  assert.ok(!looksIncomplete("liga a luz da sala"));
+});
