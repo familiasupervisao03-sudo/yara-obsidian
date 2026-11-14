@@ -89,6 +89,52 @@ public class MainActivity extends Activity {
         else openTitan(pathFor(getIntent()));
     }
 
+    private long lastRenderGone = 0;
+
+    /** A tela do TITAN travou 2 vezes: em vez de ficar reiniciando, explica e oferece o conserto. */
+    private void showRenderTrouble(boolean crashed) {
+        String wv = "?";
+        try {
+            android.content.pm.PackageInfo pi = Build.VERSION.SDK_INT >= 26 ? WebView.getCurrentWebViewPackage() : null;
+            if (pi != null) wv = pi.packageName + " " + pi.versionName;
+        } catch (Throwable ignored) { /* sem informação */ }
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(56, 120, 56, 56);
+        box.setBackgroundColor(Color.parseColor("#03070c"));
+        TextView t = new TextView(this);
+        t.setTextColor(Color.parseColor("#dff6ff"));
+        t.setTextSize(17);
+        t.setText("A tela do TITAN travou neste celular.\n\n"
+                + "Quase sempre é o \"Android System WebView\" desatualizado (comum em celular novo).\n\n"
+                + "1. Toque em ATUALIZAR WEBVIEW e atualize na Play Store.\n"
+                + "2. Atualize também o Google Chrome.\n"
+                + "3. Volte e toque em TENTAR DE NOVO.\n\n"
+                + "Para o Claude: " + (crashed ? "travou (crash)" : "fechado pelo sistema (memória)")
+                + " · WebView " + wv + " · Android " + Build.VERSION.RELEASE + " · " + Build.MODEL);
+        t.setTextIsSelectable(true);
+        box.addView(t);
+        Button upd = new Button(this);
+        upd.setText("Atualizar WebView");
+        upd.setOnClickListener(v -> {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.webview")));
+            } catch (Exception e) {
+                startActivity(new Intent(Intent.ACTION_VIEW,
+                        Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.webview")));
+            }
+        });
+        Button retry = new Button(this);
+        retry.setText("Tentar de novo");
+        retry.setOnClickListener(v -> { lastRenderGone = 0; openTitan(BuildConfig.HOME + "?leve=1"); });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = 40;
+        box.addView(upd, lp);
+        box.addView(retry, lp);
+        setContentView(box);
+    }
+
     private void safely(String what, Runnable r) {
         try { r.run(); } catch (Throwable e) { android.util.Log.w("TITAN", "Falhou: " + what, e); }
     }
@@ -437,19 +483,24 @@ public class MainActivity extends Activity {
                 return true;
             }
 
-            /** A tela interna (WebView) travou: abre de novo em vez de fechar o app inteiro. */
+            /**
+             * A tela interna (WebView) travou. 1ª vez: reabre no modo leve (sem efeitos pesados).
+             * De novo em pouco tempo: para de reabrir (sem loop) e explica o que fazer.
+             */
             @Override
             public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
+                final boolean crashed = Build.VERSION.SDK_INT < 26 || detail.didCrash();
                 ui.post(() -> {
-                    if (web == view) {
-                        android.view.ViewParent parent = view.getParent();
-                        if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(view);
-                        view.destroy();
-                        web = null;
-                        openTitan(BuildConfig.HOME);
-                    } else {
-                        view.destroy();
-                    }
+                    android.view.ViewParent parent = view.getParent();
+                    if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(view);
+                    view.destroy();
+                    if (web != view) return;
+                    web = null;
+                    long now = System.currentTimeMillis();
+                    boolean again = now - lastRenderGone < 3 * 60_000;
+                    lastRenderGone = now;
+                    if (!again) openTitan(BuildConfig.HOME + "?leve=1");
+                    else showRenderTrouble(crashed);
                 });
                 return true;
             }

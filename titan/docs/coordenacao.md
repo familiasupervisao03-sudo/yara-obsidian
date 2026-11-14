@@ -108,3 +108,6 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
 - 2026-11-14 · CENTRAL · app fechava ao abrir no celular novo: recursos extras protegidos (abre mesmo se
   falharem), WebView travada reabre em vez de fechar o app, erro guardado e mostrado na próxima abertura;
   APKs titan 1.9.1 / casa 1.4.1 / central 1.4.1 · (`apps/android/app/**`, APKs)
+- 2026-11-14 · CENTRAL · Realme C61 em loop (WebView travando): 1ª trava reabre em modo leve (`?leve=1`, sem
+  abertura animada), 2ª trava para o loop e mostra tela com "Atualizar WebView"; APKs titan 1.9.2 / casa 1.4.2 /
+  central 1.4.2 · (`theme/themes.ts`, `App.tsx`, `apps/android/app/**`, APKs)

@@ -12,6 +12,15 @@ const KEY = "titan.aparencia";
 export interface Appearance { theme: string; leve: boolean }
 
 export function loadAppearance(): Appearance {
+  // O app do celular pede "?leve=1" quando a tela travou: liga o modo leve e guarda a escolha.
+  try {
+    if (new URLSearchParams(window.location.search).get("leve") === "1") {
+      const cur = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+      localStorage.setItem(KEY, JSON.stringify({ ...cur, leve: true }));
+    }
+  } catch {
+    /* sem armazenamento */
+  }
   try {
     const v = JSON.parse(localStorage.getItem(KEY) ?? "{}");
     const theme = THEMES.some((t) => t.id === v.theme) ? v.theme : DEFAULT_THEME;

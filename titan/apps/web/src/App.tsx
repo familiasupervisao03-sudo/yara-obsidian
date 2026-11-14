@@ -15,7 +15,10 @@ export function App() {
   const endIntro = useCallback(() => setIntro(false), []);
   // "Ligar TITAN" (ícone da tela inicial): vai direto para a chamada, sem a animação de abertura.
   const calling = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("acao") === "ligar";
-  const enter = useCallback((s: SessionInfo) => { setSession(s); setExpired(false); setIntro(!calling); }, [calling]);
+  // Modo leve (celular fraco ou tela que travou): sem a animação de abertura, que é a parte mais pesada.
+  const leve = typeof document !== "undefined" && document.documentElement.dataset.leve !== undefined;
+  const enter = useCallback((s: SessionInfo) => { setSession(s); setExpired(false); setIntro(!calling && !leve); },
+    [calling, leve]);
 
   useEffect(() => {
     api
