@@ -484,6 +484,34 @@ class Todo(TimestampMixin, Base):
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
 
 
+class TitanMdVersion(TimestampMixin, Base):
+    """TITAN.md: cada versão do manual de como o TITAN age com o dono (a mais nova vale)."""
+
+    __tablename__ = "titan_md_versions"
+    __table_args__ = (Index("ix_titan_md_user_created", "user_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(String(12), nullable=False)  # dono | titan | desfazer
+    note: Mapped[str] = mapped_column(String(300), nullable=False, default="")
+
+
+class TitanMdSuggestion(TimestampMixin, Base):
+    """Linha que o TITAN sugere guardar no TITAN.md (só entra se o dono tocar em Guardar)."""
+
+    __tablename__ = "titan_md_suggestions"
+    __table_args__ = (Index("ix_titan_md_sugg_user_status", "user_id", "status"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    line: Mapped[str] = mapped_column(String(300), nullable=False)
+    section: Mapped[str] = mapped_column(String(60), nullable=False)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="pending")
+    conversation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"))
+
+
 class TitanNote(TimestampMixin, Base):
     """Mensagem que o TITAN manda por conta própria (vira aviso no celular)."""
 

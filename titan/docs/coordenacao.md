@@ -63,7 +63,7 @@ Este caderno existe para **uma não atrapalhar a outra**. Toda conversa:
 | `packages/api-contracts/openapi.json` | gerado: só rodar o script |
 | `README.md`, `CLAUDE.md`, este caderno | todos lêem |
 
-**Migrações do banco:** a próxima livre é a **0008** (0007 = entrega das mensagens por aparelho). Antes de criar uma, **reserve aqui**
+**Migrações do banco:** a próxima livre é a **0009** (0008 = TITAN.md, o manual de cada conta). Antes de criar uma, **reserve aqui**
 (escreva "0008 — reservada pela conversa X para Y") e só então crie. Nunca duas com o mesmo número.
 
 ## Reservas (migrações e arquivos compartilhados em uso)
@@ -114,3 +114,6 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
 - 2026-11-14 · CENTRAL · Ligação mais natural: responde após 0,75 s de silêncio mas espera ao "pensar em voz
   alta"; som fica no ouvido/viva-voz escolhido (app corrige a cada 0,7 s); trocar/mexer no celular não corta o
   TITAN; APKs titan 1.9.3 / casa 1.4.3 / central 1.4.3 · (`voice/vad.ts`, `voice/session.ts`, `apps/android/app/**`)
+- 2026-11-14 · CENTRAL · TITAN.md (manual de cada conta, no banco): Sistema → TITAN.md, histórico/desfazer, vai no
+  contexto de toda conversa; o cérebro só SUGERE linhas ("Guardar"/"Agora não") · migração **0008**, `db/models.py`,
+  `brain/extract.py`, `brain/service.py`, router `brain`, openapi

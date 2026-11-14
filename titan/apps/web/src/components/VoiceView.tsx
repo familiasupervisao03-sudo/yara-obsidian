@@ -166,7 +166,8 @@ export function VoiceView({ conversationId, onConversation, onTurn, onUseText, o
         const list = acts as Action[];
         const said = list.map((a) => a.type === "lembrete" ? `⏰ ${a.title} (${fmtWhen(a.due_at)})`
           : a.type === "tarefa" ? `☐ ${a.title}` : a.type === "memoria" ? `🧠 ${a.content}`
-          : a.type === "meta" || a.type === "meta_nova" ? `🎯 ${a.line}` : a.type === "resolvido" ? `✓ ${a.content}` : "")
+          : a.type === "meta" || a.type === "meta_nova" ? `🎯 ${a.line}` : a.type === "resolvido" ? `✓ ${a.content}`
+          : a.type === "manual" ? `📘 quer guardar no TITAN.md: ${a.line} (Sistema → TITAN.md)` : "")
           .filter(Boolean);
         if (said.length) setNotice(`Anotado: ${said.join(" · ")}`);
         if (list.some((a) => a.type === "lembrete")) remindersChanged();

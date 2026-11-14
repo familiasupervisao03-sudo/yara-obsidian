@@ -443,12 +443,36 @@ function ActionCards({ items }: { items: Action[] }) {
             return <div key={i} className="acard"><span className="k">🎯 Meta avançou</span><b>{a.line}</b></div>;
           case "meta_nova":
             return <div key={i} className="acard"><span className="k">🎯 Nova meta no Início</span><b>{a.line}</b></div>;
+          case "manual":
+            return <ManualCard key={i} a={a} />;
           case "bloqueado":
             return <div key={i} className="acard acard-block"><span className="k">🔒 {a.detail}</span><span className="muted small">dados pessoais sensíveis ficam de fora da memória</span></div>;
           default:
             return null;
         }
       })}
+    </div>
+  );
+}
+
+/** O TITAN sugere guardar algo no TITAN.md: só entra se você tocar em Guardar. */
+function ManualCard({ a }: { a: Extract<Action, { type: "manual" }> }) {
+  const [state, setState] = useState<"pending" | "saved" | "dismissed" | "error">(
+    a.status === "accepted" ? "saved" : a.status === "dismissed" ? "dismissed" : "pending");
+  const answer = (ok: boolean) =>
+    (ok ? brain.acceptManual(a.id) : brain.dismissManual(a.id))
+      .then(() => setState(ok ? "saved" : "dismissed")).catch(() => setState("error"));
+  return (
+    <div className="acard acard-manual">
+      <span className="k">📘 {state === "saved" ? "Guardado no TITAN.md" : state === "dismissed" ? "Não guardei" : "Guardar no TITAN.md?"}</span>
+      <b>{a.line}</b>
+      {state === "pending" && (
+        <span className="row">
+          <button className="small" onClick={() => void answer(true)}>Guardar</button>
+          <button className="small ghost" onClick={() => void answer(false)}>Agora não</button>
+        </span>
+      )}
+      {state === "error" && <span className="muted small">não consegui responder agora; veja em Sistema → TITAN.md</span>}
     </div>
   );
 }

@@ -29,7 +29,10 @@ def brain_provider(settings: Settings, session_factory):
 def context_for(session_factory, user_id: uuid.UUID, text: str) -> str:
     try:
         with session_factory.begin() as db:
-            return store.context_block(db, user_id, text)
+            from titan.brain import titan_md
+            manual = titan_md.context_block(db, user_id)   # TITAN.md: como agir com o dono
+            memory = store.context_block(db, user_id, text)
+            return "\n\n".join(b for b in (manual, memory) if b)
     except Exception:  # memória nunca derruba a conversa
         log.exception("Falha ao montar o contexto da memória")
         return ""

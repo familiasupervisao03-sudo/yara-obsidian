@@ -41,7 +41,17 @@ export type Action =
   | { type: "resolvido"; id: string; content: string }
   | { type: "meta"; id: string; title: string; added: number; line: string }
   | { type: "meta_nova"; id: string; title: string; line: string }
+  | { type: "manual"; id: string; line: string; section: string; status: string }
   | { type: "bloqueado"; detail: string };
+
+/** TITAN.md: o manual de como o TITAN age com o dono. */
+export interface Manual {
+  content: string;
+  is_template: boolean;
+  max_chars: number;
+  history: { id: string; at: string; source: string; note: string }[];
+  suggestions: { id: string; line: string; section: string; status: string }[];
+}
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
@@ -100,6 +110,11 @@ export const brain = {
   // cada aparelho recebe a sua cópia das mensagens (o notebook não "gasta" a do celular)
   notes: () => req<Note[]>("GET", `/notes?device=${deviceId()}`),
   delivered: (ids: string[], everywhere = false) => req<void>("POST", "/notes/delivered", { ids, device: deviceId(), everywhere }),
+  manual: () => req<Manual>("GET", "/manual"),
+  saveManual: (content: string) => req<Manual>("PUT", "/manual", { content }),
+  undoManual: () => req<Manual>("POST", "/manual/undo"),
+  acceptManual: (id: string) => req<Manual>("POST", `/manual/suggestions/${id}/accept`),
+  dismissManual: (id: string) => req<Manual>("POST", `/manual/suggestions/${id}/dismiss`),
   prefs: () => req<BrainPrefs>("GET", "/prefs"),
   savePrefs: (p: BrainPrefs) => req<BrainPrefs>("PUT", "/prefs", p),
 };

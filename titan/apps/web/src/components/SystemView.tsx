@@ -1,5 +1,6 @@
 import type { SettingsView, SystemStatus } from "@titan/api-contracts";
 import { AppearancePanel } from "./AppearancePanel";
+import { ManualPanel } from "./ManualPanel";
 import { NotificationsPanel } from "./NotificationsPanel";
 import { PreferencesPanel } from "./PreferencesPanel";
 import { TitanMessagesPanel } from "./TitanMessagesPanel";
@@ -57,6 +58,7 @@ export function SystemView({ status, settings, onRefresh, pendingApprovals = 0, 
           <button className="small" onClick={onTasks}>Abrir</button>
         </div>
       )}
+      <ManualPanel />
       <TitanMessagesPanel />
       <AppearancePanel />
       <NotificationsPanel />

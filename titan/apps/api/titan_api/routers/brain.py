@@ -562,3 +562,106 @@ def put_prefs(body: BrainPrefsIO, cu: CurrentUser = Depends(current_user), db: D
     audit.record(db, "brain.prefs", actor_type="user", actor_id=cu.user.id, entity_type="preferences",
                  data={k: saved[k] for k in BrainPrefsIO.model_fields})
     return BrainPrefsIO(**{k: v for k, v in saved.items() if k in BrainPrefsIO.model_fields})
+
+
+# --- TITAN.md: o manual de como o TITAN age com o dono ---------------------------------
+
+class ManualVersionOut(BaseModel):
+    id: uuid.UUID
+    at: datetime
+    source: str
+    note: str
+
+
+class ManualSuggestionOut(BaseModel):
+    id: uuid.UUID
+    line: str
+    section: str
+    status: str
+
+
+class ManualOut(BaseModel):
+    content: str
+    is_template: bool
+    max_chars: int
+    history: list[ManualVersionOut]
+    suggestions: list[ManualSuggestionOut]
+
+
+class ManualIn(BaseModel):
+    content: str = Field(max_length=8000)
+
+
+def _manual_out(db: DBSession, user_id: uuid.UUID) -> ManualOut:
+    from titan.brain import titan_md
+
+    v = titan_md.latest(db, user_id)
+    return ManualOut(
+        content=v.content if v else titan_md.TEMPLATE, is_template=v is None, max_chars=titan_md.MAX_CHARS,
+        history=[ManualVersionOut(id=h.id, at=h.created_at, source=h.source, note=h.note)
+                 for h in titan_md.history(db, user_id)],
+        suggestions=[ManualSuggestionOut(id=s.id, line=s.line, section=s.section, status=s.status)
+                     for s in titan_md.pending(db, user_id)],
+    )
+
+
+@router.get("/manual", response_model=ManualOut)
+def get_manual(cu: CurrentUser = Depends(current_user), db: DBSession = Depends(get_db)):
+    """O TITAN.md desta conta (só ela vê), com histórico e sugestões esperando resposta."""
+    return _manual_out(db, cu.user.id)
+
+
+@router.put("/manual", response_model=ManualOut, responses={422: {"model": ErrorResponse}})
+def put_manual(body: ManualIn, cu: CurrentUser = Depends(current_user), db: DBSession = Depends(get_db)):
+    from titan.brain import titan_md
+
+    try:
+        v = titan_md.save(db, cu.user.id, body.content, "dono", "você editou")
+    except titan_md.ManualError as exc:
+        return _err(422, "validation_error", str(exc))
+    audit.record(db, "brain.manual.saved", actor_type="user", actor_id=cu.user.id, entity_type="titan_md",
+                 entity_id=str(v.id), data={"chars": len(v.content)})
+    return _manual_out(db, cu.user.id)
+
+
+@router.post("/manual/undo", response_model=ManualOut, responses={422: {"model": ErrorResponse}})
+def undo_manual(cu: CurrentUser = Depends(current_user), db: DBSession = Depends(get_db)):
+    from titan.brain import titan_md
+
+    try:
+        v = titan_md.undo(db, cu.user.id)
+    except titan_md.ManualError as exc:
+        return _err(422, "validation_error", str(exc))
+    audit.record(db, "brain.manual.undo", actor_type="user", actor_id=cu.user.id, entity_type="titan_md",
+                 entity_id=str(v.id))
+    return _manual_out(db, cu.user.id)
+
+
+@router.post("/manual/suggestions/{sid}/accept", response_model=ManualOut,
+             responses={**NOT_FOUND, 422: {"model": ErrorResponse}})
+def accept_manual_suggestion(sid: uuid.UUID, cu: CurrentUser = Depends(current_user),
+                             db: DBSession = Depends(get_db)):
+    """O dono tocou em "Guardar": a linha que o TITAN sugeriu entra no TITAN.md."""
+    from titan.brain import titan_md
+
+    try:
+        v = titan_md.accept(db, cu.user.id, sid)
+    except LookupError:
+        raise _404("Sugestão")
+    except titan_md.ManualError as exc:
+        return _err(422, "validation_error", str(exc))
+    audit.record(db, "brain.manual.accepted", actor_type="user", actor_id=cu.user.id, entity_type="titan_md",
+                 entity_id=str(v.id), data={"suggestion": str(sid)})
+    return _manual_out(db, cu.user.id)
+
+
+@router.post("/manual/suggestions/{sid}/dismiss", response_model=ManualOut, responses=NOT_FOUND)
+def dismiss_manual_suggestion(sid: uuid.UUID, cu: CurrentUser = Depends(current_user),
+                              db: DBSession = Depends(get_db)):
+    from titan.brain import titan_md
+
+    try:
+        titan_md.dismiss(db, cu.user.id, sid)
+    except LookupError:
+        raise _404("Sugestão")
+    return _manual_out(db, cu.user.id)
