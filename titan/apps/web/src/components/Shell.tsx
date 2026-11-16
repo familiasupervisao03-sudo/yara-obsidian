@@ -14,7 +14,7 @@ import { syncReminders } from "../reminders";
 import { Icon, type IconName } from "./icons";
 import { OfflineScreen } from "./OfflineScreen";
 import { ShareView, type Shared } from "./ShareView";
-import { androidApp, notify } from "../notify";
+import { androidApp, diagNote, notify } from "../notify";
 
 export type View = "home" | "chat" | "voice" | "news" | "memory" | "tasks" | "system";
 
@@ -96,8 +96,8 @@ export function Shell({ session, onLogout, onExpired }: {
   }, []);
 
   const handleError = useCallback((e: unknown) => {
-    if (e instanceof HttpError && e.status === 401) onExpired();
-    else if (e instanceof HttpError && e.status === 0) { wasOffline.current = true; setOffline(true); }
+    if (e instanceof HttpError && e.status === 401) { diagNote("login venceu (401)"); onExpired(); }
+    else if (e instanceof HttpError && e.status === 0) { diagNote("sem conexão com o notebook"); wasOffline.current = true; setOffline(true); }
     else setError((e as Error).message);
   }, [onExpired]);
 

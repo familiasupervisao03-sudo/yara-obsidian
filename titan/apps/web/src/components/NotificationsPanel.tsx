@@ -54,6 +54,13 @@ function PhoneDiag() {
         <li className="muted">Lembretes marcados neste celular: {st.reminders} · app {st.version} · Android {st.android}</li>
       </ul>
       <button className="small" onClick={() => { app.testNotify?.(); setTested(true); }}>Testar aviso</button>
+      {typeof app.diagLog === "function" && (
+        <details style={{ marginTop: 10 }}>
+          <summary className="small">Diário do app (para o Claude)</summary>
+          <pre className="small" style={{ whiteSpace: "pre-wrap", fontSize: 11, margin: "6px 0 0" }}>{app.diagLog()}</pre>
+          <p className="small muted">Quando o app recarregar sozinho, abra aqui e tire um print.</p>
+        </details>
+      )}
       {tested && <p className="small muted">Apareceu um aviso agora? Em 1 minuto vem outro: feche o app e bloqueie o
         celular para ver se ele chega com a tela apagada.</p>}
     </div>

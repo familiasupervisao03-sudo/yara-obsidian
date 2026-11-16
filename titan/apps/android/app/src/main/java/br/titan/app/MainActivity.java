@@ -894,6 +894,20 @@ public class MainActivity extends Activity {
             });
         }
 
+        /** Diário do app (Sistema → Avisos): o que aconteceu, com horário (para achar a causa de problemas). */
+        @JavascriptInterface
+        public String diagLog() {
+            android.content.SharedPreferences p = getSharedPreferences(DIAG, MODE_PRIVATE);
+            return "app " + BuildConfig.VERSION_NAME + " · Android " + Build.VERSION.RELEASE + " · " + Build.MODEL
+                    + (p.getBoolean("seguro", false) ? " · modo seguro" : "") + "\n" + p.getString("log", "");
+        }
+
+        /** Escreve no diário algo que a tela percebeu (ex.: "sem conexão", "login venceu"). */
+        @JavascriptInterface
+        public void diagNote(String what) {
+            if (what != null) diag("tela: " + (what.length() > 100 ? what.substring(0, 100) : what));
+        }
+
         /** "Ligar TITAN": som pelo alto-falante de ouvido e sensor de proximidade (liga/desliga). */
         @JavascriptInterface
         public void callMode(boolean on) {

@@ -4,6 +4,7 @@ import { api, HttpError } from "./api";
 import { Login } from "./components/Login";
 import { Shell } from "./components/Shell";
 import { BootIntro } from "./components/BootIntro";
+import { diagNote } from "./notify";
 
 export function App() {
   const [session, setSession] = useState<SessionInfo | null>(null);
@@ -29,6 +30,8 @@ export function App() {
       })
       .finally(() => setChecking(false));
   }, [enter]);
+
+  useEffect(() => { diagNote("tela do TITAN iniciou"); }, []);
 
   if (checking) return <div className="boot">TITAN // inicializando…</div>;
   if (fatal) return <div className="boot error">Falha ao contatar o servidor do notebook: {fatal}</div>;

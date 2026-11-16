@@ -16,6 +16,9 @@ interface AndroidBridge {
   openBatterySettings?(): void;
   // app 1.9+: "Ligar TITAN" (alto-falante de ouvido, sensor de proximidade)
   callMode?(on: boolean): void;
+  // app 2.0.4+: diário do app (o que aconteceu, com horário)
+  diagLog?(): string;
+  diagNote?(what: string): void;
   setSpeaker?(on: boolean): void;
 }
 
@@ -57,4 +60,9 @@ export function notify(title: string, body: string, tag: string, url = "/"): voi
   } else {
     new Notification(`TITAN · ${title}`, opts);
   }
+}
+
+/** Anota no diário do app Android (Sistema → Avisos) algo que a tela percebeu. */
+export function diagNote(what: string): void {
+  try { androidApp()?.diagNote?.(what); } catch { /* sem app */ }
 }
