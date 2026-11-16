@@ -8,6 +8,7 @@ import { TasksView } from "./TasksView";
 import { SystemView } from "./SystemView";
 import { Home } from "./Home";
 import { MemoryView } from "./MemoryView";
+import { NewsView } from "./NewsView";
 import { brain, type Note } from "../brain";
 import { syncReminders } from "../reminders";
 import { Icon, type IconName } from "./icons";
@@ -15,7 +16,7 @@ import { OfflineScreen } from "./OfflineScreen";
 import { ShareView, type Shared } from "./ShareView";
 import { androidApp, notify } from "../notify";
 
-export type View = "home" | "chat" | "voice" | "memory" | "tasks" | "system";
+export type View = "home" | "chat" | "voice" | "news" | "memory" | "tasks" | "system";
 
 /** Pedido para abrir a conversa num modo (vindo do Início, de um atalho ou de algo compartilhado). */
 export interface ChatIntent {
@@ -35,6 +36,7 @@ function readLaunch(): { view?: View; intent?: ChatIntent; shared?: Shared; conv
   if (conversa && /^[0-9a-f-]{36}$/.test(conversa)) return { view: "chat", conversation: conversa };
   if (acao === "inicio") return { view: "home" };
   if (acao === "memoria") return { view: "memory" };
+  if (acao === "noticias") return { view: "news" };   // aviso de notícia/jornal no celular
   if (window.location.pathname === "/compartilhar") {
     const shared = { title: q.get("title") ?? "", text: q.get("text") ?? "", url: q.get("url") ?? "" };
     if (shared.title || shared.text || shared.url) return { shared };
@@ -51,6 +53,7 @@ const TABS: { id: View; label: string; icon: IconName }[] = [
   { id: "home", label: "Início", icon: "home" },
   { id: "chat", label: "Conversas", icon: "chat" },
   { id: "voice", label: "Voz", icon: "mic" },
+  { id: "news", label: "Notícias", icon: "news" },
   { id: "memory", label: "Memória", icon: "brain" },
   { id: "system", label: "Sistema", icon: "system" },
 ];
@@ -245,6 +248,7 @@ export function Shell({ session, onLogout, onExpired }: {
                      onTurn={() => setChatVersion((v) => v + 1)} onUseText={() => go("chat")}
                      onError={handleError} />
         )}
+        {view === "news" && <NewsView onError={handleError} />}
         {view === "memory" && (
           <MemoryView onError={handleError} onOpenConversation={(id) => { setConversationId(id); go("chat"); }} />
         )}

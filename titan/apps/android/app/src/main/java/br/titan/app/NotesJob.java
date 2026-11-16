@@ -87,7 +87,9 @@ public class NotesJob extends JobService {
             String todo = n.optString("todo_id", "");
             if ("lembrete".equals(n.optString("kind")) && local.contains(todo)) continue; // já tocou aqui
             String conv = n.optString("conversation_id", "");
-            String target = UUID.matcher(conv).matches() ? "titan://conversa/" + conv : "titan://acao/inicio";
+            String kind = n.optString("kind", "");
+            String target = ("noticia".equals(kind) || "jornal".equals(kind)) ? "titan://acao/noticias"
+                    : UUID.matcher(conv).matches() ? "titan://conversa/" + conv : "titan://acao/inicio";
             Notifier.show(c, n.getString("id").hashCode(), n.optString("title", "TITAN"), n.optString("body", ""),
                     target, "lembrete".equals(n.optString("kind")));
         }

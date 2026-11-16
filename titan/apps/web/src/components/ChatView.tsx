@@ -445,6 +445,8 @@ function ActionCards({ items }: { items: Action[] }) {
             return <div key={i} className="acard"><span className="k">🎯 Nova meta no Início</span><b>{a.line}</b></div>;
           case "manual":
             return <ManualCard key={i} a={a} />;
+          case "assunto":
+            return <div key={i} className="acard"><span className="k">🔎 Seguindo assunto</span><b>{a.title}</b><span className="muted small">veja em Notícias → Assuntos</span></div>;
           case "bloqueado":
             return <div key={i} className="acard acard-block"><span className="k">🔒 {a.detail}</span><span className="muted small">dados pessoais sensíveis ficam de fora da memória</span></div>;
           default:

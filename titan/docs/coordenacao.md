@@ -117,3 +117,8 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
 - 2026-11-14 · CENTRAL · TITAN.md (manual de cada conta, no banco): Sistema → TITAN.md, histórico/desfazer, vai no
   contexto de toda conversa; o cérebro só SUGERE linhas ("Guardar"/"Agora não") · migração **0008**, `db/models.py`,
   `brain/extract.py`, `brain/service.py`, router `brain`, openapi
+- 2026-11-16 · CENTRAL · Notícias do TITAN: servidor `titan/news/**` + router `news` (migração **0009**), aba
+  Notícias (`NewsView.tsx`, `news.ts`), manchetes na Central, avisos de notícia/jornal abrem a aba no celular;
+  `titan enable-news` / `noticias-agora`; APKs titan 2.0 / casa 1.5 / central 1.5 · (`Shell.tsx`, `styles.css` (6 abas),
+  `icons.tsx`, `brain.ts`, `ChatView.tsx`, `VoiceView.tsx`, `conversations.py`, `app.py`, `settings.py`, `cli.py`,
+  `tools/web/net.py`, `db/models.py`, `apps/android/app/**`)

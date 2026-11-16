@@ -404,7 +404,7 @@ public class MainActivity extends Activity {
         Uri d = i.getData();
         if (d != null && "titan".equals(d.getScheme()) && "acao".equals(d.getHost())) {
             String acao = d.getLastPathSegment();
-            if ("voz".equals(acao) || "ligar".equals(acao) || "conversa".equals(acao) || "aula".equals(acao) || "aprovacoes".equals(acao)
+            if ("voz".equals(acao) || "ligar".equals(acao) || "noticias".equals(acao) || "conversa".equals(acao) || "aula".equals(acao) || "aprovacoes".equals(acao)
                     || "inicio".equals(acao) || "memoria".equals(acao)) {
                 return "/?acao=" + acao;
             }

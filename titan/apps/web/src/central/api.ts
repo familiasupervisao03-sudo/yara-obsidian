@@ -47,6 +47,8 @@ export const central = {
   telemetry: () => req<Telemetry>("GET", "/api/v1/central/telemetry"),
   show: (title: string, text: string) => req<ShowItem>("POST", "/api/v1/central/show", { title, text }),
   clearShow: () => req<void>("DELETE", "/api/v1/central/show"),
+  /** Manchetes das Notícias do TITAN (título real + site). */
+  headlines: () => req<{ title: string; source: string }[]>("GET", "/api/v1/news/headlines"),
 };
 
 // Conversa do TITAN usada pela Central (perguntas que não são comandos da casa).

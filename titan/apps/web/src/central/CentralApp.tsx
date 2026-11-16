@@ -123,6 +123,20 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
   // lembretes com hora: a Central avisa (tela + voz) na hora certa, mesmo criados pelo celular
   const loadReminders = useCallback(() => { upcomingReminders().then(setReminders).catch(() => undefined); }, []);
   useEffect(() => { loadReminders(); const id = window.setInterval(loadReminders, 30_000); return () => window.clearInterval(id); }, [loadReminders]);
+  // Manchetes das Notícias: troca uma por vez a cada 8 s (leve para a TV, sem animação contínua).
+  const [heads, setHeads] = useState<{ title: string; source: string }[]>([]);
+  const [headIdx, setHeadIdx] = useState(0);
+  useEffect(() => {
+    const load = () => { central.headlines().then(setHeads).catch(() => undefined); };
+    load();
+    const id = window.setInterval(load, 5 * 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  useEffect(() => {
+    if (heads.length < 2) return;
+    const id = window.setInterval(() => setHeadIdx((i) => (i + 1) % heads.length), 8000);
+    return () => window.clearInterval(id);
+  }, [heads.length]);
   useEffect(() => {
     let done: string[] = [];
     try { done = JSON.parse(store.get("titan.central.avisados") ?? "[]"); } catch { /* vazio */ }
@@ -368,6 +382,11 @@ export function CentralApp({ onExpired }: { onExpired: () => void }) {
               <div className="cx-pill">VOZ <b>{always ? "CONTÍNUA" : "TOQUE"}</b></div>
             </div>
           </div>
+
+          {heads.length > 0 && (
+            <div className="cx-news" aria-live="polite"><span className="cx-lbl">notícias</span>
+              ▶ {heads[headIdx % heads.length].title} <i>({heads[headIdx % heads.length].source})</i></div>
+          )}
 
           <div className="cx-card cx-clock"><div className="cx-lbl">tempo de bordo</div>
             <div className="t">{p2(bt.h)}:{p2(bt.m)}<span>{p2(bt.s)}</span></div>

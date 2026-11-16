@@ -180,3 +180,10 @@
 .cx-type input:focus{border-color:var(--cy)}
 .cx-type button{flex:none;font:700 14px ui-monospace,monospace;color:#00161e;background:var(--cy);padding:10px 14px}
 .cx-type button[type=button]{background:transparent;color:var(--mu);border:1px solid #1b4256}
+
+/* Manchetes das Notícias (uma por vez) */
+.cx-news { grid-column: 1 / -1; color: var(--cx-cyan, #3ee8ff); font-size: 15px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; border-top: 1px solid rgba(62, 232, 255, 0.25); border-bottom: 1px solid rgba(62, 232, 255, 0.25);
+  padding: 6px 4px; }
+.cx-news .cx-lbl { margin-right: 10px; }
+.cx-news i { color: #7fa3b8; font-style: normal; }
