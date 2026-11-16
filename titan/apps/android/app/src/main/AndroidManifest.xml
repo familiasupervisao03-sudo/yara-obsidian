@@ -3,6 +3,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 14+/16: obrigatória para agendar a busca de mensagens "quando tiver internet". -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Microfone (modo voz) e câmera: o Android pergunta na primeira vez; só o TITAN recebe. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />

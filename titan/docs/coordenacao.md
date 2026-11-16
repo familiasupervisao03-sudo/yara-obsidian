@@ -125,3 +125,5 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
 - 2026-11-16 · CENTRAL · Servidor ligou → 2 mensagens no celular ("Bom dia, senhor. Inicialização concluída…" e
   "Hoje o senhor tem N lembretes e M notícias novas", números reais); tipo de mensagem "sistema" (na migração 0009,
   ainda não publicada) · (`app.py`, `brain/service.py`, `db/models.py`)
+- 2026-11-16 · CENTRAL · Android 16 (Realme RMX3930) fechava: faltava ACCESS_NETWORK_STATE para o agendamento de
+  mensagens; receptor de "reiniciou/atualizou" protegido; APKs titan 2.0.1 / casa 1.5.1 / central 1.5.1 · (`apps/android/app/**`)

@@ -83,9 +83,10 @@ public final class Reminders extends BroadcastReceiver {
         String action = intent.getAction();
         if (Intent.ACTION_BOOT_COMPLETED.equals(action) || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
             String json = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_JSON, "[]");
-            schedule(c, json);
-            NotesJob.ensure(c);
-            if (!BuildConfig.KIOSK) LiveService.start(c);   // só no app TITAN
+            // Cada parte protegida: se uma falhar neste aparelho, as outras continuam (e o app não fecha).
+            try { schedule(c, json); } catch (Throwable ignored) { /* lembretes reagendam ao abrir o app */ }
+            try { NotesJob.ensure(c); } catch (Throwable ignored) { /* o serviço "ligado" também busca */ }
+            try { if (!BuildConfig.KIOSK) LiveService.start(c); } catch (Throwable ignored) { }   // só no app TITAN
             return;
         }
         if (LiveService.ACTION_CHECK.equals(action)) {      // reserva: acorda o celular a cada ~10 min
