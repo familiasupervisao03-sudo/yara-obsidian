@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import threading
 import uuid
 
@@ -16,7 +17,7 @@ from sqlalchemy.orm import Session as DBSession
 from titan.audit import log as audit
 from titan.brain import service as brain
 from titan.casa import chat as casa_chat
-from titan.db.models import Message
+from titan.db.models import Message, utcnow
 from titan.memory import conversations as repo
 from titan.memory import preferences as user_prefs
 from titan.memory.reply_stream import run_reply_stream
@@ -132,8 +133,8 @@ def post_message(
     db.commit()
 
     reply_out = None
-    rem = _reminder_answer(ctx, cu, conv.id, body.content)
-    if rem is not None:  # lembrete na hora, sem IA
+    rem = _follow_answer(ctx, cu, conv.id, body.content) or _reminder_answer(ctx, cu, conv.id, body.content)
+    if rem is not None:  # lembrete (ou assunto seguido nas Notícias) na hora, sem IA
         rem.pop("_action", None)
         db.expire_all()
         return MessagePostOut(user_message=MessageOut.model_validate(user_msg), reply=MessageOut(**rem),
@@ -151,6 +152,7 @@ def post_message(
         turns, style, footer = with_research(ctx, cu, body, turns, style, lambda *_: None)
         style = brain.with_memory(style, brain.context_for(ctx.session_factory, cu.user.id, body.content))
         style = brain.with_memory(style, casa_chat.context_block(ctx.settings, ctx.session_factory, cu.user.id))
+        style = brain.with_memory(style, _news_context(ctx, cu, body.content))
         reply = provider.chat(turns, style=style)
         reply_msg = repo.add_message(
             db, conv, "assistant", reply.content.strip() + footer,
@@ -228,7 +230,8 @@ async def post_message_stream(
             yield _sse("done", {"message": casa_out, "footer_chars": 0, "metrics": {"casa": True}})
             return
         # "me lembra às 14h de ...": lembrete na hora, sem IA
-        rem_out = await run_in_threadpool(_reminder_answer, ctx, cu, conversation_id, body.content)
+        rem_out = (await run_in_threadpool(_follow_answer, ctx, cu, conversation_id, body.content)
+                   or await run_in_threadpool(_reminder_answer, ctx, cu, conversation_id, body.content))
         if rem_out is not None:
             action = rem_out.pop("_action")
             yield _sse("delta", {"text": rem_out["content"]})
@@ -258,6 +261,7 @@ async def post_message_stream(
                     return
                 st = brain.with_memory(st, brain.context_for(ctx.session_factory, cu.user.id, body.content))
                 st = brain.with_memory(st, casa_chat.context_block(ctx.settings, ctx.session_factory, cu.user.id))
+                st = brain.with_memory(st, _news_context(ctx, cu, body.content))
                 replied: dict = {}
 
                 def emit_and_keep(kind: str, data: dict) -> None:
@@ -302,6 +306,53 @@ def _casa_answer(ctx: AppContext, cu: CurrentUser, conversation_id: uuid.UUID, t
         msg = repo.add_message(db, conv, "assistant", reply, model_provider="titan", model_name="casa")
         db.flush()
         return MessageOut.model_validate(msg).model_dump(mode="json")
+
+
+def _news_context(ctx: AppContext, cu: CurrentUser, text: str) -> str:
+    """Notícias guardadas (com site e link), quando o dono pergunta de notícias: nada de inventar."""
+    from titan.news import service as news
+
+    try:
+        with ctx.session_factory() as db:
+            return news.context_block(db, cu.user.id, text)
+    except Exception:
+        return ""
+
+
+_FOLLOW_HINT = re.compile(r"\b(noticia|noticias|preco|precos|semana|semanas|assunto)\b")
+
+
+def _follow_answer(ctx: AppContext, cu: CurrentUser, conversation_id: uuid.UUID, text: str):
+    """"Titã, analisa os preços da ESP32 nas próximas 3 semanas e nas semanas passadas" → assunto seguido."""
+    from titan.brain.quick import plain
+    from titan.news import service as news
+
+    t = plain(text)
+    if len(text) > 200 or not _FOLLOW_HINT.search(t):
+        return None
+    p = news.parse_follow(text, utcnow())
+    if p is None:
+        return None
+    with ctx.session_factory.begin() as db:
+        conv = repo.get_conversation(db, cu.user.id, conversation_id)
+        f = news.create_follow(db, cu.user.id, p["topic"], p["prices"], p["past_weeks"], p["future_weeks"])
+        parts = []
+        if p["past_weeks"]:
+            parts.append(f"as últimas {p['past_weeks']} semanas")
+        if p["future_weeks"]:
+            parts.append(f"as próximas {p['future_weeks']} semanas")
+        what = "os preços e as notícias" if p["prices"] else "as notícias"
+        reply = (f"Pois não, senhor. Vou acompanhar {what} sobre {f.topic} em {' e '.join(parts)}. "
+                 "Só mostro o que eu achar de verdade, com data e link. Veja em Notícias → Assuntos.")
+        if not ctx.settings.news_enabled:
+            reply += " (As Notícias estão desligadas: rode no notebook .venv/bin/titan enable-news.)"
+        msg = repo.add_message(db, conv, "assistant", reply, model_provider="titan", model_name="noticias")
+        audit.record(db, "news.follow", actor_type="user", actor_id=cu.user.id, entity_type="news_follow",
+                     entity_id=str(f.id), data={"topic": f.topic, "via": "chat"})
+        db.flush()
+        out = MessageOut.model_validate(msg).model_dump(mode="json")
+        out["_action"] = {"type": "assunto", "id": str(f.id), "title": f.topic}
+        return out
 
 
 def _reminder_answer(ctx: AppContext, cu: CurrentUser, conversation_id: uuid.UUID, text: str):

@@ -410,7 +410,7 @@ class ModelUsage(TimestampMixin, Base):
 BRAIN_CATEGORIES = ("sobre", "gostos", "negocio", "estudos", "resumo", "outros")
 BRAIN_STATES = ("pending", "active", "archived")
 TODO_KINDS = ("lembrete", "tarefa")
-NOTE_KINDS = ("bom_dia", "boa_noite", "papo", "lembrete", "acompanhamento", "socio")
+NOTE_KINDS = ("bom_dia", "boa_noite", "papo", "lembrete", "acompanhamento", "socio", "noticia", "jornal")
 
 
 class BrainMemory(TimestampMixin, Base):
@@ -482,6 +482,118 @@ class Todo(TimestampMixin, Base):
         ForeignKey("conversations.id", ondelete="SET NULL"))
     message_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
+
+
+class NewsItem(TimestampMixin, Base):
+    """Notícia lida de um site (dado público, igual para todas as contas). Nada é inventado:
+    título, resumo do site, data e link vêm do próprio feed."""
+
+    __tablename__ = "news_items"
+    __table_args__ = (Index("ix_news_items_published", "published_at"), Index("ix_news_items_story", "story_id"))
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    url: Mapped[str] = mapped_column(String(1000), unique=True, nullable=False)
+    source: Mapped[str] = mapped_column(String(80), nullable=False)
+    category: Mapped[str] = mapped_column(String(20), nullable=False)
+    title: Mapped[str] = mapped_column(String(400), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    published_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    story_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("news_stories.id", ondelete="SET NULL"))
+
+
+class NewsStory(TimestampMixin, Base):
+    """Notícias de vários sites sobre o mesmo fato, juntas (linha do tempo com as datas reais)."""
+
+    __tablename__ = "news_stories"
+    __table_args__ = (Index("ix_news_stories_last", "last_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    title: Mapped[str] = mapped_column(String(400), nullable=False)
+    category: Mapped[str] = mapped_column(String(20), nullable=False)
+    words: Mapped[str] = mapped_column(String(600), nullable=False, default="")
+    first_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    last_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    is_checagem: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class NewsUserStory(TimestampMixin, Base):
+    """O que cada conta fez/viu numa notícia (lida, salva, 👍/👎) e o que o TITAN analisou para ela."""
+
+    __tablename__ = "news_user_stories"
+    __table_args__ = (UniqueConstraint("user_id", "story_id", name="uq_news_user_story"),
+                      Index("ix_news_user_story_user", "user_id", "updated_at"))
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    story_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("news_stories.id", ondelete="CASCADE"), nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    saved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    vote: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # -1, 0, 1
+    notified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    analysis: Mapped[str] = mapped_column(Text, nullable=False, default="")  # JSON do TITAN (só do texto lido)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class NewsFollow(TimestampMixin, Base):
+    """"Seguir assunto": notícias (e preços citados) de um tema num período (passado e/ou futuro)."""
+
+    __tablename__ = "news_follows"
+    __table_args__ = (Index("ix_news_follows_user", "user_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    topic: Mapped[str] = mapped_column(String(120), nullable=False)
+    prices: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    since: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)   # começo do passado analisado
+    until: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)   # até quando acompanhar
+    store_url: Mapped[str] = mapped_column(String(1000), nullable=False, default="")
+    last_checked_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
+
+
+class NewsFollowHit(TimestampMixin, Base):
+    """Algo REAL encontrado para um assunto seguido: notícia com data e link, e o preço se o texto citou."""
+
+    __tablename__ = "news_follow_hits"
+    __table_args__ = (UniqueConstraint("follow_id", "url", name="uq_news_follow_hit"),
+                      Index("ix_news_follow_hits_follow", "follow_id", "published_at"))
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    follow_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("news_follows.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    title: Mapped[str] = mapped_column(String(400), nullable=False)
+    published_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    price: Mapped[Optional[float]] = mapped_column(Float)
+    quote: Mapped[str] = mapped_column(String(400), nullable=False, default="")  # trecho exato onde o preço aparece
+
+
+class NewsTerm(TimestampMixin, Base):
+    """Dicionário: palavra difícil que apareceu numa notícia, explicada em palavras simples."""
+
+    __tablename__ = "news_terms"
+    __table_args__ = (UniqueConstraint("user_id", "term", name="uq_news_term"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    term: Mapped[str] = mapped_column(String(80), nullable=False)
+    explanation: Mapped[str] = mapped_column(String(600), nullable=False)
+    story_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("news_stories.id", ondelete="SET NULL"))
+
+
+class NewsSource(TimestampMixin, Base):
+    """Fontes de cada conta: as padrão desligadas por ela e os sites que ela acrescentou."""
+
+    __tablename__ = "news_sources"
+    __table_args__ = (UniqueConstraint("user_id", "url", name="uq_news_source"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    category: Mapped[str] = mapped_column(String(20), nullable=False, default="tecnologia")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class TitanMdVersion(TimestampMixin, Base):

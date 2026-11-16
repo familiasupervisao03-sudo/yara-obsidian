@@ -127,6 +127,42 @@
         "title": "ActionInfo",
         "type": "object"
       },
+      "Analysis": {
+        "properties": {
+          "afeta_titan": {
+            "default": "",
+            "title": "Afeta Titan",
+            "type": "string"
+          },
+          "discordam": {
+            "default": false,
+            "title": "Discordam",
+            "type": "boolean"
+          },
+          "discordancia": {
+            "default": "",
+            "title": "Discordancia",
+            "type": "string"
+          },
+          "oportunidade": {
+            "default": "",
+            "title": "Oportunidade",
+            "type": "string"
+          },
+          "por_que_importa": {
+            "default": "",
+            "title": "Por Que Importa",
+            "type": "string"
+          },
+          "resumo": {
+            "default": "",
+            "title": "Resumo",
+            "type": "string"
+          }
+        },
+        "title": "Analysis",
+        "type": "object"
+      },
       "AnswerIn": {
         "properties": {
           "answer": {
@@ -1326,6 +1362,164 @@
         "title": "ExecutionOut",
         "type": "object"
       },
+      "ExplainIn": {
+        "properties": {
+          "mode": {
+            "default": "melhor",
+            "enum": [
+              "melhor",
+              "facil"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "title": "ExplainIn",
+        "type": "object"
+      },
+      "ExplainOut": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceLink"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "sources"
+        ],
+        "title": "ExplainOut",
+        "type": "object"
+      },
+      "FollowIn": {
+        "properties": {
+          "future_weeks": {
+            "default": 2,
+            "maximum": 52.0,
+            "minimum": 0.0,
+            "title": "Future Weeks",
+            "type": "integer"
+          },
+          "past_weeks": {
+            "default": 2,
+            "maximum": 52.0,
+            "minimum": 0.0,
+            "title": "Past Weeks",
+            "type": "integer"
+          },
+          "prices": {
+            "default": false,
+            "title": "Prices",
+            "type": "boolean"
+          },
+          "store_url": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Store Url",
+            "type": "string"
+          },
+          "topic": {
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic"
+        ],
+        "title": "FollowIn",
+        "type": "object"
+      },
+      "FollowOut": {
+        "properties": {
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/HitOut"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "prices": {
+            "title": "Prices",
+            "type": "boolean"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "store_url": {
+            "title": "Store Url",
+            "type": "string"
+          },
+          "topic": {
+            "title": "Topic",
+            "type": "string"
+          },
+          "trend": {
+            "title": "Trend",
+            "type": "string"
+          },
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "topic",
+          "prices",
+          "since",
+          "until",
+          "store_url",
+          "last_checked_at",
+          "trend",
+          "hits"
+        ],
+        "title": "FollowOut",
+        "type": "object"
+      },
+      "FollowTextIn": {
+        "properties": {
+          "text": {
+            "maxLength": 300,
+            "minLength": 3,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "FollowTextIn",
+        "type": "object"
+      },
       "GoalBrief": {
         "properties": {
           "current": {
@@ -1603,6 +1797,24 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HeadlineOut": {
+        "properties": {
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "source"
+        ],
+        "title": "HeadlineOut",
+        "type": "object"
+      },
       "HealthOut": {
         "properties": {
           "service": {
@@ -1691,6 +1903,51 @@
         "title": "HeardOut",
         "type": "object"
       },
+      "HitOut": {
+        "properties": {
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "quote": {
+            "default": "",
+            "title": "Quote",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "url",
+          "source",
+          "published_at"
+        ],
+        "title": "HitOut",
+        "type": "object"
+      },
       "HomeOut": {
         "properties": {
           "continue_conversation": {
@@ -1765,6 +2022,36 @@
           "spoken_chars"
         ],
         "title": "InterruptionIn",
+        "type": "object"
+      },
+      "JornalOut": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "title": "JornalOut",
         "type": "object"
       },
       "LessonCreate": {
@@ -2458,6 +2745,32 @@
         "title": "ModelStatus",
         "type": "object"
       },
+      "NewsList": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "stories": {
+            "items": {
+              "$ref": "#/components/schemas/StoryOut"
+            },
+            "title": "Stories",
+            "type": "array"
+          },
+          "total_items": {
+            "title": "Total Items",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "stories",
+          "total_items"
+        ],
+        "title": "NewsList",
+        "type": "object"
+      },
       "NoteOut": {
         "properties": {
           "body": {
@@ -3046,6 +3359,113 @@
         "title": "ShowItem",
         "type": "object"
       },
+      "SourceLink": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "title",
+          "published_at"
+        ],
+        "title": "SourceLink",
+        "type": "object"
+      },
+      "SourceOut": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "custom": {
+            "title": "Custom",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "site": {
+            "title": "Site",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "site",
+          "category",
+          "enabled",
+          "custom"
+        ],
+        "title": "SourceOut",
+        "type": "object"
+      },
+      "SourceSetIn": {
+        "properties": {
+          "category": {
+            "default": "tecnologia",
+            "enum": [
+              "tecnologia",
+              "negocios",
+              "jogos",
+              "esportes",
+              "brasil",
+              "ceara",
+              "checagem"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Name",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 1000,
+            "minLength": 8,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "SourceSetIn",
+        "type": "object"
+      },
       "SpeakIn": {
         "properties": {
           "text": {
@@ -3059,6 +3479,47 @@
           "text"
         ],
         "title": "SpeakIn",
+        "type": "object"
+      },
+      "StateIn": {
+        "properties": {
+          "read": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read"
+          },
+          "saved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saved"
+          },
+          "vote": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": -1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vote"
+          }
+        },
+        "title": "StateIn",
         "type": "object"
       },
       "StatusOut": {
@@ -3257,6 +3718,98 @@
           "last_error"
         ],
         "title": "StepOut",
+        "type": "object"
+      },
+      "StoryOut": {
+        "properties": {
+          "affects": {
+            "title": "Affects",
+            "type": "boolean"
+          },
+          "analysis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Analysis"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "checks": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceLink"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "first_at": {
+            "format": "date-time",
+            "title": "First At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "important": {
+            "title": "Important",
+            "type": "boolean"
+          },
+          "last_at": {
+            "format": "date-time",
+            "title": "Last At",
+            "type": "string"
+          },
+          "n_sources": {
+            "title": "N Sources",
+            "type": "integer"
+          },
+          "read": {
+            "title": "Read",
+            "type": "boolean"
+          },
+          "saved": {
+            "title": "Saved",
+            "type": "boolean"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceLink"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "vote": {
+            "title": "Vote",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "category",
+          "first_at",
+          "last_at",
+          "sources",
+          "n_sources",
+          "read",
+          "saved",
+          "vote",
+          "important",
+          "affects"
+        ],
+        "title": "StoryOut",
         "type": "object"
       },
       "SttSessionOut": {
@@ -3538,6 +4091,30 @@
           "updated_at"
         ],
         "title": "TaskOut",
+        "type": "object"
+      },
+      "TermOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "term": {
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "term",
+          "explanation",
+          "created_at"
+        ],
+        "title": "TermOut",
         "type": "object"
       },
       "TodoBrief": {
@@ -7317,6 +7894,680 @@
         "summary": "Get Lesson",
         "tags": [
           "lessons"
+        ]
+      }
+    },
+    "/api/v1/news": {
+      "get": {
+        "description": "Notícias para esta conta: as mais importantes e recentes primeiro (👎 vai para o fim).",
+        "operationId": "list_news_api_v1_news_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cat",
+            "required": false,
+            "schema": {
+              "default": "tudo",
+              "enum": [
+                "tudo",
+                "tecnologia",
+                "ia",
+                "negocios",
+                "jogos",
+                "esportes",
+                "brasil",
+                "ceara",
+                "salvas"
+              ],
+              "title": "Cat",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 40,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List News",
+        "tags": [
+          "news"
+        ]
+      }
+    },
+    "/api/v1/news/follows": {
+      "get": {
+        "operationId": "get_follows_api_v1_news_follows_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FollowOut"
+                  },
+                  "title": "Response Get Follows Api V1 News Follows Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get Follows",
+        "tags": [
+          "news"
+        ]
+      },
+      "post": {
+        "operationId": "add_follow_api_v1_news_follows_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FollowIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Add Follow",
+        "tags": [
+          "news"
+        ]
+      }
+    },
+    "/api/v1/news/follows/from-text": {
+      "post": {
+        "description": "\"Analisa os preços da ESP32 nas próximas 3 semanas e nas semanas passadas\" → assunto seguido.",
+        "operationId": "add_follow_text_api_v1_news_follows_from_text_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FollowTextIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Add Follow Text",
+        "tags": [
+          "news"
+        ]
+      }
+    },
+    "/api/v1/news/follows/{fid}": {
+      "delete": {
+        "operationId": "delete_follow_api_v1_news_follows__fid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Follow",
+        "tags": [
+          "news"
+        ]
+      }
+    },
+    "/api/v1/news/headlines": {
+      "get": {
+        "description": "Manchetes para a TV (Central): as de maior nota das últimas 24 h.",
+        "operationId": "headlines_api_v1_news_headlines_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HeadlineOut"
+                  },
+                  "title": "Response Headlines Api V1 News Headlines Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Headlines",
+        "tags": [
+          "news"
+        ]
+      }
+    },
+    "/api/v1/news/jornal": {
+      "get": {
+        "description": "O último Jornal do TITAN; se ainda não saiu hoje, os destaques de agora.",
+        "operationId": "get_jornal_api_v1_news_jornal_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JornalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get Jornal",
+        "tags": [
+          "news"
+        ]
+      }
+    },
+    "/api/v1/news/sources": {
+      "delete": {
+        "operationId": "delete_source_api_v1_news_sources_delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "url",
+            "required": true,
+            "schema": {
+              "maxLength": 1000,
+              "title": "Url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceOut"
+                  },
+                  "title": "Response Delete Source Api V1 News Sources Delete",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Source",
+        "tags": [
+          "news"
+        ]
+      },
+      "get": {
+        "operationId": "get_sources_api_v1_news_sources_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceOut"
+                  },
+                  "title": "Response Get Sources Api V1 News Sources Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get Sources",
+        "tags": [
+          "news"
+        ]
+      },
+      "put": {
+        "description": "Liga/desliga uma fonte ou acrescenta um site novo (endereço do feed RSS, em https).",
+        "operationId": "put_source_api_v1_news_sources_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceSetIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceOut"
+                  },
+                  "title": "Response Put Source Api V1 News Sources Put",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Put Source",
+        "tags": [
+          "news"
+        ]
+      }
+    },
+    "/api/v1/news/stories/{sid}/explain": {
+      "post": {
+        "description": "\"Explica melhor\" / \"Me explica fácil\": a IA explica usando SÓ o texto dos sites.",
+        "operationId": "explain_api_v1_news_stories__sid__explain_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Sid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplainIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplainOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Explain",
+        "tags": [
+          "news"
+        ]
+      }
+    },
+    "/api/v1/news/stories/{sid}/state": {
+      "post": {
+        "description": "Lida, salva e 👍/👎 (o TITAN aprende o que a conta gosta; o voto mais recente pesa mais).",
+        "operationId": "set_state_api_v1_news_stories__sid__state_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Sid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set State",
+        "tags": [
+          "news"
+        ]
+      }
+    },
+    "/api/v1/news/terms": {
+      "get": {
+        "operationId": "get_terms_api_v1_news_terms_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TermOut"
+                  },
+                  "title": "Response Get Terms Api V1 News Terms Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get Terms",
+        "tags": [
+          "news"
         ]
       }
     },

@@ -63,7 +63,7 @@ Este caderno existe para **uma não atrapalhar a outra**. Toda conversa:
 | `packages/api-contracts/openapi.json` | gerado: só rodar o script |
 | `README.md`, `CLAUDE.md`, este caderno | todos lêem |
 
-**Migrações do banco:** a próxima livre é a **0009** (0008 = TITAN.md, o manual de cada conta). Antes de criar uma, **reserve aqui**
+**Migrações do banco:** a próxima livre é a **0010** (0008 = TITAN.md; 0009 = Notícias). Antes de criar uma, **reserve aqui**
 (escreva "0008 — reservada pela conversa X para Y") e só então crie. Nunca duas com o mesmo número.
 
 ## Reservas (migrações e arquivos compartilhados em uso)

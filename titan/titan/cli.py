@@ -750,6 +750,70 @@ def cmd_enable_web(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_enable_news(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from titan.envfile import update_env
+
+    env_path = Path(args.env_file)
+    if not env_path.exists():
+        print(f"{env_path} não existe.", file=sys.stderr)
+        return 1
+    update_env(env_path, {"TITAN_NEWS_ENABLED": "true"})
+    print("Notícias ligadas: o TITAN vai ler os sites de notícia a cada 30 min enquanto o servidor estiver ligado.\n"
+          "  * Só os endereços dos sites saem do notebook; nada seu é enviado.\n"
+          "  * Resumos e análises usam a IA só nas notícias importantes, dentro do orçamento do dia.\n"
+          "  * Para testar agora: .venv/bin/titan noticias-agora\n"
+          "  * Para desligar: .venv/bin/titan disable-news\n"
+          "Reinicie o servidor (titan ligar) para começar.")
+    return 0
+
+
+def cmd_disable_news(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from titan.envfile import update_env
+
+    env_path = Path(args.env_file)
+    if not env_path.exists():
+        print(f"{env_path} não existe.", file=sys.stderr)
+        return 1
+    update_env(env_path, {"TITAN_NEWS_ENABLED": "false"})
+    print("Notícias desligadas. Reinicie o servidor para aplicar.")
+    return 0
+
+
+def cmd_news_now(_: argparse.Namespace) -> int:
+    """Busca as notícias agora e mostra o que chegou (bom para conferir se os sites respondem)."""
+    from sqlalchemy import func, select
+
+    from titan.brain.service import brain_provider
+    from titan.db.engine import make_engine, make_session_factory
+    from titan.db.models import NewsItem
+    from titan.news import feeds
+    from titan.news.service import NewsScheduler, tick
+
+    s = _settings()
+    engine = make_engine(s.database_url)
+    sf = make_session_factory(engine)
+    sched = NewsScheduler(s, sf, lambda: brain_provider(s, sf))
+    ok = 0
+    for src in feeds.DEFAULT_SOURCES:
+        try:
+            n = len(feeds.parse(sched.fetch(src["url"]), src["name"]))
+            print(f"  ✓ {src['name']}: {n} notícias no feed")
+            ok += 1
+        except Exception as exc:
+            print(f"  ✗ {src['name']}: {str(exc)[:100]}")
+    report = tick(s, sf, sched.fetch, lambda: brain_provider(s, sf))
+    with sf() as db:
+        total = db.scalar(select(func.count()).select_from(NewsItem))
+    engine.dispose()
+    print(f"\n{ok} de {len(feeds.DEFAULT_SOURCES)} sites responderam. Novas agora: {report['novas']} · "
+          f"avisos: {report['avisos']} · total guardado: {total}.")
+    return 0 if ok else 1
+
+
 def cmd_disable_web(args: argparse.Namespace) -> int:
     from pathlib import Path
 
@@ -1324,6 +1388,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--env-file", default=".env")
     p.add_argument("--searxng", help="endereço do SearXNG local, ex.: http://127.0.0.1:8888")
     p.set_defaults(fn=cmd_enable_web)
+    p = sub.add_parser("enable-news", help="liga as Notícias (lê sites de notícia confiáveis)")
+    p.add_argument("--env-file", default=".env")
+    p.set_defaults(fn=cmd_enable_news)
+    p = sub.add_parser("disable-news", help="desliga as Notícias")
+    p.add_argument("--env-file", default=".env")
+    p.set_defaults(fn=cmd_disable_news)
+    sub.add_parser("noticias-agora", help="busca as notícias agora e mostra o que chegou").set_defaults(fn=cmd_news_now)
     p = sub.add_parser("disable-web", help="desliga a pesquisa na internet")
     p.add_argument("--env-file", default=".env")
     p.set_defaults(fn=cmd_disable_web)

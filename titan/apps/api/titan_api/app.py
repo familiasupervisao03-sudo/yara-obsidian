@@ -24,7 +24,8 @@ from titan.tasks.runner import TaskRunner
 from titan.tasks.service import recover_on_startup
 from titan.tools.web.research import WebResearcher
 from titan.voice.engines import VoiceService
-from titan_api.routers import auth, brain, casa, central, conversations, health, lessons, preferences, system, tasks, voice
+from titan_api.routers import (auth, brain, casa, central, conversations, health, lessons, news, preferences,
+                                system, tasks, voice)
 from titan_api.security import (
     CSRFMiddleware,
     NetworkAllowlistMiddleware,
@@ -58,7 +59,16 @@ async def _lifespan(app: FastAPI):
 
         scheduler = Scheduler(ctx.session_factory, lambda: brain_provider(ctx.settings, ctx.session_factory))
         scheduler.start()
+    news = None
+    if ctx.settings.news_enabled and ctx.settings.env.value != "test":
+        from titan.brain.service import brain_provider
+        from titan.news.service import NewsScheduler
+
+        news = NewsScheduler(ctx.settings, ctx.session_factory, lambda: brain_provider(ctx.settings, ctx.session_factory))
+        news.start()
     yield
+    if news is not None:
+        news.stop()
     if scheduler is not None:
         scheduler.stop()
     ctx.engine.dispose()
@@ -125,6 +135,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(brain.router)
     app.include_router(casa.router)
     app.include_router(central.router)
+    app.include_router(news.router)
 
     if settings.serve_web:
         _mount_web(app, settings.web_dist_dir)

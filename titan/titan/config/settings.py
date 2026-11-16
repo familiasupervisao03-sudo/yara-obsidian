@@ -140,6 +140,12 @@ class Settings(BaseSettings):
     web_max_searches_per_minute: int = Field(default=6, ge=1, le=60)
     web_max_searches_per_day: int = Field(default=150, ge=1, le=5000)
 
+    # Notícias do TITAN (titan enable-news): lê sites de notícia confiáveis (feeds públicos).
+    # Só os endereços dos feeds saem do notebook; nada seu é enviado aos sites.
+    news_enabled: bool = False
+    news_every_minutes: int = Field(default=30, ge=10, le=240)
+    news_jornal_hora: str = Field(default="19:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+
     backup_dir: Path = Path("./backups")
     backup_keep: int = Field(default=7, ge=1, le=365)
     approval_ttl_hours: int = Field(default=24, ge=1, le=24 * 30)

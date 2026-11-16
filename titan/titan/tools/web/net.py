@@ -127,6 +127,8 @@ class Fetcher:
     trusted_local: frozenset[tuple[str, int]] = frozenset()
     allowed_ports: frozenset[int] = frozenset({80, 443})
     min_interval_per_host: float = 1.0
+    # Tipos de conteúdo aceitos (as Notícias acrescentam os feeds RSS/Atom em XML).
+    text_types: tuple[str, ...] = TEXT_TYPES
     _last_hit: dict[str, float] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -195,7 +197,7 @@ class Fetcher:
                 media = ctype.split(";")[0].strip()
                 if resp.status >= 400:
                     raise WebError(f"O site respondeu com erro {resp.status}.", f"http_{resp.status}")
-                if media and not media.startswith(TEXT_TYPES):
+                if media and not media.startswith(self.text_types):
                     raise WebError(f"Tipo de conteúdo não suportado ({media}).", "content_type")
                 length = resp.getheader("Content-Length")
                 if length and length.isdigit() and int(length) > self.max_bytes:
