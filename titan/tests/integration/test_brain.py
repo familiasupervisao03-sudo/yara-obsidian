@@ -321,3 +321,38 @@ def test_each_device_gets_its_own_copy_of_titan_messages(chat):
            headers=CSRF)
     assert c.get("/api/v1/brain/notes").json() == [] and c.get("/api/v1/brain/notes?device=web-celular").json() == []
     assert c.get("/api/v1/brain/notes?device=x y").status_code == 422
+
+
+def test_servidor_ligado_avisa_no_celular_sem_repetir(settings):
+    """Servidor ligou: 2 mensagens ("Inicialização concluída" + o dia com números reais), sem repetir."""
+    from datetime import datetime, timedelta, timezone
+
+    from tests.conftest import create_user
+    from titan.brain import store
+    from titan.brain.service import greeting_word, startup_note
+    from titan.db.engine import make_engine, make_session_factory
+    from titan.db.models import TitanNote, User
+
+    create_user(settings, "alice")
+    engine = make_engine(settings.database_url)
+    sf = make_session_factory(engine)
+    t0 = datetime.now(timezone.utc).replace(microsecond=0)
+    local = t0.astimezone(store.local_now().tzinfo)
+    with sf.begin() as db:
+        uid = db.query(User).one().id
+        if local.hour < 22:  # lembretes de hoje ainda por vir (o de amanhã não conta)
+            store.add_todo(db, uid, "Dentista", "lembrete", t0 + timedelta(minutes=30))
+            store.add_todo(db, uid, "Pão", "lembrete", t0 + timedelta(minutes=40))
+        store.add_todo(db, uid, "Amanhã", "lembrete", t0 + timedelta(days=2))
+    assert startup_note(sf, t0) == 1
+    assert startup_note(sf, t0 + timedelta(minutes=3)) == 0      # reiniciou logo: não repete
+    with sf() as db:
+        notes = db.query(TitanNote).filter_by(kind="sistema").order_by(TitanNote.created_at).all()
+        assert [n.title for n in notes] == ["TITAN · Servidor ligado", "TITAN · Seu dia"]
+        assert notes[0].body == f"{greeting_word(local.hour)}, senhor. Inicialização concluída. Em que posso ajudar hoje?"
+        esperado = "2 lembretes" if local.hour < 22 else "nenhum lembrete"
+        assert notes[1].body == f"Hoje o senhor tem {esperado} e nenhuma notícia nova."
+    assert startup_note(sf, t0 + timedelta(minutes=15)) == 1
+    engine.dispose()
+    assert [greeting_word(h) for h in (6, 11, 12, 17, 18, 23, 2)] == \
+        ["Bom dia", "Bom dia", "Boa tarde", "Boa tarde", "Boa noite", "Boa noite", "Boa noite"]

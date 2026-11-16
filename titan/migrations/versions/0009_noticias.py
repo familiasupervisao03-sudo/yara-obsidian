@@ -13,7 +13,7 @@ branch_labels = None
 depends_on = None
 
 OLD_KINDS = ("bom_dia", "boa_noite", "papo", "lembrete", "acompanhamento", "socio")
-NEW_KINDS = OLD_KINDS + ("noticia", "jornal")
+NEW_KINDS = OLD_KINDS + ("noticia", "jornal", "sistema")
 
 
 def _in(col, values):
@@ -112,14 +112,15 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.UniqueConstraint("user_id", "url", name="uq_news_source"),
     )
-    # Mensagens do TITAN agora também podem ser "noticia" (importante) e "jornal" (resumo do dia).
+    # Mensagens do TITAN agora também podem ser "noticia" (importante), "jornal" (resumo do dia)
+    # e "sistema" (ex.: "servidor ligado").
     with op.batch_alter_table("titan_notes", recreate="always") as b:
         b.drop_constraint("ck_notes_kind", type_="check")
         b.create_check_constraint("ck_notes_kind", _in("kind", NEW_KINDS))
 
 
 def downgrade() -> None:
-    op.execute("DELETE FROM titan_notes WHERE kind IN ('noticia', 'jornal')")
+    op.execute("DELETE FROM titan_notes WHERE kind IN ('noticia', 'jornal', 'sistema')")
     with op.batch_alter_table("titan_notes", recreate="always") as b:
         b.drop_constraint("ck_notes_kind", type_="check")
         b.create_check_constraint("ck_notes_kind", _in("kind", OLD_KINDS))

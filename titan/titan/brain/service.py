@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 import uuid
 from typing import Optional
 
@@ -132,3 +133,66 @@ def summarize_conversation(settings: Settings, session_factory, user_id: uuid.UU
         db.flush()
         db.expunge(m)
     return m
+
+
+def greeting_word(hour: int) -> str:
+    return "Bom dia" if 5 <= hour < 12 else "Boa tarde" if 12 <= hour < 18 else "Boa noite"
+
+
+def _qtd(n: int, um: str, varios: str, nenhum: str = "nenhum") -> str:
+    return f"{nenhum} {um}" if n == 0 else f"1 {um}" if n == 1 else f"{n} {varios}"
+
+
+def day_counts(db, user_id, now: datetime) -> tuple[int, int]:
+    """(lembretes de hoje ainda por vir, notícias novas não lidas das últimas 24 h) — números reais."""
+    from datetime import timedelta
+
+    from sqlalchemy import func, select
+
+    from titan.db.models import NewsStory, NewsUserStory, Todo
+
+    local = now.astimezone(store.local_now().tzinfo)
+    end = local.replace(hour=23, minute=59, second=59, microsecond=0)
+    reminders = db.scalar(select(func.count()).select_from(Todo).where(
+        Todo.user_id == user_id, Todo.kind == "lembrete", Todo.done_at.is_(None),
+        Todo.due_at >= now, Todo.due_at <= end)) or 0
+    news = db.scalar(select(func.count()).select_from(NewsStory).outerjoin(
+        NewsUserStory, (NewsUserStory.story_id == NewsStory.id) & (NewsUserStory.user_id == user_id))
+        .where(NewsStory.last_at >= now - timedelta(hours=24), NewsStory.is_checagem.is_(False),
+               (NewsUserStory.read.is_(None)) | (NewsUserStory.read.is_(False)))) or 0
+    return reminders, news
+
+
+def startup_note(session_factory, now: Optional[datetime] = None) -> int:
+    """Servidor ligou: duas mensagens no celular de cada conta.
+
+    1. "Bom dia, senhor. Inicialização concluída. Em que posso ajudar hoje?"
+    2. "Hoje o senhor tem 2 lembretes e 5 notícias novas." (números reais)
+    Se o servidor reiniciar várias vezes seguidas, avisa no máximo uma vez a cada 10 minutos."""
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
+    from titan.db.models import TitanNote, User, utcnow
+
+    now = now or utcnow()
+    local = now.astimezone(store.local_now().tzinfo)
+    day = local.strftime("%Y-%m-%d")
+    sent = 0
+    with session_factory.begin() as db:
+        for uid in db.scalars(select(User.id).where(User.is_active.is_(True))):
+            recent = db.scalar(select(TitanNote.id).where(
+                TitanNote.user_id == uid, TitanNote.kind == "sistema",
+                TitanNote.created_at >= now - timedelta(minutes=10)))
+            if recent:
+                continue
+            rem, news = day_counts(db, uid, now)
+            db.add(TitanNote(user_id=uid, kind="sistema", title="TITAN · Servidor ligado",
+                             body=f"{greeting_word(local.hour)}, senhor. Inicialização concluída. "
+                                  "Em que posso ajudar hoje?", day=day, created_at=now))
+            db.add(TitanNote(user_id=uid, kind="sistema", title="TITAN · Seu dia",
+                             body=f"Hoje o senhor tem {_qtd(rem, 'lembrete', 'lembretes')} e "
+                                  f"{_qtd(news, 'notícia nova', 'notícias novas', 'nenhuma')}.",
+                             day=day, created_at=now + timedelta(seconds=1)))
+            sent += 1
+    return sent

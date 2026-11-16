@@ -59,6 +59,13 @@ async def _lifespan(app: FastAPI):
 
         scheduler = Scheduler(ctx.session_factory, lambda: brain_provider(ctx.settings, ctx.session_factory))
         scheduler.start()
+    if ctx.settings.env.value != "test":
+        try:  # "Bom dia, senhor. Servidor ligado e TITAN funcionando." no celular
+            from titan.brain.service import startup_note
+
+            startup_note(ctx.session_factory)
+        except Exception:
+            log.exception("Falha ao avisar que o servidor ligou")
     news = None
     if ctx.settings.news_enabled and ctx.settings.env.value != "test":
         from titan.brain.service import brain_provider

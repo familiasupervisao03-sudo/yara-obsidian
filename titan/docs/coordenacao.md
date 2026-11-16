@@ -122,3 +122,6 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
   `titan enable-news` / `noticias-agora`; APKs titan 2.0 / casa 1.5 / central 1.5 · (`Shell.tsx`, `styles.css` (6 abas),
   `icons.tsx`, `brain.ts`, `ChatView.tsx`, `VoiceView.tsx`, `conversations.py`, `app.py`, `settings.py`, `cli.py`,
   `tools/web/net.py`, `db/models.py`, `apps/android/app/**`)
+- 2026-11-16 · CENTRAL · Servidor ligou → 2 mensagens no celular ("Bom dia, senhor. Inicialização concluída…" e
+  "Hoje o senhor tem N lembretes e M notícias novas", números reais); tipo de mensagem "sistema" (na migração 0009,
+  ainda não publicada) · (`app.py`, `brain/service.py`, `db/models.py`)
