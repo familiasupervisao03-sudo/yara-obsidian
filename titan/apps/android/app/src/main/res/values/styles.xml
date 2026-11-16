@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Titan" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">#03070c</item>
+        <item name="android:navigationBarColor">#03070c</item>
+        <item name="android:colorAccent">#3ee8ff</item>
+    </style>
+</resources>

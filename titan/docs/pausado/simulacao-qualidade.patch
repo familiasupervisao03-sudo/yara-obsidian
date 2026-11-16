@@ -1,0 +1,275 @@
+diff --git a/titan/apps/api/titan_api/routers/conversations.py b/titan/apps/api/titan_api/routers/conversations.py
+index 10aa989..9b09420 100644
+--- a/titan/apps/api/titan_api/routers/conversations.py
++++ b/titan/apps/api/titan_api/routers/conversations.py
+@@ -246,45 +246,18 @@ async def post_message_stream(
+ 
+ def with_research(ctx: AppContext, cu: CurrentUser, body: MessageCreate, turns: list[ChatTurn],
+                   style: str, emit) -> tuple[list[ChatTurn], str, str]:
+-    """Pesquisa na internet, se pedida: devolve (turnos, estilo, rodapé com as fontes).
+-
+-    As fontes entram na ÚLTIMA mensagem do usuário (dados não confiáveis), nunca no
+-    prompt do sistema; o estilo recebe só instruções fixas do TITAN.
+-    """
+-    wanted = body.web is True or (body.web is None and web.wants_web(body.content))
+-    if not wanted or not turns or turns[-1].role != "user":
+-        return turns, style, ""
+-    sep = "\n\n" if style else ""
+-    if not ctx.settings.web_enabled or ctx.web is None:
+-        emit("research", {"status": "disabled"})
+-        return turns, style + sep + (
+-            "O usuário pediu uma pesquisa na internet, mas ela está desligada nas configurações "
+-            "do TITAN (ligar com: titan enable-web). Diga isso e não finja ter pesquisado."), ""
+-    emit("research", {"status": "searching", "query": web.make_query(body.content)})
+-    try:
+-        res = ctx.web.research(body.content, str(cu.user.id))
+-    except web.RateLimited as exc:
+-        emit("research", {"status": "limited", "detail": str(exc)})
+-        return turns, style + sep + (
+-            f"O usuário pediu uma pesquisa na internet, mas ela foi recusada: {exc} "
+-            "Diga isso e não finja ter pesquisado."), ""
+-    except Exception:
+-        log.exception("Falha inesperada na pesquisa na internet")
+-        emit("research", {"status": "failed"})
+-        return turns, style + sep + (
+-            "O usuário pediu uma pesquisa na internet, mas ela falhou por um erro interno. "
+-            "Diga isso e não finja ter pesquisado."), ""
+-    emit("research", {"status": "done", **res.public()})
+-    with ctx.session_factory.begin() as db:
+-        # Sem a pergunta nem o conteúdo das páginas: só o necessário para auditoria.
+-        audit.record(db, "web.search", actor_type="user", actor_id=cu.user.id,
+-                     entity_type="conversation", data={
+-                         "provider": res.provider, "query_chars": len(res.query),
+-                         "sources": len(res.sources), "sites": sorted({s.site for s in res.sources}),
+-                         "cached": res.cached, "elapsed_ms": res.elapsed_ms})
+-    last = turns[-1]
+-    turns = turns[:-1] + [ChatTurn("user", last.content + web.sources_block(res))]
+-    return turns, style + sep + web.style_for(res, body.mode == "voice"), web.sources_footer(res)
++    """Pesquisa na internet, se pedida: devolve (turnos, estilo, rodapé com as fontes)."""
++    turns, style, footer, res = web.augment(ctx.settings, ctx.web, body.content, body.mode, body.web,
++                                            turns, style, emit, str(cu.user.id))
++    if res is not None:
++        with ctx.session_factory.begin() as db:
++            # Sem a pergunta nem o conteúdo das páginas: só o necessário para auditoria.
++            audit.record(db, "web.search", actor_type="user", actor_id=cu.user.id,
++                         entity_type="conversation", data={
++                             "provider": res.provider, "query_chars": len(res.query),
++                             "sources": len(res.sources), "sites": sorted({s.site for s in res.sources}),
++                             "cached": res.cached, "elapsed_ms": res.elapsed_ms})
++    return turns, style, footer
+ 
+ 
+ def _style_for(ctx: AppContext, cu: CurrentUser, mode: str) -> str:
+diff --git a/titan/titan/sim/wallet.py b/titan/titan/sim/wallet.py
+new file mode 100644
+index 0000000..ddcbc2e
+--- /dev/null
++++ b/titan/titan/sim/wallet.py
+@@ -0,0 +1,152 @@
++"""Carteira da simulação: um valor em dólar, separado do orçamento diário do chat.
++
++A simulação de qualidade gasta desta carteira até ela acabar. Antes de cada
++chamada à Anthropic é reservado o custo MÁXIMO possível; se não couber no saldo,
++a chamada não é enviada. Depois, a reserva vira o custo real. Uma reserva que
++ficou pendurada (energia caiu no meio de uma chamada) conta como gasta.
++
++Arquivo: var/simulacao/carteira.json (gravação atômica).
++"""
++
++from __future__ import annotations
++
++import json
++import os
++import threading
++import uuid
++from dataclasses import dataclass
++from datetime import datetime
++from pathlib import Path
++from typing import Optional
++
++from titan.policies.budget import ANTHROPIC_PRICES_USD_PER_MTOK, WORST_CASE_PRICE
++
++ROOT = Path(__file__).resolve().parents[2]
++WALLET_FILE = ROOT / "var" / "simulacao" / "carteira.json"
++MAX_WALLET_USD = 100.0  # trava contra erro de digitação
++
++
++class WalletEmpty(Exception):
++    """Saldo insuficiente: a chamada NÃO foi enviada."""
++
++
++@dataclass
++class Reservation:
++    id: str
++    estimated_usd: float
++
++
++def real_price(model: str, input_tokens: int) -> tuple[float, float]:
++    """Preço real em US$/milhão de tokens (Haiku 5.5 tem duas faixas pelo tamanho do pedido)."""
++    if model == "claude-haiku-5-5":
++        return (0.10, 0.50) if input_tokens <= 100_000 else (0.50, 2.50)
++    return ANTHROPIC_PRICES_USD_PER_MTOK.get(model, WORST_CASE_PRICE)
++
++
++def worst_price(model: str, fallback_possible: bool) -> tuple[float, float]:
++    if fallback_possible:
++        return WORST_CASE_PRICE
++    if model == "claude-haiku-5-5":
++        return (0.50, 2.50)
++    return ANTHROPIC_PRICES_USD_PER_MTOK.get(model, WORST_CASE_PRICE)
++
++
++class Wallet:
++    """Interface compatível com BudgetGuard (reserve/finalize/fail) para o AnthropicProvider."""
++
++    def __init__(self, path: Path = WALLET_FILE, fallback_models: frozenset[str] = frozenset()) -> None:
++        self.path = path
++        self.fallback_models = fallback_models
++        self._lock = threading.Lock()
++        self.calls = 0
++
++    # --- arquivo ---------------------------------------------------------------------
++
++    def _load(self) -> dict:
++        try:
++            return json.loads(self.path.read_text(encoding="utf-8"))
++        except FileNotFoundError:
++            return {"total_usd": 0.0, "gasto_usd": 0.0, "reservas": {}, "historico": []}
++
++    def _save(self, data: dict) -> None:
++        self.path.parent.mkdir(parents=True, exist_ok=True)
++        tmp = self.path.with_suffix(".tmp")
++        with open(tmp, "w", encoding="utf-8") as f:
++            json.dump(data, f, ensure_ascii=False, indent=1)
++            f.flush()
++            os.fsync(f.fileno())
++        os.replace(tmp, self.path)
++
++    # --- uso pelo usuário ------------------------------------------------------------
++
++    def status(self) -> dict:
++        with self._lock:
++            d = self._load()
++        pending = sum(d.get("reservas", {}).values())
++        spent = d.get("gasto_usd", 0.0) + pending
++        return {"total_usd": d.get("total_usd", 0.0), "gasto_usd": round(spent, 6),
++                "saldo_usd": round(max(0.0, d.get("total_usd", 0.0) - spent), 6),
++                "chamadas": d.get("chamadas", 0)}
++
++    def add(self, usd: float) -> dict:
++        """Coloca mais dinheiro na carteira (soma ao que sobrou)."""
++        if not 0 < usd <= MAX_WALLET_USD:
++            raise ValueError(f"Valor deve estar entre 0 e {MAX_WALLET_USD:.0f} dólares.")
++        with self._lock:
++            d = self._load()
++            d["total_usd"] = round(d.get("total_usd", 0.0) + usd, 6)
++            d.setdefault("historico", []).append(
++                {"quando": datetime.now().isoformat(timespec="seconds"), "colocado_usd": usd})
++            self._save(d)
++        return self.status()
++
++    def settle_orphans(self) -> float:
++        """Reservas de uma sessão que morreu à força: contam como gastas (conservador)."""
++        with self._lock:
++            d = self._load()
++            orphan = sum(d.get("reservas", {}).values())
++            if orphan:
++                d["gasto_usd"] = round(d.get("gasto_usd", 0.0) + orphan, 6)
++                d["reservas"] = {}
++                self._save(d)
++        return orphan
++
++    # --- interface de orçamento ------------------------------------------------------
++
++    def reserve(self, provider: str, model: str, max_input_tokens: int,
++                max_output_tokens: int) -> Reservation:
++        pin, pout = worst_price(model, model in self.fallback_models)
++        worst = round((max_input_tokens * pin + max_output_tokens * pout) / 1_000_000, 6)
++        with self._lock:
++            d = self._load()
++            spent = d.get("gasto_usd", 0.0) + sum(d.get("reservas", {}).values())
++            if spent + worst > d.get("total_usd", 0.0):
++                raise WalletEmpty(
++                    f"Carteira da simulação sem saldo: gasto US$ {spent:.4f} de US$ "
++                    f"{d.get('total_usd', 0.0):.2f}; esta chamada poderia custar até US$ {worst:.4f}. "
++                    "A chamada NÃO foi enviada.")
++            rid = uuid.uuid4().hex
++            d.setdefault("reservas", {})[rid] = worst
++            self._save(d)
++        return Reservation(rid, worst)
++
++    def finalize(self, res: Reservation, model: str, input_tokens: int, output_tokens: int,
++                 request_id: Optional[str]) -> float:
++        pin, pout = real_price(model, input_tokens)
++        actual = round((input_tokens * pin + output_tokens * pout) / 1_000_000, 6)
++        with self._lock:
++            d = self._load()
++            d.get("reservas", {}).pop(res.id, None)
++            d["gasto_usd"] = round(d.get("gasto_usd", 0.0) + actual, 6)
++            d["chamadas"] = d.get("chamadas", 0) + 1
++            self._save(d)
++            self.calls += 1
++        return actual
++
++    def fail(self, res: Reservation, detail: str, *, billed_unknown: bool) -> None:
++        with self._lock:
++            d = self._load()
++            reserved = d.get("reservas", {}).pop(res.id, 0.0)
++            if billed_unknown:  # não dá para saber se cobrou: conta a reserva inteira
++                d["gasto_usd"] = round(d.get("gasto_usd", 0.0) + reserved, 6)
++            self._save(d)
+diff --git a/titan/titan/tools/web/research.py b/titan/titan/tools/web/research.py
+index 7a29e71..a92f5b7 100644
+--- a/titan/titan/tools/web/research.py
++++ b/titan/titan/tools/web/research.py
+@@ -7,6 +7,7 @@ instrução dentro delas deve ser ignorada.
+ 
+ from __future__ import annotations
+ 
++import logging
+ import re
+ import threading
+ import time
+@@ -276,3 +277,42 @@ def sources_footer(res: Research) -> str:
+     if not res.sources:
+         return ""
+     return "\n\nFontes:\n" + "\n".join(f"[{s.n}] {s.title} — {s.url}" for s in res.sources)
++
++
++def augment(settings: Settings, researcher: Optional[WebResearcher], content: str, mode: str,
++            force: Optional[bool], turns: list, style: str, emit, user_key: str = ""):
++    """Aplica a pesquisa (se pedida) a um pedido do chat.
++
++    Devolve (turnos, estilo, rodapé, Research ou None). As fontes entram na ÚLTIMA
++    mensagem do usuário (dados não confiáveis), nunca no prompt do sistema; o estilo
++    recebe só instruções fixas do TITAN. Usado pelo chat e pela simulação de qualidade.
++    """
++    from titan.models.providers import ChatTurn
++
++    wanted = force is True or (force is None and wants_web(content))
++    if not wanted or not turns or turns[-1].role != "user":
++        return turns, style, "", None
++    sep = "\n\n" if style else ""
++    if not settings.web_enabled or researcher is None:
++        emit("research", {"status": "disabled"})
++        return turns, style + sep + (
++            "O usuário pediu uma pesquisa na internet, mas ela está desligada nas configurações "
++            "do TITAN (ligar com: titan enable-web). Diga isso e não finja ter pesquisado."), "", None
++    emit("research", {"status": "searching", "query": make_query(content)})
++    try:
++        res = researcher.research(content, user_key)
++    except RateLimited as exc:
++        emit("research", {"status": "limited", "detail": str(exc)})
++        return turns, style + sep + (
++            f"O usuário pediu uma pesquisa na internet, mas ela foi recusada: {exc} "
++            "Diga isso e não finja ter pesquisado."), "", None
++    except Exception:
++        logging.getLogger("titan.web").exception("Falha inesperada na pesquisa na internet")
++        emit("research", {"status": "failed"})
++        return turns, style + sep + (
++            "O usuário pediu uma pesquisa na internet, mas ela falhou por um erro interno. "
++            "Diga isso e não finja ter pesquisado."), "", None
++    emit("research", {"status": "done", **res.public()})
++    last = turns[-1]
++    turns = turns[:-1] + [ChatTurn("user", last.content + sources_block(res))]
++    return turns, style + sep + style_for(res, mode == "voice"), sources_footer(res), res

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="voz" android:enabled="true" android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/sc_voz" android:shortcutLongLabel="@string/sc_voz_long">
+        <intent android:action="android.intent.action.VIEW" android:data="titan://acao/voz"
+            android:targetPackage="br.titan.app" android:targetClass="br.titan.app.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="conversa" android:enabled="true" android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/sc_conversa" android:shortcutLongLabel="@string/sc_conversa">
+        <intent android:action="android.intent.action.VIEW" android:data="titan://acao/conversa"
+            android:targetPackage="br.titan.app" android:targetClass="br.titan.app.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="aula" android:enabled="true" android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/sc_aula" android:shortcutLongLabel="@string/sc_aula_long">
+        <intent android:action="android.intent.action.VIEW" android:data="titan://acao/aula"
+            android:targetPackage="br.titan.app" android:targetClass="br.titan.app.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="servidor" android:enabled="true" android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/sc_servidor" android:shortcutLongLabel="@string/sc_servidor_long">
+        <intent android:action="android.intent.action.VIEW" android:data="titan://configurar"
+            android:targetPackage="br.titan.app" android:targetClass="br.titan.app.MainActivity" />
+    </shortcut>
+</shortcuts>

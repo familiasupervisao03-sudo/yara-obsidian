@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TITAN Ponte de Comando</title>
+<style>
+:root{
+  --bg:#010409; --panel:rgba(6,20,30,.72); --line:#123447; --line2:#1d5670;
+  --cy:#3ee8ff; --cy2:#9ff4ff; --mg:#ff4fd8; --am:#ffb547; --rd:#ff4f6a; --gn:#4dffb0;
+  --tx:#dff7ff; --mu:#7fa6b6; --dim:#3c5d6b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#000;color:var(--tx);font-family:"Segoe UI",system-ui,Roboto,sans-serif;overflow:hidden}
+.mono{font-family:ui-monospace,"Cascadia Mono","Roboto Mono",Consolas,monospace}
+
+/* palco 1920x1080 escalado para caber */
+#wrap{position:fixed;inset:0 0 64px 0;overflow:hidden}
+#stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform-origin:center;background:var(--bg);overflow:hidden;
+  box-shadow:0 0 0 2px #0b1a24,0 0 60px rgba(62,232,255,.08)}
+#stage::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:1;
+  background:
+    radial-gradient(ellipse at 50% 42%,rgba(62,232,255,.10),transparent 55%),
+    radial-gradient(ellipse at 50% 120%,rgba(255,79,216,.08),transparent 50%);}
+#hex{position:absolute;inset:0;opacity:.35;z-index:0}
+#scan{position:absolute;inset:0;pointer-events:none;z-index:50;
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px)}
+.layer{position:absolute;inset:0;z-index:2;transition:opacity .8s,filter .8s}
+
+/* topo */
+.top{position:absolute;left:40px;right:40px;top:26px;height:54px;display:flex;align-items:center;gap:22px;
+  border-bottom:1px solid var(--line);padding-bottom:14px}
+.brand{font:700 26px/1 ui-monospace,monospace;letter-spacing:.42em;color:var(--cy);text-shadow:0 0 16px rgba(62,232,255,.7)}
+.brand small{font-size:14px;letter-spacing:.3em;color:var(--mu);margin-left:14px;text-shadow:none}
+.pills{margin-left:auto;display:flex;gap:12px}
+.pill{font:600 13px ui-monospace,monospace;letter-spacing:.16em;padding:7px 14px;border:1px solid var(--line2);color:var(--mu);background:rgba(4,16,24,.7)}
+.pill b{color:var(--gn);font-weight:700}
+.pill .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gn);box-shadow:0 0 10px var(--gn);margin-right:8px;animation:blink 2s infinite}
+@keyframes blink{50%{opacity:.35}}
+
+/* cartões */
+.card{position:absolute;background:var(--panel);border:1px solid var(--line);padding:22px 26px;
+  clip-path:polygon(0 0,calc(100% - 22px) 0,100% 22px,100% 100%,22px 100%,0 calc(100% - 22px))}
+.card::after{content:"";position:absolute;left:0;top:0;width:60px;height:2px;background:var(--cy);box-shadow:0 0 12px var(--cy)}
+.lbl{font:600 13px ui-monospace,monospace;letter-spacing:.24em;color:var(--cy);text-transform:uppercase;margin-bottom:14px;opacity:.9}
+.lbl::before{content:"// ";color:var(--dim)}
+
+#clock{left:40px;top:110px;width:470px;height:250px}
+#clock .t{font:300 128px/1 "Segoe UI",system-ui,sans-serif;letter-spacing:-.02em;text-shadow:0 0 30px rgba(62,232,255,.35)}
+#clock .t span{font-size:56px;color:var(--mu);margin-left:6px}
+#clock .d{font:500 22px/1.4 ui-monospace,monospace;color:var(--mu);letter-spacing:.12em;margin-top:12px;text-transform:uppercase}
+
+#wx{left:40px;top:384px;width:470px;height:190px;display:grid;grid-template-columns:110px 1fr;gap:6px 18px;align-items:center}
+#wx .lbl{grid-column:1/-1;margin-bottom:0}
+#wx .temp{font:300 64px/1 system-ui;}
+#wx .desc{color:var(--mu);font-size:19px;line-height:1.4}
+#wx svg{width:96px;height:96px}
+
+#tele{left:40px;top:598px;width:470px;height:300px}
+.bar{display:grid;grid-template-columns:150px 1fr 70px;align-items:center;gap:14px;margin:12px 0;font:500 15px ui-monospace,monospace;color:var(--mu);letter-spacing:.08em}
+.bar .tr{height:8px;background:#0b2230;position:relative;overflow:hidden}
+.bar .tr i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--cy),var(--cy2));box-shadow:0 0 12px var(--cy);transition:width .9s}
+.bar .v{text-align:right;color:var(--tx)}
+#spark{width:100%;height:70px;margin-top:6px}
+
+/* centro */
+#core{position:absolute;left:540px;top:96px;width:840px;height:780px}
+#orb{position:absolute;inset:0;width:840px;height:780px}
+#state{position:absolute;left:0;right:0;top:700px;text-align:center;font:600 18px ui-monospace,monospace;letter-spacing:.34em;color:var(--cy);text-transform:uppercase;text-shadow:0 0 14px rgba(62,232,255,.6)}
+#state small{display:block;font-size:14px;color:var(--mu);letter-spacing:.2em;margin-top:8px;text-shadow:none}
+
+/* direita */
+#today{right:40px;top:110px;width:470px;height:290px}
+.item{display:grid;grid-template-columns:76px 1fr;gap:12px;align-items:baseline;padding:10px 0;border-bottom:1px dashed #12303f;font-size:19px}
+.item .h{font:600 17px ui-monospace,monospace;color:var(--cy)}
+.item.done{opacity:.4;text-decoration:line-through}
+.item.hot .h{color:var(--am);text-shadow:0 0 10px rgba(255,181,71,.6)}
+
+#goals{right:40px;top:424px;width:470px;height:220px}
+.rings{display:flex;justify-content:space-between}
+.ring{width:128px;text-align:center}
+.ring svg{width:112px;height:112px;transform:rotate(-90deg)}
+.ring svg circle{fill:none;stroke-width:9}
+.ring .bg{stroke:#0e2a38}
+.ring .fg{stroke:var(--cy);stroke-linecap:butt;filter:drop-shadow(0 0 6px var(--cy));transition:stroke-dashoffset 1.4s}
+.ring .pc{position:relative;margin-top:-76px;height:40px;font:600 24px ui-monospace,monospace}
+.ring .nm{margin-top:34px;font-size:14px;color:var(--mu);line-height:1.25}
+
+#house{right:40px;top:668px;width:470px;height:230px}
+.devs{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.dev{border:1px solid var(--line);background:rgba(3,12,18,.7);padding:12px 4px 10px;text-align:center;transition:all .5s}
+.dev .ic{font-size:30px;filter:grayscale(1) brightness(.6);transition:all .5s}
+.dev .nm{font-size:12px;color:var(--mu);margin-top:6px;line-height:1.2;height:30px}
+.dev .st{font:700 11px ui-monospace,monospace;letter-spacing:.14em;color:var(--dim);margin-top:4px}
+.dev.on{border-color:var(--cy);box-shadow:0 0 18px rgba(62,232,255,.35),inset 0 0 18px rgba(62,232,255,.12)}
+.dev.on .ic{filter:none;text-shadow:0 0 18px rgba(255,255,200,.6)}
+.dev.on .st{color:var(--cy)}
+.dev.flash{animation:flash 1s}
+@keyframes flash{0%,100%{background:rgba(3,12,18,.7)}30%{background:rgba(62,232,255,.35)}}
+
+/* legenda */
+#legend{position:absolute;left:540px;right:540px;top:906px;height:110px;text-align:center}
+#legend .you{font:500 22px ui-monospace,monospace;color:var(--mu);min-height:30px;letter-spacing:.04em}
+#legend .you b{color:var(--mg);font-weight:700;margin-right:10px}
+#legend .ai{font:500 30px/1.35 "Segoe UI",system-ui;color:var(--tx);margin-top:10px;min-height:42px;text-shadow:0 0 16px rgba(62,232,255,.35)}
+#legend .ai b{color:var(--cy);font:700 22px ui-monospace,monospace;margin-right:12px;letter-spacing:.1em}
+.caret{display:inline-block;width:12px;height:28px;background:var(--cy);vertical-align:-4px;margin-left:4px;animation:blink 1s infinite}
+
+/* faixa de baixo */
+#ticker{position:absolute;left:0;right:0;bottom:0;height:46px;border-top:1px solid var(--line);background:rgba(2,10,16,.9);overflow:hidden;
+  font:500 16px/46px ui-monospace,monospace;letter-spacing:.14em;color:var(--mu);white-space:nowrap}
+#ticker div{display:inline-block;padding-left:100%;animation:tick 48s linear infinite}
+#ticker em{color:var(--cy);font-style:normal}
+@keyframes tick{to{transform:translateX(-100%)}}
+
+/* sobreposições */
+.ov{position:absolute;inset:0;z-index:20;opacity:0;pointer-events:none;transition:opacity .6s}
+.ov.show{opacity:1}
+
+#boot{background:#000;display:flex;flex-direction:column;justify-content:center;padding:0 260px;font:500 26px/1.7 ui-monospace,monospace;color:var(--cy)}
+#boot .ln{opacity:0;transform:translateX(-14px);transition:all .35s;white-space:pre}
+#boot .ln.in{opacity:1;transform:none}
+#boot .ok{color:var(--gn)}
+#boot .big{font:700 92px/1.1 ui-monospace,monospace;letter-spacing:.5em;color:var(--cy);text-shadow:0 0 40px rgba(62,232,255,.8);margin-top:30px}
+
+#brief{background:rgba(1,4,9,.86);backdrop-filter:blur(3px)}
+#brief h2{position:absolute;left:0;right:0;top:110px;text-align:center;font:700 22px ui-monospace,monospace;letter-spacing:.5em;color:var(--cy)}
+#brief h1{position:absolute;left:0;right:0;top:150px;text-align:center;font:300 86px/1.1 system-ui;text-shadow:0 0 30px rgba(62,232,255,.4)}
+.bc{position:absolute;top:340px;width:400px;height:420px;background:var(--panel);border:1px solid var(--line2);padding:30px;
+  opacity:0;transform:translateY(40px) scale(.96);transition:all .7s cubic-bezier(.2,.8,.2,1)}
+.bc.in{opacity:1;transform:none}
+.bc .k{font:600 15px ui-monospace,monospace;letter-spacing:.26em;color:var(--cy);margin-bottom:22px}
+.bc .v{font:300 60px/1.1 system-ui}
+.bc p{color:var(--mu);font-size:21px;line-height:1.55;margin-top:14px}
+.bc li{list-style:none;font-size:22px;padding:10px 0;border-bottom:1px dashed #173a4b}
+.bc li span{font:600 18px ui-monospace,monospace;color:var(--cy);margin-right:12px}
+
+#alert{display:flex;align-items:center;justify-content:center;background:rgba(12,0,5,.78)}
+#alert .band{width:100%;padding:34px 120px 30px;background:linear-gradient(90deg,rgba(40,4,12,.92),rgba(80,8,24,.97) 50%,rgba(40,4,12,.92));
+  border-top:2px solid var(--rd);border-bottom:2px solid var(--rd);box-shadow:0 0 90px rgba(255,79,106,.35)}
+#alert.warn .band{border-color:var(--am);box-shadow:0 0 90px rgba(255,181,71,.3);background:linear-gradient(90deg,rgba(36,20,2,.92),rgba(74,40,4,.97) 50%,rgba(36,20,2,.92))}
+#alert .k{font:700 22px ui-monospace,monospace;letter-spacing:.6em;color:var(--rd);animation:blink .7s infinite;text-align:center}
+#alert.warn .k{color:var(--am)}
+#alert .row{display:grid;grid-template-columns:1fr 700px;gap:60px;align-items:center;margin-top:22px}
+#alert .t{font:700 58px/1.1 system-ui;text-shadow:0 0 24px rgba(255,79,106,.6)}
+#alert .big{font:200 120px/1 system-ui;color:#fff;margin:14px 0 6px;text-shadow:0 0 34px rgba(255,79,106,.7)}
+#alert .big small{font-size:42px;color:#ffb3c0;margin-left:10px}
+#alert .s{font:500 22px/1.5 system-ui;color:#ffc9d2}
+#alert .act{margin-top:16px;padding:12px 16px;border-left:3px solid var(--cy);background:rgba(62,232,255,.08);font:500 20px/1.45 system-ui;color:#dff7ff}
+#alert .act b{font:700 15px ui-monospace,monospace;letter-spacing:.2em;color:var(--cy);display:block;margin-bottom:4px}
+#alert canvas{width:700px;height:300px;background:rgba(0,0,0,.35);border:1px solid rgba(255,79,106,.4)}
+#alert .cd{margin-top:22px;text-align:center;font:700 26px ui-monospace,monospace;letter-spacing:.3em;color:#fff}
+#alert .cd span{color:var(--rd)}
+#alert.warn .cd span{color:var(--am)}
+#alert::before{content:"";position:absolute;inset:0;border:14px solid rgba(255,79,106,.0);animation:edge .7s infinite;pointer-events:none}
+.bar.bad{color:var(--rd)} .bar.bad .tr i{background:var(--rd);box-shadow:0 0 14px var(--rd)} .bar.bad .v{color:var(--rd)}
+@keyframes edge{50%{border-color:rgba(255,79,106,.35)}}
+
+#mission{background:rgba(1,4,9,.92);display:grid;place-items:center}
+#mission .box{text-align:center;position:relative}
+#mission svg{width:620px;height:620px;transform:rotate(-90deg)}
+#mission circle{fill:none;stroke-width:6}
+#mission .t{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center}
+#mission .t .k{font:700 20px ui-monospace,monospace;letter-spacing:.5em;color:var(--am)}
+#mission .t .n{font:200 150px/1 system-ui;margin:14px 0;text-shadow:0 0 30px rgba(255,181,71,.4)}
+#mission .t .s{font:500 22px ui-monospace,monospace;color:var(--mu);letter-spacing:.12em}
+
+#night{background:#000}
+#stars{position:absolute;inset:0}
+#night .t{position:absolute;right:90px;bottom:80px;font:200 90px/1 system-ui;color:#2c4652}
+#night .s{position:absolute;right:94px;bottom:54px;font:500 16px ui-monospace,monospace;letter-spacing:.3em;color:#22363f}
+
+#show{position:absolute;right:40px;top:110px;width:860px;height:640px;z-index:15;background:rgba(3,14,22,.98);border:1px solid var(--cy);
+  box-shadow:0 0 50px rgba(62,232,255,.25);padding:30px 36px;transform:translateX(120%);transition:transform .8s cubic-bezier(.2,.8,.2,1)}
+#show.show{transform:none}
+#show h3{font:300 46px/1.15 system-ui;margin:4px 0 20px}
+#show .src{font:500 14px ui-monospace,monospace;color:var(--dim);letter-spacing:.14em;margin-top:16px}
+
+/* controles (fora da TV) */
+#ctrl{position:fixed;left:0;right:0;bottom:0;height:64px;display:flex;gap:8px;align-items:center;padding:0 12px;background:#05090d;border-top:1px solid #11222c;overflow-x:auto}
+#ctrl button{flex:none;font:600 13px ui-monospace,monospace;letter-spacing:.06em;color:#bdefff;background:#0a1923;border:1px solid #1b4256;padding:10px 12px;cursor:pointer;white-space:nowrap}
+#ctrl button:hover{border-color:var(--cy);color:#fff}
+#ctrl button.main{background:var(--cy);color:#00161e;border-color:var(--cy)}
+#ctrl button.on{border-color:var(--gn);color:var(--gn)}
+#ctrl .sep{width:1px;height:30px;background:#1b3442;flex:none}
+#ctrl .tip{color:#4f7383;font:12px ui-monospace,monospace;white-space:nowrap;margin-left:auto;padding-left:8px}
+</style>
+</head>
+<body>
+<div id="wrap"><div id="stage">
+  <canvas id="hex" width="1920" height="1080"></canvas>
+
+  <div class="layer" id="main">
+    <div class="top">
+      <div class="brand">TITAN<small>PONTE DE COMANDO · SIMULAÇÃO</small></div>
+      <div class="pills">
+        <div class="pill"><span class="dot"></span>NÚCLEO <b>ONLINE</b></div>
+        <div class="pill">CASA <b id="pillHouse">2/5</b></div>
+        <div class="pill">REDE <b>TAILSCALE</b></div>
+        <div class="pill">IA <b>GROQ</b></div>
+      </div>
+    </div>
+
+    <div class="card" id="clock"><div class="lbl">tempo de bordo</div>
+      <div class="t" id="hh">00:00<span>00</span></div><div class="d" id="dd">—</div></div>
+
+    <div class="card" id="wx"><div class="lbl">condições externas</div>
+      <svg viewBox="0 0 100 100"><circle cx="40" cy="40" r="16" fill="none" stroke="#ffb547" stroke-width="3"/>
+        <g stroke="#ffb547" stroke-width="3">
+          <line x1="40" y1="10" x2="40" y2="17"/><line x1="40" y1="63" x2="40" y2="70"/><line x1="10" y1="40" x2="17" y2="40"/><line x1="63" y1="40" x2="70" y2="40"/>
+          <line x1="19" y1="19" x2="24" y2="24"/><line x1="56" y1="56" x2="61" y2="61"/><line x1="61" y1="19" x2="56" y2="24"/></g>
+        <path d="M38 78h42a12 12 0 0 0-3-23.6A17 17 0 0 0 45 58a11 11 0 0 0-7 20z" fill="#061620" stroke="#3ee8ff" stroke-width="3"/></svg>
+      <div><div class="temp">28°</div><div class="desc">Parcialmente nublado<br>chuva 20% · umidade 64%</div></div></div>
+
+    <div class="card" id="tele"><div class="lbl">telemetria</div>
+      <div class="bar" id="r-cpu">PROCESSADOR<div class="tr"><i style="width:34%"></i></div><span class="v">34%</span></div>
+      <div class="bar" id="r-temp">TEMPERATURA<div class="tr"><i style="width:55%"></i></div><span class="v">61°</span></div>
+      <div class="bar" id="r-bat">BATERIA<div class="tr"><i style="width:45%"></i></div><span class="v">36°</span></div>
+      <div class="bar" id="r-gasto">GASTO IA<div class="tr"><i style="width:41%"></i></div><span class="v">41%</span></div>
+      <canvas id="spark" width="418" height="70"></canvas></div>
+
+    <div id="core"><canvas id="orb" width="840" height="780"></canvas>
+      <div id="state">EM ESPERA<small>diga “Ei, Titã”</small></div></div>
+
+    <div class="card" id="today"><div class="lbl">hoje</div>
+      <div class="item done"><span class="h">07:30</span>Levar o documento na escola</div>
+      <div class="item hot"><span class="h">16:00</span>Comprar microfone USB</div>
+      <div class="item"><span class="h">19:00</span>Postar foto dos bolos</div>
+      <div class="item"><span class="h">21:00</span>Estudar 1 hora</div></div>
+
+    <div class="card" id="goals"><div class="lbl">metas</div>
+      <div class="rings" id="rings"></div></div>
+
+    <div class="card" id="house"><div class="lbl">casa</div>
+      <div class="devs" id="devs"></div></div>
+
+    <div id="legend"><div class="you" id="you"></div><div class="ai" id="ai"></div></div>
+
+    <div id="ticker"><div>
+      <em>◆ TITAN</em> 3 lembretes hoje &nbsp;&nbsp;&nbsp; <em>◆ META</em> faltam R$ 114 para os R$ 300 &nbsp;&nbsp;&nbsp;
+      <em>◆ CASA</em> luz do quarto ligada há 2 h &nbsp;&nbsp;&nbsp; <em>◆ CLIMA</em> chuva fraca depois das 18 h &nbsp;&nbsp;&nbsp;
+      <em>◆ SISTEMA</em> todos os módulos operando &nbsp;&nbsp;&nbsp; <em>◆ MEMÓRIA</em> 42 lembranças guardadas
+    </div></div>
+  </div>
+
+  <div id="show"><div class="lbl">na tela · pedido por voz</div>
+    <h3>Meta: juntar R$ 300 com os bolos</h3>
+    <svg viewBox="0 0 780 470" width="780" height="470">
+      <g stroke="#123447"><line x1="60" y1="40" x2="760" y2="40"/><line x1="60" y1="140" x2="760" y2="140"/><line x1="60" y1="240" x2="760" y2="240"/><line x1="60" y1="340" x2="760" y2="340"/></g>
+      <line x1="60" y1="40" x2="760" y2="40" stroke="#ff4fd8" stroke-dasharray="8 8"/>
+      <text x="760" y="30" text-anchor="end" fill="#ff4fd8" font-family="monospace" font-size="16">ALVO R$ 300</text>
+      <g font-family="monospace" font-size="15" fill="#7fa6b6"><text x="10" y="345">R$ 0</text><text x="0" y="245">R$100</text><text x="0" y="145">R$200</text><text x="0" y="45">R$300</text></g>
+      <g id="bars"></g>
+      <polyline id="trend" fill="none" stroke="#3ee8ff" stroke-width="3" points=""/>
+      <g font-family="monospace" font-size="15" fill="#7fa6b6" id="xl"></g>
+    </svg>
+    <div class="src">PROJEÇÃO DO TITAN: NESSE RITMO, VOCÊ CHEGA LÁ EM 3 SEMANAS</div></div>
+
+  <div class="ov" id="boot"></div>
+  <div class="ov" id="brief"><h2>BRIEFING MATINAL</h2><h1 id="bh">Bom dia, Luiz.</h1>
+    <div class="bc" style="left:150px"><div class="k">CLIMA</div><div class="v">28°</div><p>Sol de manhã, chuva fraca depois das 18 h. Leve o guarda-chuva se sair à tarde.</p></div>
+    <div class="bc" style="left:760px"><div class="k">HOJE</div><ul><li><span>07:30</span>Documento da escola</li><li><span>16:00</span>Microfone USB</li><li><span>19:00</span>Foto dos bolos</li></ul></div>
+    <div class="bc" style="left:1370px"><div class="k">CENA BOM DIA</div><ul><li><span>✓</span>Luz do quarto</li><li><span>✓</span>Ar em 23°</li><li><span>✓</span>Notebook</li><li><span>✓</span>Ventilador</li></ul></div>
+  </div>
+  <div class="ov" id="alert"><div class="band">
+    <div class="k" id="aK">⚠ ALERTA CRÍTICO ⚠</div>
+    <div class="row"><div><div class="t" id="aT"></div><div class="big" id="aV"></div><div class="s" id="aS"></div>
+      <div class="act"><b>O QUE O TITAN JÁ FEZ</b><span id="aA"></span></div></div>
+      <canvas id="aC" width="700" height="300"></canvas></div>
+    <div class="cd" id="aCd"></div></div></div>
+  <div class="ov" id="mission"><div class="box">
+    <svg viewBox="0 0 620 620"><circle cx="310" cy="310" r="290" stroke="#1d2a18"/><circle id="mRing" cx="310" cy="310" r="290" stroke="#ffb547" style="filter:drop-shadow(0 0 10px #ffb547)"/></svg>
+    <div class="t"><div class="k">MODO MISSÃO</div><div class="n" id="mT">25:00</div><div class="s">ESTUDAR MATEMÁTICA · AVISOS BLOQUEADOS</div></div></div></div>
+  <div class="ov" id="night"><canvas id="stars" width="1920" height="1080"></canvas><div class="t" id="nT">23:14</div><div class="s">MODO NOITE · DIGA “EI, TITÃ” PARA ACORDAR</div></div>
+
+  <div id="scan"></div>
+</div></div>
+
+<div id="ctrl">
+  <button class="main" data-k="1">🎙 1 · “Ei, Titã, liga a luz”</button>
+  <button data-k="2">☀ 2 · Bom dia</button>
+  <button data-k="3">⚠ 3 · Alerta crítico (4 tipos)</button>
+  <button data-k="4">🧊 4 · Quarto em holograma</button>
+  <button data-k="5">📊 5 · Mostra na tela</button>
+  <button data-k="6">⏱ 6 · Modo missão</button>
+  <button data-k="7">🌙 7 · Modo noite</button>
+  <span class="sep"></span>
+  <button data-k="d">▶ Demonstração automática</button>
+  <button data-k="v" id="bVoice">🔈 Voz: desligada</button>
+  <button data-k="f">⛶ Tela cheia</button>
+  <span class="tip">teclas 1–7 · Esc volta</span>
+</div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const stage = $("#stage");
+function fit(){ const w = innerWidth, h = innerHeight - 64; stage.style.transform = `translate(-50%,-50%) scale(${Math.min(w/1920, h/1080)})`; }
+addEventListener("resize", fit); fit();
+
+/* ---------- fundo hexagonal ---------- */
+(() => { const c = $("#hex").getContext("2d"); c.strokeStyle = "#0f2c3a"; c.lineWidth = 1; const r = 26, w = r*Math.sqrt(3);
+  for (let y = 0, row = 0; y < 1120; y += r*1.5, row++) for (let x = (row%2)*w/2; x < 1960; x += w) {
+    c.beginPath(); for (let i = 0; i < 6; i++) { const a = Math.PI/3*i + Math.PI/6; c.lineTo(x + r*Math.cos(a), y + r*Math.sin(a)); } c.closePath(); c.stroke(); } })();
+
+/* ---------- relógio ---------- */
+const DIAS = ["domingo","segunda","terça","quarta","quinta","sexta","sábado"], MES = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+const p2 = (n) => String(n).padStart(2, "0");
+function clock(){ const d = new Date();
+  $("#hh").innerHTML = `${p2(d.getHours())}:${p2(d.getMinutes())}<span>${p2(d.getSeconds())}</span>`;
+  $("#dd").textContent = `${DIAS[d.getDay()]} · ${d.getDate()} ${MES[d.getMonth()]} ${d.getFullYear()}`;
+  $("#nT").textContent = `${p2(d.getHours())}:${p2(d.getMinutes())}`; }
+setInterval(clock, 1000); clock();
+
+/* ---------- metas ---------- */
+const GOALS = [["Juntar<br>R$ 300", 62], ["Estudar<br>1 h/dia", 40], ["Treino<br>3×/semana", 75]];
+$("#rings").innerHTML = GOALS.map(([n]) => `<div class="ring"><svg viewBox="0 0 112 112"><circle class="bg" cx="56" cy="56" r="48"/>
+  <circle class="fg" cx="56" cy="56" r="48" stroke-dasharray="301.6" stroke-dashoffset="301.6"/></svg><div class="pc">0%</div><div class="nm">${n}</div></div>`).join("");
+setTimeout(() => document.querySelectorAll(".ring").forEach((el, i) => {
+  el.querySelector(".fg").style.strokeDashoffset = 301.6*(1 - GOALS[i][1]/100); countUp(el.querySelector(".pc"), GOALS[i][1]); }), 400);
+function countUp(el, to){ let v = 0; const t = setInterval(() => { v = Math.min(to, v + 2); el.textContent = v + "%"; if (v >= to) clearInterval(t); }, 28); }
+
+/* ---------- casa ---------- */
+const DEVS = [
+  { id:"luz", ic:"💡", nm:"Luz do<br>quarto", on:false, fem:true, pos:[0, 2.5, 0] },
+  { id:"vent", ic:"🌀", nm:"Ventilador", on:true, pos:[1.6, 0.3, 1.1] },
+  { id:"note", ic:"💻", nm:"Notebook", on:true, pos:[-1.5, 0.8, -1.0] },
+  { id:"ar", ic:"❄️", nm:"Ar-condi-<br>cionado", on:false, pos:[0, 2.1, -1.45] },
+  { id:"tv", ic:"📺", nm:"TV", on:false, fem:true, pos:[-1.95, 1.3, 0.6] },
+];
+function drawDevs(){ $("#devs").innerHTML = DEVS.map((d) => `<div class="dev ${d.on ? "on" : ""}" id="dv-${d.id}"><div class="ic">${d.ic}</div><div class="nm">${d.nm}</div>
+  <div class="st">${d.on ? (d.fem ? "LIGADA" : "LIGADO") : (d.fem ? "DESLIGADA" : "DESLIGADO")}</div></div>`).join("");
+  $("#pillHouse").textContent = `${DEVS.filter((d) => d.on).length}/5`; }
+function setDev(id, on){ const d = DEVS.find((x) => x.id === id); d.on = on; d.flashAt = performance.now(); drawDevs(); $("#dv-" + id).classList.add("flash"); }
+drawDevs();
+
+/* ---------- telemetria ---------- */
+const spark = Array.from({ length: 60 }, () => 30 + Math.random()*20);
+// valores normais; durante um alerta, a linha dele sobe e fica vermelha
+const tele = { cpu: 34, temp: 61, bat: 36, gasto: 41 }, override = {};
+function row(id, pct, txt, bad){ const el = $("#r-" + id); el.querySelector("i").style.width = Math.min(100, pct) + "%";
+  el.querySelector(".v").textContent = txt; el.classList.toggle("bad", !!bad); }
+setInterval(() => {
+  tele.cpu = Math.round(20 + Math.random()*30 + (mode === "think" ? 35 : 0)); tele.temp = Math.round(58 + Math.random()*5);
+  tele.bat = Math.round(35 + Math.random()*2); tele.gasto = 41;
+  const v = { ...tele, ...override };
+  row("cpu", v.cpu, v.cpu + "%", override.cpu); row("temp", v.temp, v.temp + "°", override.temp);
+  row("bat", v.bat*1.4, v.bat + "°", override.bat); row("gasto", v.gasto, v.gasto + "%", override.gasto);
+  spark.push(v.cpu); spark.shift();
+  const c = $("#spark").getContext("2d"), H = 70; c.clearRect(0, 0, 418, H);
+  c.strokeStyle = "#123447"; c.beginPath(); for (let y = 17; y < H; y += 17) { c.moveTo(0, y); c.lineTo(418, y); } c.stroke();
+  const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "rgba(62,232,255,.35)"); g.addColorStop(1, "rgba(62,232,255,0)");
+  c.beginPath(); spark.forEach((q, i) => c.lineTo(i*418/59, H - q*0.65)); c.lineTo(418, H); c.lineTo(0, H); c.fillStyle = g; c.fill();
+  c.beginPath(); spark.forEach((q, i) => c.lineTo(i*418/59, H - q*0.65)); c.strokeStyle = "#3ee8ff"; c.lineWidth = 2; c.stroke();
+}, 900);
+
+/* ---------- núcleo (orbe / holograma) ---------- */
+let mode = "idle";     // idle | listen | think | speak | holo
+let level = 0, target = 0, expand = 1, holoMix = 0, holoOn = false;
+const orb = $("#orb").getContext("2d"), W = 840, H = 780, CX = 420, CY = 350;
+const parts = Array.from({ length: 70 }, () => ({ a: Math.random()*6.28, r: 160 + Math.random()*170, s: (Math.random()*.5 + .2)*(Math.random() < .5 ? -1 : 1), z: Math.random() }));
+function col(m){ return m === "think" ? [255, 79, 216] : [62, 232, 255]; }
+function frame(t){
+  const s = t/1000;
+  target = mode === "listen" ? 0.35 + 0.65*Math.abs(Math.sin(s*7)*Math.sin(s*3.1 + 1)) :
+           mode === "speak" ? 0.25 + 0.6*Math.abs(Math.sin(s*9)*Math.cos(s*2.3)) : mode === "think" ? 0.3 : 0.06;
+  level += (target - level)*0.18;
+  const want = mode === "idle" || mode === "holo" ? 1 : 1.22; expand += (want - expand)*0.06;
+  holoMix += ((holoOn ? 1 : 0) - holoMix)*0.05;
+  orb.clearRect(0, 0, W, H);
+  if (holoMix < 0.98) drawOrb(s, 1 - holoMix);
+  if (holoMix > 0.02) drawHolo(s, holoMix);
+  requestAnimationFrame(frame);
+}
+function drawOrb(s, a){
+  const [r, g, b] = col(mode), c = (al) => `rgba(${r},${g},${b},${al*a})`, E = expand, breath = 1 + Math.sin(s*1.6)*0.025;
+  orb.save(); orb.translate(CX, CY);
+  const glow = orb.createRadialGradient(0, 0, 10, 0, 0, 330*E);
+  glow.addColorStop(0, c(0.32 + level*0.3)); glow.addColorStop(0.35, c(0.08)); glow.addColorStop(1, c(0)); orb.fillStyle = glow;
+  orb.beginPath(); orb.arc(0, 0, 330*E, 0, 6.28); orb.fill();
+  // partículas
+  for (const p of parts) { p.a += p.s*0.004*(mode === "think" ? 4 : 1); const rr = p.r*E;
+    orb.fillStyle = c(0.25 + p.z*0.6); orb.fillRect(Math.cos(p.a)*rr, Math.sin(p.a)*rr*0.92, 2 + p.z*2, 2 + p.z*2); }
+  // anéis
+  orb.lineWidth = 2;
+  const rings = [[150, 0.5, [40, 14]], [196, -0.3, [3, 9]], [244, 0.18, [120, 30, 10, 30]], [290, -0.1, [2, 18]]];
+  rings.forEach(([rad, sp, dash], i) => { orb.save(); orb.rotate(s*sp*(mode === "think" ? 4 : 1));
+    orb.setLineDash(dash); orb.strokeStyle = c(i === 2 ? 0.75 : 0.45); orb.beginPath(); orb.arc(0, 0, rad*E*breath, 0, 6.28); orb.stroke(); orb.restore(); });
+  orb.setLineDash([]);
+  // arcos magenta
+  orb.save(); orb.rotate(-s*0.4); orb.strokeStyle = `rgba(255,79,216,${0.8*a})`; orb.lineWidth = 4;
+  orb.beginPath(); orb.arc(0, 0, 244*E, 0, 0.5); orb.stroke(); orb.beginPath(); orb.arc(0, 0, 244*E, 3.14, 3.4); orb.stroke(); orb.restore();
+  // marcações
+  orb.save(); orb.rotate(s*0.05); for (let i = 0; i < 72; i++) { const an = i/72*6.28, l = i%6 === 0 ? 14 : 6;
+    orb.strokeStyle = c(i%6 === 0 ? 0.8 : 0.35); orb.beginPath(); orb.moveTo(Math.cos(an)*318*E, Math.sin(an)*318*E);
+    orb.lineTo(Math.cos(an)*(318 + l)*E, Math.sin(an)*(318 + l)*E); orb.stroke(); } orb.restore();
+  // onda polar (voz)
+  orb.lineWidth = 2.5; orb.strokeStyle = c(0.95); orb.shadowColor = c(1); orb.shadowBlur = 18; orb.beginPath();
+  for (let i = 0; i <= 180; i++) { const an = i/180*6.28;
+    const w = level*(Math.sin(an*6 + s*8)*22 + Math.sin(an*11 - s*13)*14 + Math.sin(an*3 + s*5)*10);
+    const rad = (118 + w)*E*breath; orb.lineTo(Math.cos(an)*rad, Math.sin(an)*rad); }
+  orb.closePath(); orb.stroke();
+  // núcleo
+  const core = orb.createRadialGradient(0, 0, 0, 0, 0, 92*E);
+  core.addColorStop(0, `rgba(255,255,255,${0.95*a})`); core.addColorStop(0.25, c(0.9)); core.addColorStop(0.7, c(0.25)); core.addColorStop(1, c(0));
+  orb.fillStyle = core; orb.beginPath(); orb.arc(0, 0, (78 + level*26)*E*breath, 0, 6.28); orb.fill();
+  orb.shadowBlur = 0;
+  orb.fillStyle = `rgba(0,22,30,${0.85*a})`; orb.font = "700 30px ui-monospace,monospace"; orb.textAlign = "center"; orb.textBaseline = "middle";
+  orb.fillText("T", 0, 2);
+  orb.restore();
+}
+// quarto em linhas neon (projeção 3D simples)
+function drawHolo(s, a){
+  const ang = s*0.25, tilt = 0.5, scale = 128;
+  const P = ([x, y, z]) => { const cx = x*Math.cos(ang) - z*Math.sin(ang), cz = x*Math.sin(ang) + z*Math.cos(ang);
+    const yy = (y - 1.2)*Math.cos(tilt) - cz*Math.sin(tilt), zz = (y - 1.2)*Math.sin(tilt) + cz*Math.cos(tilt), f = 7/(7 + zz);
+    return [CX + cx*scale*f, CY + 40 - yy*scale*f, f]; };
+  const L = (p, q, al, w = 1.5, cc = "62,232,255") => { const A = P(p), B = P(q); orb.strokeStyle = `rgba(${cc},${al*a})`; orb.lineWidth = w;
+    orb.beginPath(); orb.moveTo(A[0], A[1]); orb.lineTo(B[0], B[1]); orb.stroke(); };
+  orb.save(); orb.shadowColor = `rgba(62,232,255,${a})`; orb.shadowBlur = 12;
+  for (let i = -2; i <= 2; i += 0.5) { L([i, 0, -1.5], [i, 0, 1.5], 0.18, 1); }
+  for (let k = -1.5; k <= 1.5; k += 0.5) { L([-2, 0, k], [2, 0, k], 0.18, 1); }
+  const X = 2, Y = 2.6, Z = 1.5, v = [[-X,0,-Z],[X,0,-Z],[X,0,Z],[-X,0,Z],[-X,Y,-Z],[X,Y,-Z],[X,Y,Z],[-X,Y,Z]];
+  [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]].forEach(([i, j]) => L(v[i], v[j], 0.8, 2));
+  // cama e mesa
+  const box = (x0, x1, y1, z0, z1, al) => { const b = [[x0,0,z0],[x1,0,z0],[x1,0,z1],[x0,0,z1],[x0,y1,z0],[x1,y1,z0],[x1,y1,z1],[x0,y1,z1]];
+    [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]].forEach(([i, j]) => L(b[i], b[j], al, 1.3)); };
+  box(0.2, 1.9, 0.5, -0.2, 1.4, 0.55); box(-1.95, -1.0, 0.75, -1.45, -0.5, 0.55);
+  // porta e janela
+  L([X, 0, -1.2], [X, 2.0, -1.2], 0.5); L([X, 2.0, -1.2], [X, 2.0, -0.4], 0.5); L([X, 2.0, -0.4], [X, 0, -0.4], 0.5);
+  const now = performance.now();
+  for (const d of DEVS) { const [x, y, f] = P(d.pos), fl = d.flashAt && now - d.flashAt < 1500 ? 1 - (now - d.flashAt)/1500 : 0;
+    const on = d.on, rr = (on ? 13 : 8)*f;
+    if (on) { const gl = orb.createRadialGradient(x, y, 0, x, y, (d.id === "luz" ? 230 : 70)*f);
+      gl.addColorStop(0, `rgba(${d.id === "luz" ? "255,240,180" : "62,232,255"},${(0.45 + fl*0.4)*a})`); gl.addColorStop(1, "rgba(0,0,0,0)");
+      orb.fillStyle = gl; orb.beginPath(); orb.arc(x, y, (d.id === "luz" ? 230 : 70)*f, 0, 6.28); orb.fill(); }
+    if (fl) { orb.strokeStyle = `rgba(62,232,255,${fl*a})`; orb.lineWidth = 3; orb.beginPath(); orb.arc(x, y, rr + (1 - fl)*80, 0, 6.28); orb.stroke(); }
+    orb.fillStyle = on ? `rgba(62,232,255,${a})` : `rgba(60,93,107,${a})`; orb.beginPath(); orb.arc(x, y, rr, 0, 6.28); orb.fill();
+    orb.shadowBlur = 0; orb.font = "600 17px ui-monospace,monospace"; orb.textAlign = "left";
+    orb.fillStyle = on ? `rgba(223,247,255,${a})` : `rgba(127,166,182,${a*0.8})`;
+    orb.fillText(`${d.nm.replace("-<br>", "").replace("<br>", " ")} · ${on ? "ON" : "OFF"}`, x + 18, y - 12); orb.shadowBlur = 12; }
+  orb.restore();
+}
+requestAnimationFrame(frame);
+
+/* ---------- legenda, voz e sons ---------- */
+let voiceOn = false, audio = null;
+function beep(f = 880, d = 0.08, type = "sine", vol = 0.05){ try { audio = audio || new AudioContext();
+  const o = audio.createOscillator(), g = audio.createGain(); o.type = type; o.frequency.value = f; g.gain.value = vol;
+  g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + d); o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime + d); } catch { /* sem som */ } }
+function speak(text){ if (!voiceOn || !("speechSynthesis" in window)) return; speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text); u.lang = "pt-BR"; u.rate = 1.05; u.pitch = 0.75; speechSynthesis.speak(u); }
+
+let run = 0;
+const wait = (ms, id) => new Promise((ok, no) => setTimeout(() => id === run ? ok() : no("cancel"), ms));
+async function type(el, prefix, text, id, speed = 32){ el.innerHTML = prefix; for (let i = 1; i <= text.length; i++) { await wait(speed, id);
+  el.innerHTML = prefix + text.slice(0, i) + '<span class="caret"></span>'; } el.innerHTML = prefix + text; }
+function setState(m, a, b){ mode = m; $("#state").innerHTML = `${a}<small>${b}</small>`;
+  $("#state").style.color = m === "think" ? "var(--mg)" : "var(--cy)"; }
+
+function reset(){ run++; clearInterval(alertT); for (const k in override) delete override[k]; ["#boot", "#brief", "#alert", "#mission", "#night"].forEach((s) => $(s).classList.remove("show"));
+  $("#show").classList.remove("show"); $("#main").style.opacity = 1; $("#main").style.filter = "none";
+  document.querySelectorAll(".bc").forEach((b) => b.classList.remove("in"));
+  holoOn = false; setState("idle", "EM ESPERA", "diga “Ei, Titã”"); $("#you").innerHTML = ""; $("#ai").innerHTML = "";
+  if ("speechSynthesis" in window) speechSynthesis.cancel(); clearInterval(missionT); }
+
+async function scVoice(id, cmd = "liga a luz do quarto", reply = "Pronto. Luz do quarto ligada.", act = () => setDev("luz", true), tail = 2200){
+  setState("listen", "OUVINDO", "fale normalmente"); beep(660); beep(990, 0.12);
+  await type($("#you"), "<b>VOCÊ ›</b>", `Ei, Titã, ${cmd}`, id, 55);
+  await wait(500, id); setState("think", "PROCESSANDO", "entendendo o pedido"); beep(520, 0.05, "square", 0.02);
+  await wait(900, id); act(); beep(1240, 0.1);
+  setState("speak", "RESPONDENDO", "voz do TITAN"); speak(reply);
+  await type($("#ai"), "<b>TITAN ›</b>", reply, id, 34); await wait(tail, id); setState(holoOn ? "holo" : "idle", holoOn ? "QUARTO · HOLOGRAMA" : "EM ESPERA", holoOn ? "planta ao vivo dos aparelhos" : "diga “Ei, Titã”");
+}
+const BOOT = ["TITAN NÚCLEO v5 ............................ ", "CARREGANDO MEMÓRIA (42 lembranças) ......... ", "SINCRONIZANDO CASA (5 aparelhos) ........... ",
+  "LINK COM A IA ............................. ", "VOZ E OUVIDO .............................. "];
+async function scMorning(id){
+  DEVS.forEach((d) => { d.on = false; }); drawDevs();
+  const bt = $("#boot"); bt.innerHTML = ""; bt.classList.add("show"); await wait(700, id);
+  for (const l of BOOT) { const d = document.createElement("div"); d.className = "ln"; d.innerHTML = l + '<span class="ok">OK</span>'; bt.appendChild(d);
+    await wait(30, id); d.classList.add("in"); beep(1400, 0.03, "square", 0.015); await wait(380, id); }
+  const big = document.createElement("div"); big.className = "ln big"; big.textContent = "TITAN"; bt.appendChild(big); await wait(30, id); big.classList.add("in");
+  beep(440, 0.4, "sine", 0.06); await wait(1400, id); bt.classList.remove("show");
+  const h = new Date().getHours(); $("#bh").textContent = (h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite") + ", Luiz.";
+  $("#brief").classList.add("show"); speak("Bom dia, Luiz. Hoje faz 28 graus, com chuva fraca depois das seis. Você tem três compromissos. Ativando a cena bom dia.");
+  const cards = document.querySelectorAll(".bc");
+  for (let i = 0; i < cards.length; i++) { await wait(900, id); cards[i].classList.add("in"); beep(880 + i*220, 0.08); }
+  for (const [d, ms] of [["luz", 500], ["ar", 500], ["note", 500], ["vent", 500]]) { await wait(ms, id); setDev(d, true); }
+  await wait(3000, id); $("#brief").classList.remove("show"); cards.forEach((b) => b.classList.remove("in"));
+  setState("speak", "RESPONDENDO", "voz do TITAN");
+  await type($("#ai"), "<b>TITAN ›</b>", "Tudo pronto. Bora fazer o dia render.", id, 34); await wait(1800, id); setState("idle", "EM ESPERA", "diga “Ei, Titã”");
+}
+// Só coisa grave: o que, se continuar, derruba o TITAN.
+const ALERTS = [
+  { key: "temp", lvl: "crit", t: "SUPERAQUECIMENTO DO NOTEBOOK", unit: "°C", from: 72, to: 96, lim: 85, max: 105,
+    s: "Processador acima do limite seguro há 2 minutos. Se continuar, o notebook desliga sozinho e o TITAN cai.",
+    a: "Reduziu a carga e pausou as tarefas pesadas. Desobstrua a saída de ar ou use uma base com ventoinha.",
+    cd: ["DESLIGAMENTO DE PROTEÇÃO EM", 60], say: "Alerta crítico. Superaquecimento do notebook. Noventa e seis graus. Desobstrua a saída de ar." },
+  { key: "bat", lvl: "crit", t: "BATERIA / CARREGADOR AQUECENDO", unit: "°C", from: 38, to: 58, lim: 48, max: 70,
+    s: "A bateria está esquentando rápido com o carregador ligado. A tomada do carregador está puxando 92 W (o normal é 45 W).",
+    a: "Avisou no celular. Se não baixar, desliga a tomada inteligente do carregador (o notebook continua na bateria).",
+    cd: ["TOMADA DO CARREGADOR DESLIGA EM", 30], say: "Alerta crítico. Bateria e carregador aquecendo. Vou desligar a tomada do carregador em trinta segundos." },
+  { key: "cpu", lvl: "crit", t: "SOBRECARGA DO PROCESSADOR", unit: "%", from: 55, to: 100, lim: 90, max: 100,
+    s: "Processador travado em 100% há 5 minutos. O TITAN está demorando para responder e pode congelar.",
+    a: "Pausou a escuta contínua e as animações. Encontrou o culpado: o navegador com 23 abas abertas.",
+    cd: ["MODO ECONOMIA", 0], say: "Alerta crítico. Processador em cem por cento. Ativei o modo economia." },
+  { key: "gasto", lvl: "warn", t: "LIMITE DE GASTO DA IA", unit: "%", from: 70, to: 96, lim: 90, max: 100, extra: "R$ 28,80 de R$ 30,00",
+    s: "96% do orçamento do mês já foi usado e ainda faltam 12 dias. Quando chegar em 100%, o núcleo de IA pausa.",
+    a: "Passou a dar respostas curtas. Comandos da casa e lembretes continuam funcionando (não gastam IA).",
+    cd: ["IA PAUSA AUTOMATICAMENTE EM R$ 30,00", 0], say: "Atenção. Noventa e seis por cento do limite de gasto da IA." },
+];
+let alertIdx = 0, alertT = null;
+function chart(al, pts){ const c = $("#aC").getContext("2d"), W = 700, H = 300, pad = 46;
+  const Y = (v) => H - pad/2 - (v - (al.unit === "%" ? 0 : 20))/(al.max - (al.unit === "%" ? 0 : 20))*(H - pad);
+  const red = al.lvl === "warn" ? "255,181,71" : "255,79,106";
+  c.clearRect(0, 0, W, H); c.font = "14px monospace"; c.fillStyle = "#7fa6b6"; c.strokeStyle = "rgba(255,255,255,.07)";
+  for (let k = 0; k < 5; k++) { const y = 20 + k*(H - 40)/4; c.beginPath(); c.moveTo(pad, y); c.lineTo(W - 10, y); c.stroke(); }
+  // zona de perigo
+  c.fillStyle = `rgba(${red},.12)`; c.fillRect(pad, 0, W - pad - 10, Y(al.lim));
+  c.setLineDash([8, 8]); c.strokeStyle = `rgb(${red})`; c.lineWidth = 2; c.beginPath(); c.moveTo(pad, Y(al.lim)); c.lineTo(W - 10, Y(al.lim)); c.stroke(); c.setLineDash([]);
+  c.fillStyle = `rgb(${red})`; c.fillText(`LIMITE ${al.lim}${al.unit}`, pad + 10, Y(al.lim) - 8);
+  c.fillStyle = "#7fa6b6"; c.fillText("ÚLTIMOS 10 MIN", pad, H - 6);
+  const X = (i) => pad + i*(W - pad - 10)/59;
+  const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, `rgba(${red},.45)`); g.addColorStop(1, `rgba(${red},0)`);
+  c.beginPath(); pts.forEach((v, i) => c.lineTo(X(i), Y(v))); c.lineTo(X(pts.length - 1), H); c.lineTo(X(0), H); c.fillStyle = g; c.fill();
+  c.beginPath(); pts.forEach((v, i) => c.lineTo(X(i), Y(v))); c.strokeStyle = "#fff"; c.lineWidth = 2.5; c.shadowColor = `rgb(${red})`; c.shadowBlur = 12; c.stroke(); c.shadowBlur = 0;
+  const lx = X(pts.length - 1), ly = Y(pts[pts.length - 1]); c.fillStyle = "#fff"; c.beginPath(); c.arc(lx, ly, 6, 0, 6.28); c.fill(); }
+async function scAlert(id){
+  const al = ALERTS[alertIdx++ % ALERTS.length], ov = $("#alert");
+  ov.classList.toggle("warn", al.lvl === "warn");
+  $("#aK").textContent = al.lvl === "warn" ? "⚠ ATENÇÃO MÁXIMA ⚠" : "⚠ ALERTA CRÍTICO ⚠";
+  $("#aT").textContent = al.t; $("#aS").textContent = al.s; $("#aA").textContent = al.a;
+  // histórico: estava normal e foi subindo
+  const pts = Array.from({ length: 60 }, (_, i) => { const k = Math.max(0, (i - 25)/34);
+    return al.from + (al.to - al.from)*k*k + (Math.random() - .5)*(al.max - al.from)*0.03; }).map((v) => Math.min(al.max, v));
+  let shown = 0; const total = 60;
+  ov.classList.add("show"); speak(al.say);
+  let left = al.cd[1];
+  const showCd = () => { $("#aCd").innerHTML = al.cd[1] ? `${al.cd[0]} <span>00:${p2(left)}</span>` : `<span>${al.cd[0]}</span>`; };
+  showCd();
+  clearInterval(alertT);
+  alertT = setInterval(() => { if (shown < total) shown += 3; const vis = pts.slice(0, shown); if (vis.length > 1) chart(al, vis);
+    const cur = vis.length ? vis[vis.length - 1] : al.from;
+    $("#aV").innerHTML = al.extra && shown >= total ? `${Math.round(cur)}<small>% · ${al.extra}</small>` : `${Math.round(cur)}<small>${al.unit}</small>`;
+    override[al.key] = Math.round(cur); }, 90);
+  for (let i = 0; i < 16; i++) { if (i%2 === 0) beep(i%4 ? 620 : 880, 0.2, "sawtooth", 0.03); await wait(450, id);
+    if (al.cd[1] && i%2 === 1) { left = Math.max(0, left - 1); showCd(); } }
+  clearInterval(alertT); ov.classList.remove("show"); await wait(600, id);
+  setState("speak", "RESPONDENDO", "voz do TITAN");
+  await type($("#ai"), "<b>TITAN ›</b>", al.key === "gasto" ? "Vou economizar até o mês virar." : "Monitorando. Te aviso quando normalizar.", id, 30);
+  await wait(2500, id); delete override[al.key]; setState("idle", "EM ESPERA", "diga “Ei, Titã”");
+}
+async function scHolo(id){ holoOn = true; setState("holo", "QUARTO · HOLOGRAMA", "planta ao vivo dos aparelhos"); await wait(2500, id);
+  await scVoice(id, "liga a TV e o ar", "TV e ar-condicionado ligados.", () => { setDev("tv", true); setTimeout(() => setDev("ar", true), 500); }, 1500);
+  await wait(4000, id); holoOn = false; setState("idle", "EM ESPERA", "diga “Ei, Titã”"); }
+async function scShow(id){
+  const vals = [30, 52, 75, 98, 126, 152, 186], bars = $("#bars"), xl = $("#xl");
+  bars.innerHTML = ""; xl.innerHTML = ""; $("#trend").setAttribute("points", "");
+  await scVoice(id, "mostra minha meta dos bolos na TV", "Mostrando na tela.", () => {}, 200);
+  $("#show").classList.add("show"); await wait(700, id);
+  const pts = [];
+  for (let i = 0; i < vals.length; i++) { const x = 90 + i*95, h = vals[i]/300*300, y = 340 - h; pts.push(`${x + 25},${y}`);
+    bars.insertAdjacentHTML("beforeend", `<rect x="${x}" y="${y}" width="50" height="${h}" fill="rgba(62,232,255,.25)" stroke="#3ee8ff"/>
+      <text x="${x + 25}" y="${y - 10}" text-anchor="middle" fill="#dff7ff" font-family="monospace" font-size="16">R$${vals[i]}</text>`);
+    xl.insertAdjacentHTML("beforeend", `<text x="${x + 25}" y="370" text-anchor="middle">SEM ${i + 1}</text>`);
+    $("#trend").setAttribute("points", pts.join(" ")); beep(700 + i*80, 0.05); await wait(260, id); }
+  speak("Você já juntou cento e oitenta e seis reais. Nesse ritmo, chega nos trezentos em três semanas.");
+  await type($("#ai"), "<b>TITAN ›</b>", "Já são R$ 186. Nesse ritmo, R$ 300 em 3 semanas.", id, 30);
+  await wait(4500, id); $("#show").classList.remove("show"); }
+let missionT = null;
+async function scMission(id){ $("#mission").classList.add("show"); speak("Modo missão ativado. Vinte e cinco minutos de foco. Vou segurar as distrações.");
+  const ring = $("#mRing"), C = 2*Math.PI*290; ring.style.strokeDasharray = C; let left = 25*60;
+  const tick = () => { $("#mT").textContent = `${p2(Math.floor(left/60))}:${p2(left%60)}`; ring.style.strokeDashoffset = C*(1 - left/1500); };
+  tick(); missionT = setInterval(() => { left = Math.max(0, left - 37); tick(); }, 200);  // acelerado para a simulação
+  await wait(7000, id); clearInterval(missionT); $("#mission").classList.remove("show"); }
+async function scNight(id){ $("#night").classList.add("show"); await wait(6500, id); $("#night").classList.remove("show"); }
+
+// estrelas
+(() => { const c = $("#stars").getContext("2d"); const st = Array.from({ length: 260 }, () => [Math.random()*1920, Math.random()*1080, Math.random()]);
+  (function tw(t){ if ($("#night").classList.contains("show")) { c.clearRect(0, 0, 1920, 1080);
+    for (const [x, y, z] of st) { c.fillStyle = `rgba(160,220,255,${0.15 + 0.5*z*(0.6 + 0.4*Math.sin(t/900 + x))})`; c.fillRect(x, y, z*2 + 0.5, z*2 + 0.5); } }
+    requestAnimationFrame(tw); })(0); })();
+
+async function demo(id){ const seq = [scVoice, scAlert, scHolo, scAlert, scShow, scMission, scAlert, scNight, scMorning, scAlert];
+  while (id === run) for (const f of seq) { await f(id); await wait(1200, id); $("#you").innerHTML = ""; $("#ai").innerHTML = ""; } }
+
+const SC = { "1": scVoice, "2": scMorning, "3": scAlert, "4": scHolo, "5": scShow, "6": scMission, "7": scNight, d: demo };
+function go(k){
+  if (k === "v") { voiceOn = !voiceOn; $("#bVoice").textContent = voiceOn ? "🔊 Voz: ligada" : "🔈 Voz: desligada"; $("#bVoice").classList.toggle("on", voiceOn); return; }
+  if (k === "f") { (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {}); return; }
+  if (k === "Escape") { reset(); return; }
+  if (!SC[k]) return;
+  if (k === "1") setDev("luz", false);
+  reset(); const id = run; SC[k](id).catch(() => {});
+}
+document.querySelectorAll("#ctrl button").forEach((b) => b.addEventListener("click", () => go(b.dataset.k)));
+addEventListener("keydown", (e) => go(e.key));
+</script>
+</body>
+</html>
