@@ -129,3 +129,6 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
   mensagens; receptor de "reiniciou/atualizou" protegido; APKs titan 2.0.1 / casa 1.5.1 / central 1.5.1 · (`apps/android/app/**`)
 - 2026-11-16 · CENTRAL · Realme reiniciando a tela: trava do loop (4 aberturas em 90 s → tela de problema com
   diário do que aconteceu, "Abrir no Chrome", "Atualizar WebView"), tela de erro protegida; APKs 2.0.2 / 1.5.2 · (`apps/android/app/**`)
+- 2026-11-16 · CENTRAL · Realme: app morre "duro" ao carregar a tela (tela preta, sem aviso). Diário gravado na hora
+  (commit), conta mortes ao carregar; 2 seguidas → modo seguro (WebView sem placa de vídeo + leve); 3 → tela de
+  problema. APKs 2.0.3 / 1.5.3 · (`apps/android/app/**`)

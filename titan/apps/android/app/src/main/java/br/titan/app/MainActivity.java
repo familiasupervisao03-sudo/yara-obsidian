@@ -71,6 +71,20 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         diag("app abriu (" + (state == null ? "novo" : "recriado") + ")");
+        // O app morreu da última vez enquanto carregava a tela? (morte "dura", sem aviso de erro)
+        android.content.SharedPreferences dp = getSharedPreferences(DIAG, MODE_PRIVATE);
+        int deaths = "carregando".equals(dp.getString("estado", "")) ? dp.getInt("mortes", 0) + 1 : 0;
+        dp.edit().putInt("mortes", deaths).putString("estado", "abriu").commit();
+        if (deaths > 0) diag("o app morreu carregando a tela (" + deaths + "x seguidas)");
+        if (deaths >= 2 && !safeMode()) {
+            dp.edit().putBoolean("seguro", true).commit();
+            diag("modo seguro ligado: tela sem placa de vídeo e modo leve");
+        }
+        if (deaths >= 3) {
+            showTrouble("O app fechou " + deaths + " vezes seguidas enquanto carregava a tela, mesmo no modo seguro. "
+                    + "É um problema da peça de tela do Android (WebView) neste celular.");
+            return;
+        }
         server = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_SERVER, null);
         alt = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_ALT, null);
         // Casa e Central (tablet/TV): tela sempre acesa e em tela cheia.
@@ -105,7 +119,7 @@ public class MainActivity extends Activity {
             StringBuilder b = new StringBuilder();
             for (int i = Math.max(0, old.length - 24); i < old.length; i++) if (!old[i].isEmpty()) b.append(old[i]).append('\n');
             b.append(time).append(' ').append(what.length() > 140 ? what.substring(0, 140) : what);
-            p.edit().putString("log", b.toString()).apply();
+            p.edit().putString("log", b.toString()).commit();   // commit: grava na hora (o app pode morrer logo depois)
         } catch (Throwable ignored) { /* diagnóstico nunca atrapalha */ }
     }
 
@@ -122,8 +136,17 @@ public class MainActivity extends Activity {
             } catch (NumberFormatException ignored) { }
         }
         keep.append(now);
-        p.edit().putString("opens", keep.toString()).apply();
+        p.edit().putString("opens", keep.toString()).commit();
         return recent >= 3;
+    }
+
+    /** Anota em que ponto a tela está (gravado na hora): se o app morrer, a próxima abertura sabe onde foi. */
+    private void mark(String state) {
+        getSharedPreferences(DIAG, MODE_PRIVATE).edit().putString("estado", state).commit();
+    }
+
+    private boolean safeMode() {
+        return getSharedPreferences(DIAG, MODE_PRIVATE).getBoolean("seguro", false);
     }
 
     private void showRenderTrouble(boolean crashed) {
@@ -173,7 +196,8 @@ public class MainActivity extends Activity {
         retry.setText("Tentar de novo");
         retry.setOnClickListener(v -> {
             lastRenderGone = 0;
-            getSharedPreferences(DIAG, MODE_PRIVATE).edit().remove("opens").apply();
+            getSharedPreferences(DIAG, MODE_PRIVATE).edit().remove("opens").putInt("mortes", 0)
+                    .putBoolean("seguro", true).commit();
             if (server == null) showSetup(null); else openTitan(BuildConfig.HOME + "?leve=1");
         });
         Button chrome = new Button(this);
@@ -590,6 +614,10 @@ public class MainActivity extends Activity {
         }
         web = new WebView(this);
         web.setBackgroundColor(Color.parseColor("#03070c"));
+        if (safeMode()) {
+            web.setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null);   // sem placa de vídeo: mais estável
+            if (!path.contains("leve=1")) path = path + (path.contains("?") ? "&" : "?") + "leve=1";
+        }
         WebSettings ws = web.getSettings();
         ws.setJavaScriptEnabled(true);
         ws.setDomStorageEnabled(true);
@@ -682,7 +710,8 @@ public class MainActivity extends Activity {
 
     /** Carrega mostrando "Conectando…"; se nada chegar em 12 s, tenta a reserva ou avisa. */
     private void load(String url) {
-        diag("carregar " + url);
+        diag("carregar " + url + (safeMode() ? " [modo seguro]" : ""));
+        mark("carregando");
         loaded = false;
         errorSeen = false;
         if (connecting != null) {
@@ -700,6 +729,8 @@ public class MainActivity extends Activity {
         if (errorSeen || url == null || !sameServer(Uri.parse(url))) return;
         loaded = true;
         diag("página chegou");
+        // chegou e ficou de pé alguns segundos: não conta como morte ao carregar
+        ui.postDelayed(() -> { if (loaded) { mark("ok"); getSharedPreferences(DIAG, MODE_PRIVATE).edit().putInt("mortes", 0).commit(); } }, 8000);
         triedAlt = false; // carregou: na próxima falha pode tentar o outro de novo
         sslFail = false;
         ui.removeCallbacks(timeout);
@@ -839,6 +870,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         diag("app fechou" + (isFinishing() ? "" : " (pelo sistema)"));
+        mark("fechou");
         setCallMode(false);   // nunca deixa o modo ligação / sensor presos
         ui.removeCallbacks(timeout);
         if (errorView != null) errorView.destroy();
