@@ -70,6 +70,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        diag("app abriu (" + (state == null ? "novo" : "recriado") + ")");
         server = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_SERVER, null);
         alt = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_ALT, null);
         // Casa e Central (tablet/TV): tela sempre acesa e em tela cheia.
@@ -92,7 +93,50 @@ public class MainActivity extends Activity {
     private long lastRenderGone = 0;
 
     /** A tela do TITAN travou 2 vezes: em vez de ficar reiniciando, explica e oferece o conserto. */
+    // --- diagnóstico: o que aconteceu (fica guardado, aparece na tela de problema) ----------
+    private static final String DIAG = "titan-diag";
+
+    /** Anota um acontecimento (últimos 25), para a tela de problema mostrar o que houve. */
+    private void diag(String what) {
+        try {
+            android.content.SharedPreferences p = getSharedPreferences(DIAG, MODE_PRIVATE);
+            String time = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(new java.util.Date());
+            String[] old = p.getString("log", "").split("\n");
+            StringBuilder b = new StringBuilder();
+            for (int i = Math.max(0, old.length - 24); i < old.length; i++) if (!old[i].isEmpty()) b.append(old[i]).append('\n');
+            b.append(time).append(' ').append(what.length() > 140 ? what.substring(0, 140) : what);
+            p.edit().putString("log", b.toString()).apply();
+        } catch (Throwable ignored) { /* diagnóstico nunca atrapalha */ }
+    }
+
+    /** Abriu a tela do TITAN 4 vezes em 90 s (mesmo com o app reiniciando)? Então está em loop. */
+    private boolean looping() {
+        android.content.SharedPreferences p = getSharedPreferences(DIAG, MODE_PRIVATE);
+        long now = System.currentTimeMillis();
+        StringBuilder keep = new StringBuilder();
+        int recent = 0;
+        for (String t : p.getString("opens", "").split(",")) {
+            try {
+                long v = Long.parseLong(t.trim());
+                if (now - v < 90_000) { recent++; keep.append(v).append(','); }
+            } catch (NumberFormatException ignored) { }
+        }
+        keep.append(now);
+        p.edit().putString("opens", keep.toString()).apply();
+        return recent >= 3;
+    }
+
     private void showRenderTrouble(boolean crashed) {
+        showTrouble("A tela do TITAN travou neste celular (" + (crashed ? "travou" : "fechada pelo sistema por memória") + ").");
+    }
+
+    /** Em vez de ficar reiniciando: explica, mostra o que aconteceu e oferece saídas. */
+    private void showTrouble(String headline) {
+        diag("tela de problema: " + headline);
+        if (web != null) {
+            try { web.destroy(); } catch (Throwable ignored) { }
+            web = null;
+        }
         String wv = "?";
         try {
             android.content.pm.PackageInfo pi = Build.VERSION.SDK_INT >= 26 ? WebView.getCurrentWebViewPackage() : null;
@@ -105,13 +149,14 @@ public class MainActivity extends Activity {
         TextView t = new TextView(this);
         t.setTextColor(Color.parseColor("#dff6ff"));
         t.setTextSize(17);
-        t.setText("A tela do TITAN travou neste celular.\n\n"
-                + "Quase sempre é o \"Android System WebView\" desatualizado (comum em celular novo).\n\n"
-                + "1. Toque em ATUALIZAR WEBVIEW e atualize na Play Store.\n"
-                + "2. Atualize também o Google Chrome.\n"
+        t.setText(headline + "\n\n"
+                + "1. Toque em ABRIR NO CHROME: se abrir lá, o notebook está bem e o problema é a tela do app.\n"
+                + "2. Toque em ATUALIZAR WEBVIEW e atualize na Play Store (atualize o Chrome também).\n"
                 + "3. Volte e toque em TENTAR DE NOVO.\n\n"
-                + "Para o Claude: " + (crashed ? "travou (crash)" : "fechado pelo sistema (memória)")
-                + " · WebView " + wv + " · Android " + Build.VERSION.RELEASE + " · " + Build.MODEL);
+                + "Para o Claude (tire print): app " + BuildConfig.VERSION_NAME + " · WebView " + wv
+                + " · Android " + Build.VERSION.RELEASE + " · " + Build.MODEL + "\n"
+                + getSharedPreferences(DIAG, MODE_PRIVATE).getString("log", ""));
+        t.setTextSize(14);
         t.setTextIsSelectable(true);
         box.addView(t);
         Button upd = new Button(this);
@@ -126,13 +171,29 @@ public class MainActivity extends Activity {
         });
         Button retry = new Button(this);
         retry.setText("Tentar de novo");
-        retry.setOnClickListener(v -> { lastRenderGone = 0; openTitan(BuildConfig.HOME + "?leve=1"); });
+        retry.setOnClickListener(v -> {
+            lastRenderGone = 0;
+            getSharedPreferences(DIAG, MODE_PRIVATE).edit().remove("opens").apply();
+            if (server == null) showSetup(null); else openTitan(BuildConfig.HOME + "?leve=1");
+        });
+        Button chrome = new Button(this);
+        chrome.setText("Abrir no Chrome");
+        chrome.setOnClickListener(v -> {
+            if (server != null) {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(server + BuildConfig.HOME))); }
+                catch (Exception ignored) { }
+            }
+        });
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = 40;
+        box.addView(chrome, lp);
         box.addView(upd, lp);
         box.addView(retry, lp);
-        setContentView(box);
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.setBackgroundColor(Color.parseColor("#03070c"));
+        sv.addView(box);
+        setContentView(sv);
     }
 
     private void safely(String what, Runnable r) {
@@ -522,6 +583,11 @@ public class MainActivity extends Activity {
     }
 
     private void openTitan(String path) {
+        diag("abrir " + path);
+        if (looping()) {
+            showTrouble("O TITAN ficou reiniciando a tela várias vezes seguidas, então parei para não ficar em loop.");
+            return;
+        }
         web = new WebView(this);
         web.setBackgroundColor(Color.parseColor("#03070c"));
         WebSettings ws = web.getSettings();
@@ -551,6 +617,7 @@ public class MainActivity extends Activity {
             @Override
             public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
                 final boolean crashed = Build.VERSION.SDK_INT < 26 || detail.didCrash();
+                diag("tela interna caiu: " + (crashed ? "travou" : "fechada por memória"));
                 ui.post(() -> {
                     android.view.ViewParent parent = view.getParent();
                     if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(view);
@@ -615,6 +682,7 @@ public class MainActivity extends Activity {
 
     /** Carrega mostrando "Conectando…"; se nada chegar em 12 s, tenta a reserva ou avisa. */
     private void load(String url) {
+        diag("carregar " + url);
         loaded = false;
         errorSeen = false;
         if (connecting != null) {
@@ -631,6 +699,7 @@ public class MainActivity extends Activity {
         // A página de erro do Android também "termina": só conta a do TITAN de verdade.
         if (errorSeen || url == null || !sameServer(Uri.parse(url))) return;
         loaded = true;
+        diag("página chegou");
         triedAlt = false; // carregou: na próxima falha pode tentar o outro de novo
         sslFail = false;
         ui.removeCallbacks(timeout);
@@ -639,6 +708,7 @@ public class MainActivity extends Activity {
     }
 
     private void connectionFailed() {
+        diag("falha de conexão" + (sslFail ? " (cadeado)" : "") + (loaded ? " (ignorada: já carregou)" : ""));
         ui.removeCallbacks(timeout);
         if (web == null || loaded) return;
         web.stopLoading();
@@ -667,6 +737,19 @@ public class MainActivity extends Activity {
             es.setAllowFileAccess(false);
             es.setAllowContentAccess(false);
             errorView.addJavascriptInterface(new ErrorBridge(), "TitanErro");
+            errorView.setWebViewClient(new WebViewClient() {
+                @Override
+                public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail d) {
+                    diag("tela de erro caiu");
+                    ui.post(() -> {
+                        android.view.ViewParent parent = view.getParent();
+                        if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(view);
+                        view.destroy();
+                        if (errorView == view) errorView = null;
+                    });
+                    return true;   // nunca derruba o app inteiro
+                }
+            });
             frame.addView(errorView, new android.widget.FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
@@ -755,6 +838,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        diag("app fechou" + (isFinishing() ? "" : " (pelo sistema)"));
         setCallMode(false);   // nunca deixa o modo ligação / sensor presos
         ui.removeCallbacks(timeout);
         if (errorView != null) errorView.destroy();

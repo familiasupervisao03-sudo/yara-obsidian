@@ -127,3 +127,5 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
   ainda não publicada) · (`app.py`, `brain/service.py`, `db/models.py`)
 - 2026-11-16 · CENTRAL · Android 16 (Realme RMX3930) fechava: faltava ACCESS_NETWORK_STATE para o agendamento de
   mensagens; receptor de "reiniciou/atualizou" protegido; APKs titan 2.0.1 / casa 1.5.1 / central 1.5.1 · (`apps/android/app/**`)
+- 2026-11-16 · CENTRAL · Realme reiniciando a tela: trava do loop (4 aberturas em 90 s → tela de problema com
+  diário do que aconteceu, "Abrir no Chrome", "Atualizar WebView"), tela de erro protegida; APKs 2.0.2 / 1.5.2 · (`apps/android/app/**`)
