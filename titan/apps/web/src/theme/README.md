@@ -3,7 +3,8 @@
 Todo o visual sai de **variáveis** (cores, fontes, brilho, formato dos cantos,
 fundo). Os componentes e o `styles.css` só usam essas variáveis.
 
-- `futurista.css` — padrão: HUD neon, vidro, cantos cortados, grade hexagonal.
+- `vidro.css` — padrão (interface nova): orbe de vidro, cartões translúcidos; azul (`vidro`) e roxo (`vidro-roxo`).
+- `futurista.css` — HUD neon, cantos cortados, grade hexagonal.
 - `classico.css` — o visual grafite anterior (mais sóbrio).
 - `themes.ts` — lista de temas mostrada em **Sistema → Aparência**, o "modo leve"
   e a aplicação no `<html data-theme="…">`.

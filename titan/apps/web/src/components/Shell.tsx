@@ -49,14 +49,16 @@ function readLaunch(): { view?: View; intent?: ChatIntent; shared?: Shared; conv
   return {};
 }
 
-const TABS: { id: View; label: string; icon: IconName }[] = [
+// Barra de baixo da interface nova: Início · Conversa · orbe (Falar) · Notícias · Você.
+// "Você" junta Memória e Sistema (a Memória abre por lá e pelo Início).
+const TABS: { id: View; label: string; icon: IconName; orb?: boolean }[] = [
   { id: "home", label: "Início", icon: "home" },
-  { id: "chat", label: "Conversas", icon: "chat" },
-  { id: "voice", label: "Voz", icon: "mic" },
+  { id: "chat", label: "Conversa", icon: "chat" },
+  { id: "voice", label: "Falar", icon: "mic", orb: true },
   { id: "news", label: "Notícias", icon: "news" },
-  { id: "memory", label: "Memória", icon: "brain" },
-  { id: "system", label: "Sistema", icon: "system" },
+  { id: "system", label: "Você", icon: "user" },
 ];
+const TAB_OF: Partial<Record<View, View>> = { memory: "system", tasks: "system" };
 
 function loadView(): View {
   try {
@@ -222,9 +224,10 @@ export function Shell({ session, onLogout, onExpired }: {
 
       <nav className="tabs" aria-label="Seções">
         {TABS.map((t) => (
-          <button key={t.id} className={`tab ${view === t.id ? "active" : ""}`} onClick={() => go(t.id)}
-                  aria-current={view === t.id ? "page" : undefined}>
+          <button key={t.id} className={`tab ${t.orb ? "tab-orb" : ""} ${(TAB_OF[view] ?? view) === t.id ? "active" : ""}`}
+                  onClick={() => go(t.id)} aria-current={(TAB_OF[view] ?? view) === t.id ? "page" : undefined}>
             <span className="tab-icon"><Icon name={t.icon} size={20} /></span>
+            {t.orb && <span className="tab-orb-ball" aria-hidden="true"><Icon name="mic" size={22} /></span>}
             <span>{t.label}</span>
             {t.id === "system" && pendingApprovals > 0 && <span className="pill">{pendingApprovals}</span>}
           </button>
@@ -254,7 +257,8 @@ export function Shell({ session, onLogout, onExpired }: {
         )}
         {view === "tasks" && <TasksView onError={handleError} onChanged={refresh} />}
         {view === "system" && <SystemView status={status} settings={settings} onRefresh={refresh}
-                                          pendingApprovals={pendingApprovals} onTasks={() => go("tasks")} />}
+                                          pendingApprovals={pendingApprovals} onTasks={() => go("tasks")}
+                                          onMemory={() => go("memory")} />}
       </main>
       {shared && <ShareView shared={shared} webEnabled={settings?.config.web_enabled === true}
                             onAction={openChat} onClose={() => setShared(null)} />}

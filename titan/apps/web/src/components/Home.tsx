@@ -48,6 +48,12 @@ export function Home({ username, status, offline, pendingApprovals, onGo, onChat
 
   return (
     <section className="home" aria-labelledby="home-title">
+      <div className="home-orb" aria-hidden="true">
+        <div className="glass-orb">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#e8f1ff" strokeWidth="1.6"><path d="M12 2.5 20.5 7.4v9.2L12 21.5 3.5 16.6V7.4z" /><path d="M8 8.5h8M12 8.5v8" /></svg>
+        </div>
+        <span className={`online-pill ${offline ? "off" : ""}`}><i />{offline ? "Sem conexão com o notebook" : "TITAN está online"}</span>
+      </div>
       <header className="home-head">
         <p className="eyebrow">Início · {new Date().toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" })}</p>
         <h1 id="home-title" className="home-title">{data?.greeting ?? "Olá"}, {displayName(username)}.</h1>

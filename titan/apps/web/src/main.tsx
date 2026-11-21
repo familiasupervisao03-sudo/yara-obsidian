@@ -5,6 +5,7 @@ import { CrashScreen, ErrorBoundary } from "./components/ErrorBoundary";
 import { applyAppearance, loadAppearance } from "./theme/themes";
 import "./theme/futurista.css";
 import "./theme/classico.css";
+import "./theme/vidro.css";
 import "./styles.css";
 
 applyAppearance(loadAppearance()); // antes de desenhar, para não piscar com outro tema

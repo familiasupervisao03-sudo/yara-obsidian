@@ -10,17 +10,25 @@ const STATE_LABEL: Record<string, string> = {
   online: "ONLINE", offline: "OFFLINE", disabled: "DESATIVADO", unavailable: "INDISPONÍVEL", planned: "PLANEJADO",
 };
 
-export function SystemView({ status, settings, onRefresh, pendingApprovals = 0, onTasks }: {
+export function SystemView({ status, settings, onRefresh, pendingApprovals = 0, onTasks, onMemory }: {
   status: SystemStatus | null;
   settings: SettingsView | null;
   onRefresh: () => void;
   pendingApprovals?: number;
   onTasks?: () => void;
+  onMemory?: () => void;
 }) {
   if (!status) return <p className="muted">Carregando…</p>;
   const c = settings?.config ?? {};
   return (
     <section className="system-view">
+      {onMemory && (
+        <div className="you-links">
+          <button className="ghost" onClick={onMemory}>🧠 Memória<span className="muted small">o que eu lembro</span></button>
+          {onTasks && <button className="ghost" onClick={onTasks}>✅ Tarefas e aprovações
+            <span className="muted small">{pendingApprovals > 0 ? `${pendingApprovals} esperando você` : "laboratório"}</span></button>}
+        </div>
+      )}
       <div className="row between">
         <h2 className="section-title">Sistema</h2>
         <button className="ghost small" onClick={onRefresh}>Atualizar</button>

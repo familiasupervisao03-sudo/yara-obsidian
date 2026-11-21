@@ -137,3 +137,7 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
   Acordar, Lousa Limpa; sempre perguntam antes). Migração 0010. Usa o TITAN Casa só por funções dele (sem mexer em
   `titan/casa/**`). Android 2.0.5 / 1.5.5 no código, **APK não gerado** (chave de assinatura perdida no
   reinício do servidor de testes) · (`titan/jarvis/**`, `routers/jarvis.py`, `apps/android/app/**`)
+- 2026-11-21 · TITAN · Interface nova aplicada: tema Vidro (azul padrão e roxo, em Sistema → Aparência; quem estava
+  no Futurista passa para o Vidro uma vez), orbe de vidro no Início, barra de baixo com 5 botões (orbe "Falar" no meio;
+  "Você" = Memória + Sistema), modo leve sem desfoque/animação. Casa e Central continuam com o visual delas ·
+  (`apps/web/src/theme/vidro.css`, `themes.ts`, `Shell.tsx`)
