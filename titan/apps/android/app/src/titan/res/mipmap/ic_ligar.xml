@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 7 (sem ícone adaptável): círculo verde com o telefone. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape android:shape="oval"><solid android:color="@color/ligar_verde" /></shape></item>
+    <item android:drawable="@drawable/ic_ligar_fg" />
+</layer-list>

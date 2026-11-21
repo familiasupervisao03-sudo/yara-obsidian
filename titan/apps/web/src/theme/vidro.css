@@ -1,0 +1,126 @@
+/* Tema VIDRO (a interface nova, padrão): orbe de vidro, cartões translúcidos arredondados,
+   fundo azul profundo com brilhos suaves. Duas cores: azul (data-theme="vidro") e roxo
+   (data-theme="vidro-roxo"). No modo leve: sem vidro embaçado, sem brilho e sem animação.
+   Contraste (WCAG) sobre --bg: texto ~16:1, secundário ~6.5:1, destaque ~12:1. */
+:root[data-theme="vidro"], :root[data-theme="vidro-roxo"] {
+  --bg: #060b14; --surface: #0c1422; --surface-2: #111b2c; --surface-3: #172338;
+  --line: rgba(255, 255, 255, 0.10); --line-strong: rgba(255, 255, 255, 0.22); --line-hover: rgba(255, 255, 255, 0.32);
+  --text: #e8f1ff; --muted: #8fa2bf;
+  --accent: #3ee8ff; --accent-rgb: 62, 232, 255; --accent-strong: #8ff3ff; --accent-ink: #03111c;
+  --accent-2: #9a6bff; --accent-3: #4f8dff;
+  --user: #4f8dff; --user-rgb: 79, 141, 255; --user-bg: rgba(79, 141, 255, 0.16); --user-line: rgba(79, 141, 255, 0.5);
+  --ok: #3dffa8; --warn: #ffb547; --bad: #ff6b81; --info: #3ee8ff;
+  --warn-bg: #1f1607; --bad-bg: #24090f;
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "DejaVu Sans", sans-serif;
+  --font-hud: system-ui, -apple-system, "Segoe UI", Roboto, "DejaVu Sans", sans-serif;
+  --radius: 18px; --radius-sm: 12px;
+  --clip: none; --clip-sm: none;
+  --glow: 0 0 18px rgba(var(--accent-rgb), 0.35);
+  --glow-text: none;
+  --app-bg:
+    radial-gradient(120% 60% at 50% -10%, rgba(79, 141, 255, 0.22), transparent 60%),
+    radial-gradient(80% 50% at 100% 105%, rgba(154, 107, 255, 0.18), transparent 60%),
+    var(--bg);
+  --bar-bg: rgba(6, 11, 20, 0.72); --nav-bg: rgba(6, 11, 20, 0.82);
+  --scan: 0;
+  --panel-bg: rgba(255, 255, 255, 0.055);
+  --panel-stripe: 0px;
+  --brand-spacing: 0.3em;
+  --orb: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.55), transparent 22%),
+         radial-gradient(circle at 60% 65%, var(--accent-2), transparent 55%),
+         radial-gradient(circle at 40% 55%, var(--accent), transparent 60%),
+         radial-gradient(circle at 50% 50%, #0d2a4a, #050a14 70%);
+}
+:root[data-theme="vidro-roxo"] {
+  --accent: #b48cff; --accent-rgb: 180, 140, 255; --accent-strong: #d2b8ff; --accent-ink: #12061f;
+  --accent-2: #d06bff; --accent-3: #8a5cff;
+  --user: #8a5cff; --user-rgb: 138, 92, 255; --user-bg: rgba(138, 92, 255, 0.18); --user-line: rgba(138, 92, 255, 0.5);
+  --info: #b48cff;
+  --app-bg:
+    radial-gradient(120% 60% at 50% -10%, rgba(138, 92, 255, 0.24), transparent 60%),
+    radial-gradient(80% 50% at 100% 105%, rgba(208, 107, 255, 0.16), transparent 60%),
+    var(--bg);
+}
+
+/* --- Decorações só deste tema ------------------------------------------------------------ */
+:root[data-theme^="vidro"] .card, :root[data-theme^="vidro"] .panel {
+  border-radius: var(--radius); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+:root[data-theme^="vidro"] .card-title, :root[data-theme^="vidro"] .panel-title {
+  font-family: var(--font-ui); text-transform: none; letter-spacing: 0.01em; font-size: 0.9rem; color: var(--text); }
+:root[data-theme^="vidro"] .eyebrow { font-family: var(--font-ui); letter-spacing: 0.08em; }
+:root[data-theme^="vidro"] input, :root[data-theme^="vidro"] textarea, :root[data-theme^="vidro"] select {
+  border-radius: 14px; background: rgba(255, 255, 255, 0.05); }
+:root[data-theme^="vidro"] .brand { color: var(--text); text-shadow: none; }
+
+/* Início: orbe de vidro com "TITAN está online" */
+.home-orb { display: none; }
+:root[data-theme^="vidro"] .home-orb { display: grid; justify-items: center; gap: 0.5rem; padding: 0.4rem 0 0.2rem; }
+:root[data-theme^="vidro"] .home-orb .glass-orb { width: 116px; height: 116px; }
+:root[data-theme^="vidro"] .home-head { text-align: center; justify-items: center; }
+.online-pill { display: inline-flex; gap: 6px; align-items: center; padding: 3px 10px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055); border: 1px solid var(--line); font-size: 0.75rem; color: var(--muted); }
+.online-pill i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+.online-pill.off i { background: var(--bad); box-shadow: none; }
+
+.glass-orb { position: relative; border-radius: 50%; background: var(--orb);
+  box-shadow: 0 0 40px rgba(var(--accent-rgb), 0.35), inset 0 0 30px rgba(255, 255, 255, 0.12);
+  animation: vidro-breathe 4s ease-in-out infinite; }
+.glass-orb::after { content: ""; position: absolute; inset: -9px; border-radius: 50%; border: 1px solid rgba(var(--accent-rgb), 0.25); }
+.glass-orb svg { position: absolute; inset: 0; margin: auto; width: 44%; height: 44%; opacity: 0.9;
+  filter: drop-shadow(0 0 6px var(--accent)); }
+@keyframes vidro-breathe { 50% { transform: scale(1.04); box-shadow: 0 0 60px rgba(var(--accent-rgb), 0.5), inset 0 0 30px rgba(255, 255, 255, 0.15); } }
+
+/* Voz: o orbe é de vidro */
+:root[data-theme^="vidro"] .orb { border: 0; background: var(--orb); width: 140px; height: 140px;
+  box-shadow: 0 0 40px rgba(var(--accent-rgb), 0.35), inset 0 0 30px rgba(255, 255, 255, 0.12); }
+:root[data-theme^="vidro"] .state-user_speaking .orb, :root[data-theme^="vidro"] .state-speaking .orb {
+  box-shadow: 0 0 70px rgba(var(--accent-rgb), 0.6), inset 0 0 30px rgba(255, 255, 255, 0.18); }
+:root[data-theme^="vidro"] .state-idle .orb { filter: saturate(0.5) brightness(0.8); }
+:root[data-theme^="vidro"] .orb-label { font-family: var(--font-ui); }
+
+/* Conversa: balões arredondados; os seus em degradê */
+:root[data-theme^="vidro"] .msg { border-radius: 18px; }
+:root[data-theme^="vidro"] .msg-user { border: 0; border-top-right-radius: 5px; color: #fff;
+  background: linear-gradient(135deg, var(--accent-3), var(--accent-2)); }
+:root[data-theme^="vidro"] .msg-user .msg-meta { color: rgba(255, 255, 255, 0.75); }
+:root[data-theme^="vidro"] .msg-assistant { border: 1px solid var(--line); border-top-left-radius: 5px;
+  background: rgba(255, 255, 255, 0.055); }
+:root[data-theme^="vidro"] .acard { border-radius: 14px; }
+
+/* Barra de baixo: a orbe no meio (Falar) */
+.tab-orb-ball { display: none; }
+@media (max-width: 899px) {
+  :root[data-theme^="vidro"] .tabs { border-top: 1px solid var(--line); position: relative; z-index: 3; }
+  :root[data-theme^="vidro"] .tab.active::before { display: none; }
+  :root[data-theme^="vidro"] .talk-dock { display: none; }  /* a orbe da barra já é o "Falar" */
+  :root[data-theme^="vidro"] .tab-orb .tab-icon { display: none; }
+  :root[data-theme^="vidro"] .tab-orb .tab-orb-ball { display: grid; place-items: center; width: 54px; height: 54px;
+    margin-top: -26px; border-radius: 50%; color: #04101c; background: var(--orb);
+    box-shadow: 0 0 22px rgba(var(--accent-rgb), 0.6); }
+  :root[data-theme^="vidro"] .tab-orb .tab-orb-ball svg { stroke: #fff; }
+  :root[data-theme^="vidro"] .tab-orb.active .tab-orb-ball { box-shadow: 0 0 30px rgba(var(--accent-rgb), 0.9); }
+}
+
+/* Modo leve: sem vidro embaçado, sem brilho e sem animação (notebook fraco) */
+:root[data-leve][data-theme^="vidro"] { --app-bg: var(--bg); --panel-bg: var(--surface); --bar-bg: var(--bg); --nav-bg: var(--surface); }
+:root[data-leve][data-theme^="vidro"] .card, :root[data-leve][data-theme^="vidro"] .panel,
+:root[data-leve][data-theme^="vidro"] .tabs, :root[data-leve][data-theme^="vidro"] .topbar {
+  backdrop-filter: none; -webkit-backdrop-filter: none; }
+:root[data-leve] .glass-orb, :root[data-leve][data-theme^="vidro"] .orb, :root[data-leve] .tab-orb-ball {
+  animation: none; box-shadow: none !important; }
+
+/* Amostras em Sistema → Aparência */
+[data-preview="vidro"] .theme-swatch, [data-preview="vidro-roxo"] .theme-swatch { border-radius: 50%; border: 0;
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.6), transparent 25%),
+              radial-gradient(circle at 60% 65%, #9a6bff, transparent 60%), radial-gradient(circle at 40% 50%, #3ee8ff, #0b2140 75%); }
+[data-preview="vidro-roxo"] .theme-swatch {
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.6), transparent 25%),
+              radial-gradient(circle at 60% 65%, #d06bff, transparent 60%), radial-gradient(circle at 40% 50%, #b48cff, #1a0b40 75%); }
+
+/* Personalizar → orbe: Reator (anel de energia) ou Simples (cor lisa); "parada" sem animação */
+:root[data-orb="reator"] { --orb: radial-gradient(circle, #ffffff 0, var(--accent) 18%, rgba(var(--accent-rgb), 0.4) 45%, transparent 68%); }
+:root[data-orb="reator"] .glass-orb::after { inset: -6px; border: 2px dashed rgba(var(--accent-rgb), 0.6); }
+:root[data-orb="simples"] { --orb: radial-gradient(circle at 50% 50%, var(--accent), var(--accent-3)); }
+:root[data-orb="simples"] .glass-orb { box-shadow: none; }
+:root[data-orb="simples"] .glass-orb::after { display: none; }
+:root[data-orb-still] .glass-orb, :root[data-orb-still][data-theme^="vidro"] .orb { animation: none; }

@@ -1,0 +1,1005 @@
+package br.titan.app;
+
+import android.Manifest;
+import android.app.Activity;
+import android.app.AlarmManager;
+import android.app.AlertDialog;
+import android.app.NotificationManager;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
+import android.os.PowerManager;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.net.Uri;
+import android.net.http.SslError;
+import android.os.Build;
+import android.os.Bundle;
+import android.text.InputType;
+import android.view.Gravity;
+import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest;
+import android.webkit.SslErrorHandler;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * App TITAN: abre o TITAN que roda no notebook (o servidor é um só, o do notebook).
+ *
+ * Segurança:
+ * - só abre endereços https:// (o cadeado do TITAN é instalado em Configurações);
+ * - certificado inválido = não abre (nunca "continuar mesmo assim");
+ * - microfone e câmera só para páginas do próprio servidor;
+ * - links de fora abrem no navegador, fora do app.
+ */
+public class MainActivity extends Activity {
+    private static final String PREFS = "titan";
+    private static final String KEY_SERVER = "server";
+    static final String KEY_ALT = "server_alt";
+    private static final int REQ_MEDIA = 10;
+
+    private WebView web;
+    private String server; // ex.: https://100.101.102.103:8000 (sem barra no fim)
+    private String alt;    // reserva (ex.: Wi-Fi de casa): usado se o principal não responder
+    private boolean triedAlt = false;
+    private boolean loaded = false;
+    private boolean errorSeen = false;
+    private boolean sslFail = false;
+    private WebView errorView; // telas de erro no estilo da nave (assets/erro.html)
+    private TextView connecting;
+    private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable timeout = this::connectionFailed;
+    private static final long CONNECT_TIMEOUT_MS = 12_000;
+    private PermissionRequest pendingPermission;
+    private int notifyId = 1;
+
+    @Override
+    protected void onCreate(Bundle state) {
+        super.onCreate(state);
+        diag("app abriu (" + (state == null ? "novo" : "recriado") + ")");
+        // O app morreu da última vez enquanto carregava a tela? (morte "dura", sem aviso de erro)
+        android.content.SharedPreferences dp = getSharedPreferences(DIAG, MODE_PRIVATE);
+        int deaths = "carregando".equals(dp.getString("estado", "")) ? dp.getInt("mortes", 0) + 1 : 0;
+        dp.edit().putInt("mortes", deaths).putString("estado", "abriu").commit();
+        if (deaths > 0) diag("o app morreu carregando a tela (" + deaths + "x seguidas)");
+        if (deaths >= 2 && !safeMode()) {
+            dp.edit().putBoolean("seguro", true).commit();
+            diag("modo seguro ligado: tela sem placa de vídeo e modo leve");
+        }
+        if (deaths >= 3) {
+            showTrouble("O app fechou " + deaths + " vezes seguidas enquanto carregava a tela, mesmo no modo seguro. "
+                    + "É um problema da peça de tela do Android (WebView) neste celular.");
+            return;
+        }
+        server = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_SERVER, null);
+        alt = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_ALT, null);
+        // Casa e Central (tablet/TV): tela sempre acesa e em tela cheia.
+        // As mensagens do TITAN (NotesJob) ficam só no app TITAN, para não avisar em dobro.
+        if (BuildConfig.KIOSK) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            fullscreen();
+        } else {
+            // Cada recurso extra protegido: se um falhar neste celular, o app abre mesmo assim.
+            safely("mensagens", () -> NotesJob.ensure(this));
+            safely("ficar ligado", () -> LiveService.start(this));   // recebe mensagens com o app fechado
+            safely("avisos", this::ensureNotifications);
+        }
+        if (showLastCrash()) return;
+        if (askConfigLink(getIntent())) return;
+        if (server == null) showSetup(null);
+        else openTitan(pathFor(getIntent()));
+    }
+
+    private long lastRenderGone = 0;
+
+    /** A tela do TITAN travou 2 vezes: em vez de ficar reiniciando, explica e oferece o conserto. */
+    // --- diagnóstico: o que aconteceu (fica guardado, aparece na tela de problema) ----------
+    private static final String DIAG = "titan-diag";
+
+    /** Anota um acontecimento (últimos 25), para a tela de problema mostrar o que houve. */
+    private void diag(String what) {
+        try {
+            android.content.SharedPreferences p = getSharedPreferences(DIAG, MODE_PRIVATE);
+            String time = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(new java.util.Date());
+            String[] old = p.getString("log", "").split("\n");
+            StringBuilder b = new StringBuilder();
+            for (int i = Math.max(0, old.length - 24); i < old.length; i++) if (!old[i].isEmpty()) b.append(old[i]).append('\n');
+            b.append(time).append(' ').append(what.length() > 140 ? what.substring(0, 140) : what);
+            p.edit().putString("log", b.toString()).commit();   // commit: grava na hora (o app pode morrer logo depois)
+        } catch (Throwable ignored) { /* diagnóstico nunca atrapalha */ }
+    }
+
+    /** Abriu a tela do TITAN 4 vezes em 90 s (mesmo com o app reiniciando)? Então está em loop. */
+    private boolean looping() {
+        android.content.SharedPreferences p = getSharedPreferences(DIAG, MODE_PRIVATE);
+        long now = System.currentTimeMillis();
+        StringBuilder keep = new StringBuilder();
+        int recent = 0;
+        for (String t : p.getString("opens", "").split(",")) {
+            try {
+                long v = Long.parseLong(t.trim());
+                if (now - v < 90_000) { recent++; keep.append(v).append(','); }
+            } catch (NumberFormatException ignored) { }
+        }
+        keep.append(now);
+        p.edit().putString("opens", keep.toString()).commit();
+        return recent >= 3;
+    }
+
+    /** Anota em que ponto a tela está (gravado na hora): se o app morrer, a próxima abertura sabe onde foi. */
+    private void mark(String state) {
+        getSharedPreferences(DIAG, MODE_PRIVATE).edit().putString("estado", state).commit();
+    }
+
+    private boolean safeMode() {
+        return getSharedPreferences(DIAG, MODE_PRIVATE).getBoolean("seguro", false);
+    }
+
+    private void showRenderTrouble(boolean crashed) {
+        showTrouble("A tela do TITAN travou neste celular (" + (crashed ? "travou" : "fechada pelo sistema por memória") + ").");
+    }
+
+    /** Em vez de ficar reiniciando: explica, mostra o que aconteceu e oferece saídas. */
+    private void showTrouble(String headline) {
+        diag("tela de problema: " + headline);
+        if (web != null) {
+            try { web.destroy(); } catch (Throwable ignored) { }
+            web = null;
+        }
+        String wv = "?";
+        try {
+            android.content.pm.PackageInfo pi = Build.VERSION.SDK_INT >= 26 ? WebView.getCurrentWebViewPackage() : null;
+            if (pi != null) wv = pi.packageName + " " + pi.versionName;
+        } catch (Throwable ignored) { /* sem informação */ }
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(56, 120, 56, 56);
+        box.setBackgroundColor(Color.parseColor("#03070c"));
+        TextView t = new TextView(this);
+        t.setTextColor(Color.parseColor("#dff6ff"));
+        t.setTextSize(17);
+        t.setText(headline + "\n\n"
+                + "1. Toque em ABRIR NO CHROME: se abrir lá, o notebook está bem e o problema é a tela do app.\n"
+                + "2. Toque em ATUALIZAR WEBVIEW e atualize na Play Store (atualize o Chrome também).\n"
+                + "3. Volte e toque em TENTAR DE NOVO.\n\n"
+                + "Para o Claude (tire print): app " + BuildConfig.VERSION_NAME + " · WebView " + wv
+                + " · Android " + Build.VERSION.RELEASE + " · " + Build.MODEL + "\n"
+                + getSharedPreferences(DIAG, MODE_PRIVATE).getString("log", ""));
+        t.setTextSize(14);
+        t.setTextIsSelectable(true);
+        box.addView(t);
+        Button upd = new Button(this);
+        upd.setText("Atualizar WebView");
+        upd.setOnClickListener(v -> {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.webview")));
+            } catch (Exception e) {
+                startActivity(new Intent(Intent.ACTION_VIEW,
+                        Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.webview")));
+            }
+        });
+        Button retry = new Button(this);
+        retry.setText("Tentar de novo");
+        retry.setOnClickListener(v -> {
+            lastRenderGone = 0;
+            getSharedPreferences(DIAG, MODE_PRIVATE).edit().remove("opens").putInt("mortes", 0)
+                    .putBoolean("seguro", true).commit();
+            if (server == null) showSetup(null); else openTitan(BuildConfig.HOME + "?leve=1");
+        });
+        Button chrome = new Button(this);
+        chrome.setText("Abrir no Chrome");
+        chrome.setOnClickListener(v -> {
+            if (server != null) {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(server + BuildConfig.HOME))); }
+                catch (Exception ignored) { }
+            }
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = 40;
+        box.addView(chrome, lp);
+        box.addView(upd, lp);
+        box.addView(retry, lp);
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.setBackgroundColor(Color.parseColor("#03070c"));
+        sv.addView(box);
+        setContentView(sv);
+    }
+
+    private void safely(String what, Runnable r) {
+        try { r.run(); } catch (Throwable e) { android.util.Log.w("TITAN", "Falhou: " + what, e); }
+    }
+
+    /** O app fechou sozinho da última vez? Mostra o motivo (para tirar print) e segue. */
+    private boolean showLastCrash() {
+        android.content.SharedPreferences p = getSharedPreferences(TitanApp.CRASH_PREFS, MODE_PRIVATE);
+        String err = p.getString("ultimo", null);
+        if (err == null) return false;
+        p.edit().remove("ultimo").apply();
+        TextView tv = new TextView(this);
+        tv.setText(err);
+        tv.setTextIsSelectable(true);
+        tv.setTextSize(11);
+        tv.setPadding(32, 24, 32, 24);
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(tv);
+        new AlertDialog.Builder(this)
+                .setTitle("O TITAN fechou sozinho da última vez")
+                .setMessage("Tire um print desta tela e mande para o Claude. Depois toque em Continuar.")
+                .setView(sv)
+                .setPositiveButton("Continuar", (d, w) -> {
+                    if (server == null) showSetup(null); else openTitan(pathFor(getIntent()));
+                })
+                .setCancelable(false)
+                .show();
+        return true;
+    }
+
+    // --- "Ligar TITAN" -------------------------------------------------------------------
+    private PowerManager.WakeLock proximity;
+    private boolean inCall;
+    private boolean wantSpeaker;
+    private android.hardware.SensorEventListener nearListener;
+    private Boolean wasNear;
+
+    /**
+     * O navegador interno muda a saída de som sozinho quando o microfone abre (põe no viva-voz).
+     * Durante a ligação, confere a cada 0,7 s e devolve o som para onde você escolheu.
+     */
+    private final Runnable keepRoute = new Runnable() {
+        @Override public void run() {
+            if (!inCall) return;
+            AudioManager am = getSystemService(AudioManager.class);
+            if (am.getMode() != AudioManager.MODE_IN_COMMUNICATION) am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+            if (onSpeaker(am) != wantSpeaker) applyRoute(am, wantSpeaker);
+            ui.postDelayed(this, 700);
+        }
+    };
+
+    @SuppressWarnings("deprecation")
+    private boolean onSpeaker(AudioManager am) {
+        if (Build.VERSION.SDK_INT >= 31) {
+            AudioDeviceInfo d = am.getCommunicationDevice();
+            return d != null && d.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;
+        }
+        return am.isSpeakerphoneOn();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void applyRoute(AudioManager am, boolean speaker) {
+        if (Build.VERSION.SDK_INT >= 31) {
+            int want = speaker ? AudioDeviceInfo.TYPE_BUILTIN_SPEAKER : AudioDeviceInfo.TYPE_BUILTIN_EARPIECE;
+            for (AudioDeviceInfo d : am.getAvailableCommunicationDevices()) {
+                if (d.getType() == want) { am.setCommunicationDevice(d); break; }
+            }
+        } else {
+            am.setSpeakerphoneOn(speaker);
+        }
+    }
+
+    /** Avisa a tela quando o celular encosta/sai do ouvido (mexer no celular não corta o TITAN). */
+    private void watchNear(boolean on) {
+        android.hardware.SensorManager sm = getSystemService(android.hardware.SensorManager.class);
+        if (sm == null) return;
+        if (!on) {
+            if (nearListener != null) sm.unregisterListener(nearListener);
+            nearListener = null;
+            wasNear = null;
+            return;
+        }
+        android.hardware.Sensor sensor = sm.getDefaultSensor(android.hardware.Sensor.TYPE_PROXIMITY);
+        if (sensor == null || nearListener != null) return;
+        final float max = sensor.getMaximumRange();
+        nearListener = new android.hardware.SensorEventListener() {
+            @Override public void onSensorChanged(android.hardware.SensorEvent e) {
+                boolean near = e.values.length > 0 && e.values[0] < Math.min(5f, max);
+                if (wasNear != null && wasNear == near) return;
+                wasNear = near;
+                if (web != null) web.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('titan:proximidade',{detail:" + near + "}))", null);
+            }
+            @Override public void onAccuracyChanged(android.hardware.Sensor s, int a) { }
+        };
+        sm.registerListener(nearListener, sensor, android.hardware.SensorManager.SENSOR_DELAY_NORMAL);
+    }
+
+    /** Liga o modo ligação: áudio de chamada (ouvido), tela acesa e sensor de proximidade. */
+    private void setCallMode(boolean on) {
+        AudioManager am = getSystemService(AudioManager.class);
+        if (on) {
+            if (inCall) return;
+            inCall = true;
+            am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+            setVolumeControlStream(AudioManager.STREAM_VOICE_CALL);   // botões de volume = volume da ligação
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            routeSpeaker(false);
+            watchNear(true);
+            ui.removeCallbacks(keepRoute);
+            ui.postDelayed(keepRoute, 700);
+        } else {
+            if (!inCall) return;
+            inCall = false;
+            ui.removeCallbacks(keepRoute);
+            watchNear(false);
+            releaseProximity();
+            if (Build.VERSION.SDK_INT >= 31) am.clearCommunicationDevice();
+            else am.setSpeakerphoneOn(false);
+            am.setMode(AudioManager.MODE_NORMAL);   // som volta ao normal (música, vídeos)
+            setVolumeControlStream(AudioManager.USE_DEFAULT_STREAM_TYPE);
+            if (!BuildConfig.KIOSK) getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+    }
+
+    private void routeSpeaker(boolean speaker) {
+        if (!inCall) return;
+        wantSpeaker = speaker;
+        applyRoute(getSystemService(AudioManager.class), speaker);
+        // No ouvido: encostou, a tela apaga e os toques travam (o rosto não desliga a ligação).
+        // No viva-voz o celular fica longe do rosto: sem sensor.
+        if (speaker) releaseProximity(); else acquireProximity();
+    }
+
+    private void acquireProximity() {
+        if (proximity != null) return;
+        PowerManager pm = getSystemService(PowerManager.class);
+        if (pm == null || !pm.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) return;
+        proximity = pm.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "titan:ligacao");
+        proximity.setReferenceCounted(false);
+        proximity.acquire(2 * 60 * 60 * 1000L);   // no máximo 2 h (nunca fica preso)
+    }
+
+    private void releaseProximity() {
+        if (proximity == null) return;
+        try {
+            if (proximity.isHeld()) proximity.release(PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY);
+        } catch (RuntimeException ignored) { /* já solto */ }
+        proximity = null;
+    }
+
+    boolean notificationsOn() {
+        boolean perm = Build.VERSION.SDK_INT < 33
+                || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+        return perm && getSystemService(NotificationManager.class).areNotificationsEnabled();
+    }
+
+    boolean batteryFree() {
+        android.os.PowerManager pm = getSystemService(android.os.PowerManager.class);
+        return pm.isIgnoringBatteryOptimizations(getPackageName());
+    }
+
+    void openNotificationSettings() {
+        try {
+            Intent i = new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName());
+            startActivity(i);
+        } catch (Exception e) {
+            openAppSettings();
+        }
+    }
+
+    void openAppSettings() {
+        try {
+            startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + getPackageName())));
+        } catch (Exception ignored) { /* sem tela de configurações */ }
+    }
+
+    /** Ao abrir: se os avisos estão desligados, pede para ligar (sem isso nada chega). */
+    private void ensureNotifications() {
+        if (notificationsOn()) return;
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                && !getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean("asked_notify", false)) {
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean("asked_notify", true).apply();
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 11);
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Avisos do TITAN desligados")
+                .setMessage("Sem isso os lembretes e mensagens não aparecem na tela nem com o celular bloqueado. Ligar agora?")
+                .setPositiveButton("Ligar", (d, w) -> openNotificationSettings())
+                .setNegativeButton("Agora não", null)
+                .show();
+    }
+
+    /** Esconde as barras do sistema (deslizar da borda mostra de novo por um instante). */
+    @SuppressWarnings("deprecation")
+    private void fullscreen() {
+        getWindow().getDecorView().setSystemUiVisibility(android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | android.view.View.SYSTEM_UI_FLAG_FULLSCREEN | android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE | android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && BuildConfig.KIOSK) fullscreen();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (askConfigLink(intent)) return;
+        if (isConfigure(intent) || server == null) { showSetup(null); return; }
+        String path = pathFor(intent);
+        if (web != null) load(server + path);
+        else openTitan(path);
+    }
+
+    // --- endereço do servidor -------------------------------------------------------
+
+    private static boolean isConfigure(Intent i) {
+        Uri d = i == null ? null : i.getData();
+        return d != null && BuildConfig.SCHEME.equals(d.getScheme()) && "configurar".equals(d.getHost());
+    }
+
+    /**
+     * Link da página de instalação (titan://configurar?s=…&alt=…): preenche os endereços,
+     * mas SEMPRE pergunta antes (outro site não consegue trocar o servidor sem você ver).
+     */
+    private boolean askConfigLink(Intent i) {
+        if (!isConfigure(i)) return false;
+        Uri d = i.getData();
+        String s = normalize(d.getQueryParameter("s"));
+        if (s == null) return false;
+        String a = normalize(d.getQueryParameter("alt"));
+        if (a != null && a.equals(s)) a = null;
+        final String fa = a;
+        if (web == null) showSetup(null);
+        new AlertDialog.Builder(this)
+                .setTitle("Usar este TITAN?")
+                .setMessage("Endereço principal:\n" + s + (fa != null ? "\n\nReserva (se o principal não responder):\n" + fa : "")
+                        + "\n\nSó confirme se veio da página de instalação do SEU notebook.")
+                .setPositiveButton("Usar", (dlg, w) -> {
+                    server = s;
+                    alt = fa;
+                    triedAlt = false;
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_SERVER, s)
+                            .putString(KEY_ALT, fa).apply();
+                    if (web != null) { web.destroy(); web = null; }
+                    openTitan(BuildConfig.HOME);
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
+        return true;
+    }
+
+    /** Converte atalho / compartilhamento no caminho da interface do TITAN. */
+    private String pathFor(Intent i) {
+        if (i == null) return BuildConfig.HOME;
+        // Ícone "Ligar TITAN" da tela inicial: abre direto a tela de chamada.
+        if (i.getComponent() != null && i.getComponent().getClassName().endsWith(".LigarTitan")) return "/?acao=ligar";
+        if (isConfigure(i)) return BuildConfig.HOME;
+        Uri d = i.getData();
+        if (d != null && "titan".equals(d.getScheme()) && "acao".equals(d.getHost())) {
+            String acao = d.getLastPathSegment();
+            if ("voz".equals(acao) || "ligar".equals(acao) || "noticias".equals(acao) || "conversa".equals(acao) || "aula".equals(acao) || "aprovacoes".equals(acao)
+                    || "inicio".equals(acao) || "memoria".equals(acao) || "saida".equals(acao)) {
+                return "/?acao=" + acao;
+            }
+        }
+        // Aviso de mensagem do TITAN: abre direto a conversa que ele começou.
+        if (d != null && "titan".equals(d.getScheme()) && "conversa".equals(d.getHost())) {
+            String id = d.getLastPathSegment();
+            if (id != null && id.matches("^[0-9a-f-]{36}$")) return "/?conversa=" + id;
+        }
+        if (Intent.ACTION_SEND.equals(i.getAction())) {
+            String text = i.getStringExtra(Intent.EXTRA_TEXT);
+            String title = i.getStringExtra(Intent.EXTRA_SUBJECT);
+            if (BuildConfig.KIOSK) return BuildConfig.HOME;
+            return "/compartilhar?title=" + Uri.encode(title == null ? "" : title)
+                    + "&text=" + Uri.encode(text == null ? "" : text) + "&url=";
+        }
+        return BuildConfig.HOME;
+    }
+
+    static String normalize(String raw) {
+        String s = raw == null ? "" : raw.trim();
+        if (s.isEmpty()) return null;
+        if (!s.contains("://")) s = "https://" + s;
+        Uri u = Uri.parse(s);
+        if (!"https".equals(u.getScheme()) || u.getHost() == null || u.getHost().isEmpty()) return null;
+        String port = u.getPort() > 0 ? ":" + u.getPort() : "";
+        return "https://" + u.getHost() + port;
+    }
+
+    private void showSetup(String error) {
+        ui.removeCallbacks(timeout);
+        if (errorView != null) { errorView.destroy(); errorView = null; }
+        if (web != null) { web.destroy(); web = null; }
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(56, 120, 56, 56);
+        box.setBackgroundColor(Color.parseColor("#03070c"));
+
+        TextView title = new TextView(this);
+        title.setText(BuildConfig.TITLE);
+        title.setTextColor(Color.parseColor("#3ee8ff"));
+        title.setTextSize(30);
+        title.setGravity(Gravity.CENTER);
+        box.addView(title);
+
+        TextView help = new TextView(this);
+        help.setText("Endereço do TITAN no seu notebook.\n\nNo notebook, rode \"titan ligar\": ele mostra os "
+                + "endereços e um QR code. Na página do QR, instale o cadeado e toque em \"CONFIGURAR O APP SOZINHO\" "
+                + "(ou digite aqui).");
+        help.setTextColor(Color.parseColor("#86aebe"));
+        help.setTextSize(15);
+        help.setPadding(0, 48, 0, 24);
+        box.addView(help);
+
+        EditText input = new EditText(this);
+        input.setHint("https://192.168.0.10:8000");
+        input.setInputType(InputType.TYPE_TEXT_VARIATION_URI);
+        input.setTextColor(Color.WHITE);
+        input.setHintTextColor(Color.parseColor("#4b6a78"));
+        input.setSingleLine(true);
+        if (server != null) input.setText(server);
+        box.addView(input);
+
+        TextView altLabel = new TextView(this);
+        altLabel.setText("Reserva (opcional): usado se o primeiro não responder. Ex.: Tailscale em cima, Wi-Fi de casa aqui.");
+        altLabel.setTextColor(Color.parseColor("#86aebe"));
+        altLabel.setTextSize(13);
+        altLabel.setPadding(0, 32, 0, 8);
+        box.addView(altLabel);
+        EditText altInput = new EditText(this);
+        altInput.setHint("https://100.x.x.x:8000");
+        altInput.setInputType(InputType.TYPE_TEXT_VARIATION_URI);
+        altInput.setTextColor(Color.WHITE);
+        altInput.setHintTextColor(Color.parseColor("#4b6a78"));
+        altInput.setSingleLine(true);
+        if (alt != null) altInput.setText(alt);
+        box.addView(altInput);
+
+        if (error != null) {
+            TextView err = new TextView(this);
+            err.setText(error);
+            err.setTextColor(Color.parseColor("#ffb547"));
+            err.setPadding(0, 24, 0, 0);
+            box.addView(err);
+        }
+
+        Button go = new Button(this);
+        go.setText("CONECTAR");
+        go.setOnClickListener(v -> {
+            String s = normalize(input.getText().toString());
+            if (s == null) { showSetup("Use um endereço que comece com https:// (o TITAN só abre com cadeado)."); return; }
+            String a = altInput.getText().toString().trim().isEmpty() ? null : normalize(altInput.getText().toString());
+            if (a == null && !altInput.getText().toString().trim().isEmpty()) {
+                showSetup("O endereço de reserva também precisa começar com https://."); return;
+            }
+            server = s;
+            alt = s.equals(a) ? null : a;
+            triedAlt = false;
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_SERVER, s).putString(KEY_ALT, alt).apply();
+            openTitan(BuildConfig.HOME);
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = 40;
+        box.addView(go, lp);
+        setContentView(box);
+    }
+
+    // --- o TITAN ----------------------------------------------------------------------
+
+    private boolean sameServer(Uri u) {
+        Uri s = Uri.parse(server);
+        return u != null && "https".equals(u.getScheme()) && s.getHost().equalsIgnoreCase(u.getHost())
+                && s.getPort() == u.getPort();
+    }
+
+    private void openTitan(String path) {
+        diag("abrir " + path);
+        if (looping()) {
+            showTrouble("O TITAN ficou reiniciando a tela várias vezes seguidas, então parei para não ficar em loop.");
+            return;
+        }
+        web = new WebView(this);
+        web.setBackgroundColor(Color.parseColor("#03070c"));
+        if (safeMode()) {
+            web.setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null);   // sem placa de vídeo: mais estável
+            if (!path.contains("leve=1")) path = path + (path.contains("?") ? "&" : "?") + "leve=1";
+        }
+        WebSettings ws = web.getSettings();
+        ws.setJavaScriptEnabled(true);
+        ws.setDomStorageEnabled(true);
+        ws.setMediaPlaybackRequiresUserGesture(false); // a voz do TITAN toca sem precisar de toque
+        ws.setAllowFileAccess(false);
+        ws.setAllowContentAccess(false);
+        ws.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        ws.setSupportMultipleWindows(false);
+        web.addJavascriptInterface(new Bridge(), "TitanAndroid");
+
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
+                Uri u = req.getUrl();
+                if (sameServer(u)) return false;
+                // Fontes, links das aulas etc.: abrem no navegador, fora do app.
+                try { startActivity(new Intent(Intent.ACTION_VIEW, u)); } catch (Exception ignored) { }
+                return true;
+            }
+
+            /**
+             * A tela interna (WebView) travou. 1ª vez: reabre no modo leve (sem efeitos pesados).
+             * De novo em pouco tempo: para de reabrir (sem loop) e explica o que fazer.
+             */
+            @Override
+            public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
+                final boolean crashed = Build.VERSION.SDK_INT < 26 || detail.didCrash();
+                diag("tela interna caiu: " + (crashed ? "travou" : "fechada por memória"));
+                ui.post(() -> {
+                    android.view.ViewParent parent = view.getParent();
+                    if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(view);
+                    view.destroy();
+                    if (web != view) return;
+                    web = null;
+                    long now = System.currentTimeMillis();
+                    boolean again = now - lastRenderGone < 3 * 60_000;
+                    lastRenderGone = now;
+                    if (!again) openTitan(BuildConfig.HOME + "?leve=1");
+                    else showRenderTrouble(crashed);
+                });
+                return true;
+            }
+
+            @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                handler.cancel(); // nunca continua sem cadeado válido
+                sslFail = true;
+                errorSeen = true;
+                runOnUiThread(() -> connectionFailed());
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
+                if (!req.isForMainFrame()) return;
+                errorSeen = true;
+                runOnUiThread(() -> connectionFailed());
+            }
+
+            @Override
+            public void onPageCommitVisible(WebView view, String url) {
+                pageArrived(url);
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                pageArrived(url);
+            }
+        });
+
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(PermissionRequest request) {
+                runOnUiThread(() -> handleMediaPermission(request));
+            }
+        });
+
+        android.widget.FrameLayout frame = new android.widget.FrameLayout(this);
+        frame.setBackgroundColor(Color.parseColor("#03070c"));
+        frame.addView(web);
+        connecting = new TextView(this);
+        connecting.setTextColor(Color.parseColor("#3ee8ff"));
+        connecting.setTextSize(16);
+        connecting.setGravity(Gravity.CENTER);
+        connecting.setPadding(48, 48, 48, 48);
+        frame.addView(connecting, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        setContentView(frame);
+        load(server + path);
+    }
+
+    /** Carrega mostrando "Conectando…"; se nada chegar em 12 s, tenta a reserva ou avisa. */
+    private void load(String url) {
+        diag("carregar " + url + (safeMode() ? " [modo seguro]" : ""));
+        mark("carregando");
+        loaded = false;
+        errorSeen = false;
+        if (connecting != null) {
+            connecting.setText("Conectando ao notebook…\n\n" + server
+                    + "\n\nFora de casa, o Tailscale precisa estar ligado no celular.");
+            connecting.setVisibility(android.view.View.VISIBLE);
+        }
+        ui.removeCallbacks(timeout);
+        ui.postDelayed(timeout, CONNECT_TIMEOUT_MS);
+        web.loadUrl(url);
+    }
+
+    private void pageArrived(String url) {
+        // A página de erro do Android também "termina": só conta a do TITAN de verdade.
+        if (errorSeen || url == null || !sameServer(Uri.parse(url))) return;
+        loaded = true;
+        diag("página chegou");
+        // chegou e ficou de pé alguns segundos: não conta como morte ao carregar
+        ui.postDelayed(() -> { if (loaded) { mark("ok"); getSharedPreferences(DIAG, MODE_PRIVATE).edit().putInt("mortes", 0).commit(); } }, 8000);
+        triedAlt = false; // carregou: na próxima falha pode tentar o outro de novo
+        sslFail = false;
+        ui.removeCallbacks(timeout);
+        if (connecting != null) connecting.setVisibility(android.view.View.GONE);
+        hideError();
+    }
+
+    private void connectionFailed() {
+        diag("falha de conexão" + (sslFail ? " (cadeado)" : "") + (loaded ? " (ignorada: já carregou)" : ""));
+        ui.removeCallbacks(timeout);
+        if (web == null || loaded) return;
+        web.stopLoading();
+        // Principal fora do alcance (ex.: Tailscale desligado em casa): tenta a reserva sozinho.
+        if (alt != null && !triedAlt) {
+            triedAlt = true;
+            String other = alt;
+            alt = server;
+            server = other;
+            load(server + BuildConfig.HOME);
+            return;
+        }
+        if (connecting != null) connecting.setText("Sem resposta do notebook.");
+        showError(sslFail ? "cadeado" : "offline");
+    }
+
+    /** Tela de erro (1 = notebook não encontrado, 2 = cadeado não confiável) por cima de tudo. */
+    private void showError(String kind) {
+        if (web == null) return;
+        android.widget.FrameLayout frame = (android.widget.FrameLayout) web.getParent();
+        if (errorView == null) {
+            errorView = new WebView(this);
+            errorView.setBackgroundColor(Color.parseColor("#010306"));
+            WebSettings es = errorView.getSettings();
+            es.setJavaScriptEnabled(true);
+            es.setAllowFileAccess(false);
+            es.setAllowContentAccess(false);
+            errorView.addJavascriptInterface(new ErrorBridge(), "TitanErro");
+            errorView.setWebViewClient(new WebViewClient() {
+                @Override
+                public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail d) {
+                    diag("tela de erro caiu");
+                    ui.post(() -> {
+                        android.view.ViewParent parent = view.getParent();
+                        if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(view);
+                        view.destroy();
+                        if (errorView == view) errorView = null;
+                    });
+                    return true;   // nunca derruba o app inteiro
+                }
+            });
+            frame.addView(errorView, new android.widget.FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        String html;
+        try (java.io.InputStream in = getAssets().open("erro.html")) {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            html = out.toString("UTF-8");
+        } catch (java.io.IOException e) {
+            html = "<body style='background:#010306;color:#fff'>Sem resposta do notebook.</body>";
+        }
+        html = html.replace("{{KIND}}", kind)
+                .replace("{{PRIMARY}}", label(server))
+                .replace("{{ALT}}", alt == null ? "" : label(alt))
+                .replace("{{ALT_HIDE}}", alt == null ? "hide" : "");
+        errorView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
+        errorView.setVisibility(android.view.View.VISIBLE);
+    }
+
+    /** "TAILSCALE 100.x.x.x" / "WI-FI DE CASA 192.168.x.x" (texto da tela de erro). */
+    private static String label(String url) {
+        String host = Uri.parse(url).getHost();
+        if (host == null) return "";
+        String safe = host.replaceAll("[^0-9A-Za-z.:-]", "");
+        if (safe.startsWith("100.")) return "TAILSCALE " + safe;
+        if (safe.startsWith("192.168.") || safe.startsWith("10.") || safe.startsWith("172.")) return "WI-FI " + safe;
+        return safe;
+    }
+
+    private void hideError() {
+        if (errorView != null) errorView.setVisibility(android.view.View.GONE);
+    }
+
+    /** Botões da tela de erro. */
+    private class ErrorBridge {
+        @JavascriptInterface
+        public void retry() {
+            runOnUiThread(() -> {
+                triedAlt = false;
+                sslFail = false;
+                if (web != null) load(server + BuildConfig.HOME);
+            });
+        }
+
+        @JavascriptInterface
+        public void configure() {
+            runOnUiThread(() -> showSetup(null));
+        }
+    }
+
+    // --- microfone e câmera ------------------------------------------------------------
+
+    private void handleMediaPermission(PermissionRequest request) {
+        if (!sameServer(request.getOrigin())) { request.deny(); return; }
+        List<String> need = new ArrayList<>();
+        for (String r : request.getResources()) {
+            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) need.add(Manifest.permission.RECORD_AUDIO);
+            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r)) need.add(Manifest.permission.CAMERA);
+        }
+        List<String> missing = new ArrayList<>();
+        for (String p : need) if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) missing.add(p);
+        if (missing.isEmpty()) { request.grant(request.getResources()); return; }
+        pendingPermission = request;
+        requestPermissions(missing.toArray(new String[0]), REQ_MEDIA);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        if (code != REQ_MEDIA || pendingPermission == null) return;
+        boolean ok = results.length > 0;
+        for (int r : results) ok &= r == PackageManager.PERMISSION_GRANTED;
+        if (ok) pendingPermission.grant(pendingPermission.getResources());
+        else pendingPermission.deny();
+        pendingPermission = null;
+    }
+
+    // --- voltar ------------------------------------------------------------------------
+
+    @Override
+    public void onBackPressed() {
+        if (web != null && web.canGoBack()) web.goBack();
+        else super.onBackPressed();
+    }
+
+    @Override
+    protected void onDestroy() {
+        diag("app fechou" + (isFinishing() ? "" : " (pelo sistema)"));
+        mark("fechou");
+        setCallMode(false);   // nunca deixa o modo ligação / sensor presos
+        ui.removeCallbacks(timeout);
+        if (errorView != null) errorView.destroy();
+        if (web != null) web.destroy();
+        super.onDestroy();
+    }
+
+    // --- ponte com a interface do TITAN (tela acesa e avisos) --------------------------
+
+    private class Bridge {
+        @JavascriptInterface
+        public boolean isApp() { return true; }
+
+        /** Tela acesa durante a conversa por voz. */
+        @JavascriptInterface
+        public void keepAwake(boolean on) {
+            if (BuildConfig.KIOSK) return; // Casa e Central ficam sempre acesas
+            runOnUiThread(() -> {
+                if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            });
+        }
+
+        /** Diário do app (Sistema → Avisos): o que aconteceu, com horário (para achar a causa de problemas). */
+        @JavascriptInterface
+        public String diagLog() {
+            android.content.SharedPreferences p = getSharedPreferences(DIAG, MODE_PRIVATE);
+            return "app " + BuildConfig.VERSION_NAME + " · Android " + Build.VERSION.RELEASE + " · " + Build.MODEL
+                    + (p.getBoolean("seguro", false) ? " · modo seguro" : "") + "\n" + p.getString("log", "");
+        }
+
+        /** Escreve no diário algo que a tela percebeu (ex.: "sem conexão", "login venceu"). */
+        @JavascriptInterface
+        public void diagNote(String what) {
+            if (what != null) diag("tela: " + (what.length() > 100 ? what.substring(0, 100) : what));
+        }
+
+        /** "Ligar TITAN": som pelo alto-falante de ouvido e sensor de proximidade (liga/desliga). */
+        @JavascriptInterface
+        public void callMode(boolean on) {
+            runOnUiThread(() -> setCallMode(on));
+        }
+
+        /** Botão alto-falante da ligação: viva-voz (sem sensor) ou ouvido (com sensor). */
+        @JavascriptInterface
+        public void setSpeaker(boolean on) {
+            runOnUiThread(() -> routeSpeaker(on));
+        }
+
+        @JavascriptInterface
+        public boolean canNotify() {
+            return notificationsOn();
+        }
+
+        /** Diagnóstico dos avisos (Sistema → Avisos): o que está ligado e a última checagem. */
+        @JavascriptInterface
+        public String notifyStatus() {
+            try {
+                android.content.SharedPreferences st = getSharedPreferences("titan-status", MODE_PRIVATE);
+                AlarmManager am = getSystemService(AlarmManager.class);
+                return new org.json.JSONObject()
+                        .put("enabled", notificationsOn())
+                        .put("version", BuildConfig.VERSION_NAME)
+                        .put("android", Build.VERSION.RELEASE)
+                        .put("exact", Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms())
+                        .put("battery", batteryFree())
+                        .put("reminders", Reminders.scheduledIds(MainActivity.this).size())
+                        .put("lastAt", st.getLong("at", 0))
+                        .put("last", st.getString("text", "ainda não conferiu"))
+                        .toString();
+            } catch (Exception e) {
+                return "{}";
+            }
+        }
+
+        /** Mostra um aviso agora e marca outro para daqui a 1 minuto (feche o app e espere). */
+        @JavascriptInterface
+        public void testNotify() {
+            Notifier.show(MainActivity.this, 777, "TITAN · Teste", "Aviso de teste: se você está vendo isto, os avisos estão ligados.",
+                    "titan://acao/inicio", false);
+            Reminders.testIn(MainActivity.this, 60_000);
+            new Thread(() -> {
+                try { NotesJob.check(MainActivity.this); } catch (Exception ignored) { /* aparece no status */ }
+            }, "titan-check-now").start();
+        }
+
+        /** Abre a tela do Android com os avisos deste app. */
+        @JavascriptInterface
+        public void openNotifySettings() {
+            runOnUiThread(() -> openNotificationSettings());
+        }
+
+        /** Abre a tela para tirar o app da economia de bateria. */
+        @JavascriptInterface
+        public void openBatterySettings() {
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                } catch (Exception e) {
+                    openAppSettings();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void askNotify() {
+            if (Build.VERSION.SDK_INT >= 33) runOnUiThread(() ->
+                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 11));
+        }
+
+        /** Aviso do sistema (aprovação pendente, resposta pronta, mensagem do TITAN). */
+        @JavascriptInterface
+        public void notify(String title, String body, String path) {
+            String safe = path != null && path.startsWith("/") ? path : "/";
+            String target = "titan://acao/inicio";
+            if (safe.contains("aprovacoes")) target = "titan://acao/aprovacoes";
+            int at = safe.indexOf("conversa=");
+            if (at >= 0) {
+                String id = safe.substring(at + 9).split("&")[0];
+                if (id.matches("^[0-9a-f-]{36}$")) target = "titan://conversa/" + id;
+            }
+            Notifier.show(MainActivity.this, notifyId++, title, body, target, false);
+        }
+
+        /** Lembretes com hora: agendados no próprio celular (tocam mesmo sem o notebook). */
+        @JavascriptInterface
+        public void scheduleReminders(String json) {
+            Reminders.schedule(MainActivity.this, json == null ? "[]" : json);
+        }
+    }
+
+}

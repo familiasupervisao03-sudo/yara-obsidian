@@ -1,0 +1,234 @@
+{
+ "rate": 16000,
+ "generator": "make_samples.py",
+ "seed": 20261024,
+ "samples": [
+  {
+   "file": "ruido_silencio.wav",
+   "category": "noise",
+   "expected": "",
+   "owner_speech_ms": [],
+   "notes": "quarto silencioso"
+  },
+  {
+   "file": "ruido_ventilador.wav",
+   "category": "noise",
+   "expected": "",
+   "owner_speech_ms": [],
+   "notes": "ventilador do notebook, constante"
+  },
+  {
+   "file": "ruido_ventilador_forte.wav",
+   "category": "noise",
+   "expected": "",
+   "owner_speech_ms": [],
+   "notes": "ventilador alto"
+  },
+  {
+   "file": "ruido_teclado.wav",
+   "category": "noise",
+   "expected": "",
+   "owner_speech_ms": [],
+   "notes": "digitação"
+  },
+  {
+   "file": "ruido_batidas.wav",
+   "category": "noise",
+   "expected": "",
+   "owner_speech_ms": [],
+   "notes": "batidas na mesa"
+  },
+  {
+   "file": "ruido_porta.wav",
+   "category": "noise",
+   "expected": "",
+   "owner_speech_ms": [],
+   "notes": "porta batendo"
+  },
+  {
+   "file": "ruido_passos.wav",
+   "category": "noise",
+   "expected": "",
+   "owner_speech_ms": [],
+   "notes": "passos"
+  },
+  {
+   "file": "ruido_musica.wav",
+   "category": "noise",
+   "expected": "",
+   "owner_speech_ms": [],
+   "notes": "música sem voz"
+  },
+  {
+   "file": "fundo_tv_conversa.wav",
+   "category": "background_speech",
+   "expected": "",
+   "owner_speech_ms": [],
+   "notes": "outra voz baixa, como TV"
+  },
+  {
+   "file": "fala_curta.wav",
+   "category": "speech",
+   "expected": "abre a lista de tarefas",
+   "owner_speech_ms": [
+    [
+     800,
+     2166
+    ]
+   ],
+   "notes": "frase curta, quarto silencioso"
+  },
+  {
+   "file": "fala_minima.wav",
+   "category": "speech",
+   "expected": "sim",
+   "owner_speech_ms": [
+    [
+     800,
+     1132
+    ]
+   ],
+   "notes": "uma palavra"
+  },
+  {
+   "file": "fala_giria.wav",
+   "category": "speech",
+   "expected": "e aí mano beleza me explica rapidinho como funciona o backup",
+   "owner_speech_ms": [
+    [
+     800,
+     4073
+    ]
+   ],
+   "notes": "gírias"
+  },
+  {
+   "file": "fala_longa.wav",
+   "category": "speech",
+   "expected": "eu tava pensando em fazer um bolo de cenoura pra galera no fim de semana",
+   "owner_speech_ms": [
+    [
+     800,
+     4666
+    ]
+   ],
+   "notes": "frase longa e coloquial"
+  },
+  {
+   "file": "fala_baixa.wav",
+   "category": "speech",
+   "expected": "qual é a capital do paraná",
+   "owner_speech_ms": [
+    [
+     800,
+     2314
+    ]
+   ],
+   "notes": "voz baixa (longe do microfone)"
+  },
+  {
+   "file": "fala_primeira_palavra.wav",
+   "category": "speech",
+   "expected": "titan desliga a luz da sala",
+   "owner_speech_ms": [
+    [
+     300,
+     1903
+    ]
+   ],
+   "notes": "a primeira palavra não pode ser cortada"
+  },
+  {
+   "file": "fala_com_ventilador.wav",
+   "category": "speech",
+   "expected": "liga o modo de voz e me fala a previsão do tempo para amanhã",
+   "owner_speech_ms": [
+    [
+     800,
+     3492
+    ]
+   ],
+   "notes": "ventilador forte (SNR ~5 dB)"
+  },
+  {
+   "file": "fala_com_teclado.wav",
+   "category": "speech",
+   "expected": "anota aí que eu preciso comprar pão e café",
+   "owner_speech_ms": [
+    [
+     800,
+     2946
+    ]
+   ],
+   "notes": "digitação durante a fala"
+  },
+  {
+   "file": "fala_com_musica.wav",
+   "category": "speech",
+   "expected": "aumenta o volume da música",
+   "owner_speech_ms": [
+    [
+     800,
+     2087
+    ]
+   ],
+   "notes": "música de fundo"
+  },
+  {
+   "file": "fala_com_fundo.wav",
+   "category": "speech",
+   "expected": "me mostra as tarefas de hoje",
+   "owner_speech_ms": [
+    [
+     800,
+     2216
+    ]
+   ],
+   "notes": "outra pessoa conversando ao fundo (-10 dB)"
+  },
+  {
+   "file": "fala_sobreposta.wav",
+   "category": "speech",
+   "expected": "qual é a previsão do tempo",
+   "owner_speech_ms": [
+    [
+     800,
+     1941
+    ]
+   ],
+   "notes": "duas pessoas ao mesmo tempo (-4 dB)"
+  },
+  {
+   "file": "pausa_curta.wav",
+   "category": "speech",
+   "expected": "pesquisa pra mim quanto custa um notebook usado",
+   "owner_speech_ms": [
+    [
+     800,
+     1630
+    ],
+    [
+     2530,
+     4142
+    ]
+   ],
+   "notes": "pausa natural de 0,9 s"
+  },
+  {
+   "file": "pausa_longa.wav",
+   "category": "speech",
+   "expected": "me lembra amanhã de ligar pro dentista e depois de pagar a conta de luz",
+   "owner_speech_ms": [
+    [
+     800,
+     2570
+    ],
+    [
+     4370,
+     5937
+    ]
+   ],
+   "notes": "frase incompleta, pausa de 1,8 s: deve continuar sendo ouvida"
+  }
+ ]
+}

@@ -1,0 +1,20 @@
+/* Tema CLÁSSICO: grafite com destaque azul suave (o visual original do TITAN).
+   Contraste (WCAG) sobre --bg: texto 15.8:1, secundário 7.4:1, destaque 8.7:1. */
+:root[data-theme="classico"] {
+  --bg: #0a0d10; --surface: #12171c; --surface-2: #182027; --surface-3: #1e2831;
+  --line: #222c35; --line-strong: #64757f; --line-hover: #7d8e99;
+  --text: #e3e8ec; --muted: #93a1ab;
+  --accent: #7cb0f0; --accent-rgb: 124, 176, 240; --accent-strong: #a3c8f5; --accent-ink: #0a0d10;
+  --user: #7cb0f0; --user-rgb: 124, 176, 240; --user-bg: #16263a; --user-line: #24405f;
+  --ok: #5cc79a; --warn: #e3b55a; --bad: #f07a7a; --info: #7cb0f0;
+  --warn-bg: #241e10; --bad-bg: #2a1417;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "DejaVu Sans", sans-serif;
+  --font-hud: ui-monospace, "DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace;
+  --radius: 10px; --radius-sm: 7px;
+  --clip: none; --clip-sm: none;
+  --glow: none; --glow-text: none;
+  --app-bg: var(--bg); --bar-bg: var(--bg); --nav-bg: var(--surface);
+  --scan: 0;
+  --panel-bg: var(--surface); --panel-stripe: 0px;
+  --brand-spacing: 0.3em;
+}

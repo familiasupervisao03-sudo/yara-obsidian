@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sc_voz">Falar</string>
+    <string name="sc_voz_long">Falar com o TITAN</string>
+    <string name="sc_conversa">Nova conversa</string>
+    <string name="sc_aula">Nova aula</string>
+    <string name="sc_aula_long">Nova vídeo-aula</string>
+    <string name="sc_servidor">Servidor</string>
+    <string name="sc_servidor_long">Trocar o endereço do servidor</string>
+</resources>
