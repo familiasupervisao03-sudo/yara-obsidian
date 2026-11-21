@@ -9,7 +9,8 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: calc(15px * var(--fscale, 1))/1.5 var(--sans); }
+html { font-size: calc(100% * var(--fscale, 1)); }  /* Personalizar → tamanho da letra */
 body { background: var(--app-bg); background-attachment: fixed; }
 /* Linhas de varredura (intensidade pelo tema: --scan) */
 body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 100; opacity: calc(var(--scan) * 1);
@@ -737,3 +738,4 @@ button.ghost.warn-btn { color: var(--warn); border-color: var(--warn); }
 /* Você: atalhos para Memória e Tarefas */
 .you-links { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem; }
 .you-links button { display: grid; justify-content: start; justify-items: start; align-content: center; text-align: left; gap: 0.1rem; min-height: 58px; padding: 0.55rem 0.8rem; }
+.you-links .you-main { grid-column: 1 / -1; }

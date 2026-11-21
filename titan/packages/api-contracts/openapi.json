@@ -411,6 +411,24 @@
         "title": "CancelIn",
         "type": "object"
       },
+      "CardIO": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "on": {
+            "title": "On",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "on"
+        ],
+        "title": "CardIO",
+        "type": "object"
+      },
       "CasaBrief": {
         "properties": {
           "demo": {
@@ -2855,6 +2873,80 @@
           "show"
         ],
         "title": "Overview",
+        "type": "object"
+      },
+      "PersonalIO": {
+        "properties": {
+          "bg": {
+            "default": "brilho",
+            "title": "Bg",
+            "type": "string"
+          },
+          "call": {
+            "default": "senhor",
+            "title": "Call",
+            "type": "string"
+          },
+          "call_custom": {
+            "default": "",
+            "maxLength": 16,
+            "title": "Call Custom",
+            "type": "string"
+          },
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/CardIO"
+            },
+            "maxItems": 20,
+            "title": "Cards",
+            "type": "array"
+          },
+          "color": {
+            "default": "azul",
+            "title": "Color",
+            "type": "string"
+          },
+          "custom": {
+            "default": "#3ee8ff",
+            "title": "Custom",
+            "type": "string"
+          },
+          "font": {
+            "default": "M",
+            "title": "Font",
+            "type": "string"
+          },
+          "name": {
+            "default": "TITAN",
+            "maxLength": 16,
+            "title": "Name",
+            "type": "string"
+          },
+          "nav": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Nav",
+            "type": "array"
+          },
+          "orb": {
+            "default": "vidro",
+            "title": "Orb",
+            "type": "string"
+          },
+          "orb_anim": {
+            "default": true,
+            "title": "Orb Anim",
+            "type": "boolean"
+          },
+          "tone": {
+            "default": "formal",
+            "title": "Tone",
+            "type": "string"
+          }
+        },
+        "title": "PersonalIO",
         "type": "object"
       },
       "Place": {
@@ -6295,6 +6387,117 @@
           }
         },
         "summary": "Notes Delivered",
+        "tags": [
+          "brain"
+        ]
+      }
+    },
+    "/api/v1/brain/personal": {
+      "delete": {
+        "description": "Voltar ao padrão.",
+        "operationId": "reset_personal_api_v1_brain_personal_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalIO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Reset Personal",
+        "tags": [
+          "brain"
+        ]
+      },
+      "get": {
+        "description": "Você → Personalizar (o jeito desta conta).",
+        "operationId": "get_personal_api_v1_brain_personal_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalIO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get Personal",
+        "tags": [
+          "brain"
+        ]
+      },
+      "put": {
+        "operationId": "put_personal_api_v1_brain_personal_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonalIO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalIO"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Put Personal",
         "tags": [
           "brain"
         ]

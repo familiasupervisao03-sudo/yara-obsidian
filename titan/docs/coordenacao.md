@@ -141,3 +141,7 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
   no Futurista passa para o Vidro uma vez), orbe de vidro no Início, barra de baixo com 5 botões (orbe "Falar" no meio;
   "Você" = Memória + Sistema), modo leve sem desfoque/animação. Casa e Central continuam com o visual delas ·
   (`apps/web/src/theme/vidro.css`, `themes.ts`, `Shell.tsx`)
+- 2026-11-21 · TITAN · Você → Personalizar: cor (6 + livre), fundo, orbe (Vidro/Reator/Simples), cartões do Início
+  (ligar/ordem), barra de baixo (4 botões + orbe), letra, nome do assistente, tratamento e jeito de falar. Salvo por
+  conta (`/api/v1/brain/personal`); mensagens prontas e a IA seguem o tratamento escolhido · (`titan/brain/personal.py`,
+  `apps/web/src/personal.ts`, `PersonalizeView.tsx`, `Home.tsx`, `Shell.tsx`)

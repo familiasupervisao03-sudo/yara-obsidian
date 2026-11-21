@@ -54,3 +54,41 @@
 
 .acard-proto .jv-go { margin-top: 0.4rem; }
 .acard-proto ul { margin: 0.2rem 0; padding-left: 1.1rem; font-size: 0.85rem; }
+
+/* Você → Personalizar */
+.pz { display: grid; gap: 0.75rem; padding-bottom: 76px; }
+.pz .card { margin: 0; }
+.pz-colors { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 0.4rem; }
+.pz-dot { width: 40px; height: 40px; min-height: 0; padding: 0; border-radius: 50% !important; border: 2px solid transparent; flex: none; cursor: pointer; }
+.pz-dot.on { border-color: #fff; box-shadow: 0 0 0 2px var(--bg), 0 0 12px rgba(255, 255, 255, 0.35); }
+.pz-free { background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); position: relative; overflow: hidden; display: block; }
+.pz-free input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; border: 0; padding: 0; }
+.pz-seg { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.pz-seg button.on, .pz-seg button.on:hover:not(:disabled) { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.pz-orbs { display: flex; gap: 0.8rem; margin-bottom: 0.4rem; }
+.pz-orb { display: grid; justify-items: center; gap: 0.35rem; background: transparent; color: var(--muted); border: 1px solid transparent;
+  box-shadow: none; padding: 0.4rem 0.6rem; min-height: 0; font-weight: 500; border-radius: 14px; }
+.pz-orb.on { color: var(--text); border-color: var(--accent-line); background: var(--accent-soft); }
+.pz-orb .glass-orb { width: 48px; height: 48px; animation: none; }
+.pz-orb-vidro { --orb: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.55), transparent 22%), radial-gradient(circle at 60% 65%, var(--accent-2, #9a6bff), transparent 55%), radial-gradient(circle at 40% 55%, var(--accent), transparent 60%), radial-gradient(circle at 50% 50%, #0d2a4a, #050a14 70%); }
+.pz-orb-reator { --orb: radial-gradient(circle, #ffffff 0, var(--accent) 18%, rgba(var(--accent-rgb), 0.4) 45%, transparent 68%); }
+.pz-orb-simples { --orb: radial-gradient(circle at 50% 50%, var(--accent), var(--accent-3, var(--accent))); }
+.pz-orb .glass-orb::after { display: none; }
+.pz-list { list-style: none; padding: 0; margin: 0; }
+.pz-list li { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.3rem 0; border-top: 1px solid var(--line); }
+.pz-list li:first-child { border-top: 0; }
+.pz-list label.check { margin: 0; }
+.pz-arrows { display: flex; gap: 0.3rem; }
+.pz-arrows button { min-width: 34px; padding: 0.2rem 0.4rem; }
+.pz-slots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.4rem; align-items: center; }
+.pz-slots select { font-size: 0.8rem; padding: 0.35rem 0.2rem; }
+.pz-slot-orb { display: grid; justify-items: center; gap: 0.2rem; font-size: 0.75rem; color: var(--muted); }
+.pz-slot-orb .glass-orb { width: 36px; height: 36px; animation: none; }
+.pz-slot-orb .glass-orb::after { display: none; }
+.pz-field { display: grid; gap: 0.3rem; font-size: 0.85rem; }
+.pz-label { margin: 0.7rem 0 0.3rem; }
+.pz-call { margin-top: 0.5rem; }
+.pz-example { border: 1px solid var(--line); border-radius: 12px; padding: 0.5rem 0.7rem; background: rgba(255, 255, 255, 0.04); }
+.pz-example b { color: var(--accent); }
+.pz-actions { display: flex; gap: 0.5rem; }
+.pz-actions button { flex: 1; }

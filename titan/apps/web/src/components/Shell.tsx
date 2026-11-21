@@ -15,8 +15,10 @@ import { Icon, type IconName } from "./icons";
 import { OfflineScreen } from "./OfflineScreen";
 import { ShareView, type Shared } from "./ShareView";
 import { androidApp, diagNote, notify } from "../notify";
+import { applyPersonal, personalApi, usePersonal, type NavId } from "../personal";
+import { PersonalizeView } from "./PersonalizeView";
 
-export type View = "home" | "chat" | "voice" | "news" | "memory" | "tasks" | "system";
+export type View = "home" | "chat" | "voice" | "news" | "memory" | "tasks" | "system" | "personalize";
 
 /** Pedido para abrir a conversa num modo (vindo do Início, de um atalho ou de algo compartilhado). */
 export interface ChatIntent {
@@ -49,21 +51,25 @@ function readLaunch(): { view?: View; intent?: ChatIntent; shared?: Shared; conv
   return {};
 }
 
-// Barra de baixo da interface nova: Início · Conversa · orbe (Falar) · Notícias · Você.
-// "Você" junta Memória e Sistema (a Memória abre por lá e pelo Início).
-const TABS: { id: View; label: string; icon: IconName; orb?: boolean }[] = [
-  { id: "home", label: "Início", icon: "home" },
-  { id: "chat", label: "Conversa", icon: "chat" },
-  { id: "voice", label: "Falar", icon: "mic", orb: true },
-  { id: "news", label: "Notícias", icon: "news" },
-  { id: "system", label: "Você", icon: "user" },
-];
-const TAB_OF: Partial<Record<View, View>> = { memory: "system", tasks: "system" };
+// Barra de baixo da interface nova: 4 botões que o dono escolhe (Você → Personalizar) e a orbe
+// "Falar" no meio. Padrão: Início · Conversa · orbe · Notícias · Você ("Você" junta Memória e Sistema).
+type Tab = { id: View | "casa"; label: string; icon: IconName; orb?: boolean };
+const NAV_TAB: Record<NavId, Tab> = {
+  home: { id: "home", label: "Início", icon: "home" }, chat: { id: "chat", label: "Conversa", icon: "chat" },
+  news: { id: "news", label: "Notícias", icon: "news" }, memory: { id: "memory", label: "Memória", icon: "brain" },
+  system: { id: "system", label: "Você", icon: "user" }, casa: { id: "casa", label: "Casa", icon: "plug" },
+};
+const ORB_TAB: Tab = { id: "voice", label: "Falar", icon: "mic", orb: true };
+function tabsFor(nav: NavId[]): Tab[] {
+  const t = nav.map((n) => NAV_TAB[n] ?? NAV_TAB.home);
+  return [t[0], t[1], ORB_TAB, t[2], t[3]];
+}
+const VIEWS: View[] = ["home", "chat", "voice", "news", "memory", "tasks", "system", "personalize"];
 
 function loadView(): View {
   try {
     const v = localStorage.getItem("titan.view");
-    if (v && (TABS.some((t) => t.id === v) || v === "tasks")) return v as View;
+    if (v && VIEWS.includes(v as View)) return v as View;
   } catch {
     /* armazenamento indisponível */
   }
@@ -91,6 +97,12 @@ export function Shell({ session, onLogout, onExpired }: {
   const [error, setError] = useState<string | null>(null);
   const seenApprovals = useRef<number | null>(null);
   const wasOffline = useRef(false);
+  const personal = usePersonal();
+  const tabs = tabsFor(personal.nav);
+  // aba acesa: Memória/Tarefas/Personalizar ficam dentro de "Você" (se a Memória não estiver na barra)
+  const tabOf = (v: View): string => (v === "memory" && personal.nav.includes("memory") ? "memory"
+    : v === "memory" || v === "tasks" || v === "personalize" ? "system" : v);
+  useEffect(() => { personalApi.get().then(applyPersonal).catch(() => undefined); }, []);
 
   // Limpa o endereço do atalho/compartilhamento (recarregar não repete a ação).
   useEffect(() => {
@@ -189,7 +201,7 @@ export function Shell({ session, onLogout, onExpired }: {
   return (
     <div className="app">
       <header className="topbar">
-        <button className="brand" onClick={() => go("home")} aria-label="TITAN — ir para o início">TITAN</button>
+        <button className="brand" onClick={() => go("home")} aria-label={`${personal.name} — ir para o início`}>{personal.name.toUpperCase()}</button>
         {status && (
           <span className={`badge ${hybrid ? "badge-warn" : "badge-ok"}`}>{hybrid ? "HÍBRIDO" : "LOCAL"}</span>
         )}
@@ -223,9 +235,10 @@ export function Shell({ session, onLogout, onExpired }: {
       )}
 
       <nav className="tabs" aria-label="Seções">
-        {TABS.map((t) => (
-          <button key={t.id} className={`tab ${t.orb ? "tab-orb" : ""} ${(TAB_OF[view] ?? view) === t.id ? "active" : ""}`}
-                  onClick={() => go(t.id)} aria-current={(TAB_OF[view] ?? view) === t.id ? "page" : undefined}>
+        {tabs.map((t) => (
+          <button key={t.id} className={`tab ${t.orb ? "tab-orb" : ""} ${tabOf(view) === t.id ? "active" : ""}`}
+                  onClick={() => (t.id === "casa" ? window.location.assign("/casa") : go(t.id))}
+                  aria-current={tabOf(view) === t.id ? "page" : undefined}>
             <span className="tab-icon"><Icon name={t.icon} size={20} /></span>
             {t.orb && <span className="tab-orb-ball" aria-hidden="true"><Icon name="mic" size={22} /></span>}
             <span>{t.label}</span>
@@ -258,7 +271,8 @@ export function Shell({ session, onLogout, onExpired }: {
         {view === "tasks" && <TasksView onError={handleError} onChanged={refresh} />}
         {view === "system" && <SystemView status={status} settings={settings} onRefresh={refresh}
                                           pendingApprovals={pendingApprovals} onTasks={() => go("tasks")}
-                                          onMemory={() => go("memory")} />}
+                                          onMemory={() => go("memory")} onPersonalize={() => go("personalize")} />}
+        {view === "personalize" && <PersonalizeView username={session.user.username} onBack={() => go("system")} />}
       </main>
       {shared && <ShareView shared={shared} webEnabled={settings?.config.web_enabled === true}
                             onAction={openChat} onClose={() => setShared(null)} />}

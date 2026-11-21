@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Fragment, useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { SystemStatus } from "@titan/api-contracts";
 import { brain, displayName, fmtWhen, type Goal, type HomeData, type Todo } from "../brain";
 import { remindersChanged } from "../reminders";
 import { Icon } from "./icons";
 import { LeaveSheet, ProtocolsCard, WeatherCard } from "./JarvisCards";
+import { addressOf, usePersonal, type CardId } from "../personal";
 import type { ChatIntent, View } from "./Shell";
 
 // Rótulos de apresentação para os serviços informados por /system/status.
@@ -30,6 +31,7 @@ export function Home({ username, status, offline, pendingApprovals, onGo, onChat
   const [data, setData] = useState<HomeData | null>(null);
   const [allTodos, setAllTodos] = useState<Todo[] | null>(null);
   // aviso "O senhor saiu de casa" abre o app com ?acao=saida
+  const personal = usePersonal();
   const [leaving, setLeaving] = useState(() => new URLSearchParams(window.location.search).get("acao") === "saida");
 
   const load = useCallback(() => {
@@ -46,38 +48,45 @@ export function Home({ username, status, offline, pendingApprovals, onGo, onChat
   const web = status?.services.some((s) => s.name === "internet" && s.state === "online");
   const cont = data?.continue_conversation;
 
-  return (
-    <section className="home" aria-labelledby="home-title">
+  const header = (
+    <header className="home-head">
+        <p className="eyebrow">Início · {new Date().toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" })}</p>
+        <h1 id="home-title" className="home-title">{data?.greeting ?? "Olá"}, {personal.call === "senhor" && personal.name === "TITAN" ? displayName(username) : addressOf(personal, username)}.</h1>
+        {offline && <p className="muted small">Sem conexão com o notebook.</p>}
+      </header>
+  );
+  const orbOn = personal.cards.some((c) => c.id === "orbe" && c.on);
+
+  const blocks: Record<CardId, ReactNode> = {
+    orbe: <>
       <div className="home-orb" aria-hidden="true">
         <div className="glass-orb">
           <svg viewBox="0 0 24 24" fill="none" stroke="#e8f1ff" strokeWidth="1.6"><path d="M12 2.5 20.5 7.4v9.2L12 21.5 3.5 16.6V7.4z" /><path d="M8 8.5h8M12 8.5v8" /></svg>
         </div>
-        <span className={`online-pill ${offline ? "off" : ""}`}><i />{offline ? "Sem conexão com o notebook" : "TITAN está online"}</span>
+        <span className={`online-pill ${offline ? "off" : ""}`}><i />{offline ? "Sem conexão com o notebook" : `${personal.name} está online`}</span>
       </div>
-      <header className="home-head">
-        <p className="eyebrow">Início · {new Date().toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" })}</p>
-        <h1 id="home-title" className="home-title">{data?.greeting ?? "Olá"}, {displayName(username)}.</h1>
-        {offline && <p className="muted small">Sem conexão com o notebook.</p>}
-      </header>
-      {leaving && <LeaveSheet onClose={() => setLeaving(false)} />}
-
+    </>,
+    clima: <>
       <WeatherCard onSetup={() => { window.location.hash = "clima"; onGo("system"); }} />
-
+    </>,
+    continuar: <>
       {cont && (
         <section className="card continue" aria-label="Continuar conversa">
-          <h2 className="card-title">{cont.origin === "titan" ? "O TITAN te mandou" : "Continuar conversa"}</h2>
+          <h2 className="card-title">{cont.origin === "titan" ? `O ${personal.name} te mandou` : "Continuar conversa"}</h2>
           <div className="continue-row">
             <div className="continue-text">
               <strong>{cont.title}</strong>
-              <span className="muted small">{cont.last_role === "user" ? "Você" : "TITAN"}: “{cont.last_text}”</span>
+              <span className="muted small">{cont.last_role === "user" ? "Você" : personal.name}: “{cont.last_text}”</span>
             </div>
             <button onClick={() => onOpenConversation(cont.conversation_id)}>Abrir ›</button>
           </div>
         </section>
       )}
-
+    </>,
+    metas: <>
       <GoalsCard goals={data?.goals ?? null} onChanged={load} onError={onError} onChat={onChat} />
-
+    </>,
+    hoje: <>
       <section className="card" aria-labelledby="home-today">
         <header className="card-head">
           <h2 id="home-today" className="card-title">Hoje</h2>
@@ -92,7 +101,8 @@ export function Home({ username, status, offline, pendingApprovals, onGo, onChat
         )}
         <AddTodo onAdded={reloadAll} onError={onError} />
       </section>
-
+    </>,
+    avisos: <>
       {data && data.pending_memories > 0 && (
         <div className="card card-attention" role="status">
           <span><Icon name="brain" size={16} /> {data.pending_memories === 1 ? "1 coisa que aprendi espera você aprovar"
@@ -106,9 +116,11 @@ export function Home({ username, status, offline, pendingApprovals, onGo, onChat
           <button className="small" onClick={() => onGo("tasks")}>Revisar aprovações</button>
         </div>
       )}
-
+    </>,
+    protocolos: <>
       <ProtocolsCard />
-
+    </>,
+    atalhos: <>
       <div className="home-actions">
         <button className="action" onClick={() => onChat({ newConversation: true })}>
           <span className="action-icon"><Icon name="chat" size={22} /></span>
@@ -128,7 +140,8 @@ export function Home({ username, status, offline, pendingApprovals, onGo, onChat
           <span className="action-text"><strong>Memória</strong><span>O que eu lembro</span></span>
         </button>
       </div>
-
+    </>,
+    status: <>
       {status && (
         <details className="card meters">
           <summary className="card-title">Status do sistema</summary>
@@ -152,9 +165,20 @@ export function Home({ username, status, offline, pendingApprovals, onGo, onChat
           )}
         </details>
       )}
+    </>,
+  };
+
+  return (
+    <section className="home" aria-labelledby="home-title">
+      {leaving && <LeaveSheet onClose={() => setLeaving(false)} />}
+      {/* Você → Personalizar: quais cartões aparecem e em que ordem */}
+      {!orbOn && header}
+      {personal.cards.filter((c) => c.on).map((c) => (
+        <Fragment key={c.id}>{blocks[c.id]}{c.id === "orbe" && header}</Fragment>
+      ))}
 
       <div className="talk-dock">
-        <button className="talk" onClick={() => onGo("voice")}><Icon name="mic" size={20} /> Falar com o TITAN</button>
+        <button className="talk" onClick={() => onGo("voice")}><Icon name="mic" size={20} /> Falar com o {personal.name}</button>
       </div>
     </section>
   );

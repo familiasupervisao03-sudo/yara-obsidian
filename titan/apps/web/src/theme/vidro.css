@@ -116,3 +116,11 @@
 [data-preview="vidro-roxo"] .theme-swatch {
   background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.6), transparent 25%),
               radial-gradient(circle at 60% 65%, #d06bff, transparent 60%), radial-gradient(circle at 40% 50%, #b48cff, #1a0b40 75%); }
+
+/* Personalizar → orbe: Reator (anel de energia) ou Simples (cor lisa); "parada" sem animação */
+:root[data-orb="reator"] { --orb: radial-gradient(circle, #ffffff 0, var(--accent) 18%, rgba(var(--accent-rgb), 0.4) 45%, transparent 68%); }
+:root[data-orb="reator"] .glass-orb::after { inset: -6px; border: 2px dashed rgba(var(--accent-rgb), 0.6); }
+:root[data-orb="simples"] { --orb: radial-gradient(circle at 50% 50%, var(--accent), var(--accent-3)); }
+:root[data-orb="simples"] .glass-orb { box-shadow: none; }
+:root[data-orb="simples"] .glass-orb::after { display: none; }
+:root[data-orb-still] .glass-orb, :root[data-orb-still][data-theme^="vidro"] .orb { animation: none; }

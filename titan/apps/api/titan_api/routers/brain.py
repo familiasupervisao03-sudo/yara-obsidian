@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 
 from titan.audit import log as audit
 from titan.brain import extract, service, store
+from titan.brain import personal
 from titan.brain import prefs as brain_prefs
 from titan.brain.questions import BY_KEY, LABELS, QUESTIONS
 from titan.db.models import BrainMemory, Conversation, Goal, Message, TitanNote, Todo, utcnow
@@ -519,8 +520,11 @@ def notes(pending: bool = True, device: str = Query(default="", max_length=40, p
         stmt = stmt.where(TitanNote.delivered_at.is_(None),
                           TitanNote.created_at >= utcnow() - timedelta(days=2))
     rows = db.scalars(stmt.order_by(TitanNote.created_at.desc()).limit(50))
-    return [NoteOut(id=n.id, kind=n.kind, title=n.title, body=n.body, conversation_id=n.conversation_id,
-                    todo_id=n.todo_id, created_at=n.created_at, delivered=n.delivered_at is not None) for n in rows]
+    # Você → Personalizar: "senhor" vira o tratamento escolhido e "TITAN ·" o nome do assistente
+    p, user = personal.get(db, cu.user.id), cu.user.username
+    return [NoteOut(id=n.id, kind=n.kind, title=personal.adapt(n.title, p, user), body=personal.adapt(n.body, p, user),
+                    conversation_id=n.conversation_id, todo_id=n.todo_id, created_at=n.created_at,
+                    delivered=n.delivered_at is not None) for n in rows]
 
 
 @router.post("/notes/delivered", status_code=204)
@@ -534,6 +538,49 @@ def notes_delivered(body: DeliveredIn, cu: CurrentUser = Depends(current_user), 
         if not body.device or body.everywhere:
             n.delivered_at = n.delivered_at or utcnow()
     return Response(status_code=204)
+
+
+class CardIO(BaseModel):
+    id: str
+    on: bool
+
+
+class PersonalIO(BaseModel):
+    color: str = "azul"
+    custom: str = "#3ee8ff"
+    bg: str = "brilho"
+    orb: str = "vidro"
+    orb_anim: bool = True
+    cards: list[CardIO] = Field(default_factory=list, max_length=20)
+    nav: list[str] = Field(default_factory=list, max_length=4)
+    font: str = "M"
+    name: str = Field(default="TITAN", max_length=16)
+    call: str = "senhor"
+    call_custom: str = Field(default="", max_length=16)
+    tone: str = "formal"
+
+
+@router.get("/personal", response_model=PersonalIO)
+def get_personal(cu: CurrentUser = Depends(current_user), db: DBSession = Depends(get_db)):
+    """Você → Personalizar (o jeito desta conta)."""
+    return PersonalIO(**personal.get(db, cu.user.id))
+
+
+@router.put("/personal", response_model=PersonalIO, responses={422: {"model": ErrorResponse}})
+def put_personal(body: PersonalIO, cu: CurrentUser = Depends(current_user), db: DBSession = Depends(get_db)):
+    try:
+        saved = personal.save(db, cu.user.id, body.model_dump())
+    except personal.PersonalError as exc:
+        return _err(422, "validation_error", str(exc))
+    audit.record(db, "brain.personal", actor_type="user", actor_id=cu.user.id, entity_type="preferences",
+                 data={k: saved[k] for k in ("color", "bg", "orb", "font", "call", "tone")})
+    return PersonalIO(**saved)
+
+
+@router.delete("/personal", response_model=PersonalIO)
+def reset_personal(cu: CurrentUser = Depends(current_user), db: DBSession = Depends(get_db)):
+    """Voltar ao padrão."""
+    return PersonalIO(**personal.reset(db, cu.user.id))
 
 
 class BrainPrefsIO(BaseModel):

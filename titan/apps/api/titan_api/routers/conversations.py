@@ -155,6 +155,7 @@ def post_message(
         style = brain.with_memory(style, casa_chat.context_block(ctx.settings, ctx.session_factory, cu.user.id))
         style = brain.with_memory(style, _news_context(ctx, cu, body.content))
         style = brain.with_memory(style, _weather_context(ctx, cu, body.content))
+        style = brain.with_memory(style, _personal_style(ctx, cu))
         reply = provider.chat(turns, style=style)
         reply_msg = repo.add_message(
             db, conv, "assistant", reply.content.strip() + footer,
@@ -274,6 +275,7 @@ async def post_message_stream(
                 st = brain.with_memory(st, casa_chat.context_block(ctx.settings, ctx.session_factory, cu.user.id))
                 st = brain.with_memory(st, _news_context(ctx, cu, body.content))
                 st = brain.with_memory(st, _weather_context(ctx, cu, body.content))
+                st = brain.with_memory(st, _personal_style(ctx, cu))
                 replied: dict = {}
 
                 def emit_and_keep(kind: str, data: dict) -> None:
@@ -344,6 +346,23 @@ def _weather_context(ctx: AppContext, cu: CurrentUser, text: str) -> str:
         return ""
 
 
+def _personal_style(ctx: AppContext, cu: CurrentUser) -> str:
+    """Nome do assistente, tratamento e jeito de falar escolhidos em Você → Personalizar."""
+    from titan.brain import personal
+
+    try:
+        with ctx.session_factory() as db:
+            return personal.style_block(personal.get(db, cu.user.id), cu.user.username)
+    except Exception:
+        return ""
+
+
+def _personal_adapt(db, cu: CurrentUser, text: str) -> str:
+    from titan.brain import personal
+
+    return personal.adapt(text, personal.get(db, cu.user.id), cu.user.username)
+
+
 def _protocol_answer(ctx: AppContext, cu: CurrentUser, conversation_id: uuid.UUID, text: str):
     """"Protocolo dormir" → lista o que vai fazer e pergunta; "sim" (até 3 min depois) → executa."""
     from titan.casa.chat import shared_provider
@@ -355,6 +374,7 @@ def _protocol_answer(ctx: AppContext, cu: CurrentUser, conversation_id: uuid.UUI
             if r is None:
                 return None
             reply, action = r
+            reply = _personal_adapt(db, cu, reply)
             conv = repo.get_conversation(db, cu.user.id, conversation_id)
             msg = repo.add_message(db, conv, "assistant", reply, model_provider="titan", model_name="protocolo")
             db.flush()
@@ -395,6 +415,7 @@ def _follow_answer(ctx: AppContext, cu: CurrentUser, conversation_id: uuid.UUID,
                  "Só mostro o que eu achar de verdade, com data e link. Veja em Notícias → Assuntos.")
         if not ctx.settings.news_enabled:
             reply += " (As Notícias estão desligadas: rode no notebook .venv/bin/titan enable-news.)"
+        reply = _personal_adapt(db, cu, reply)
         msg = repo.add_message(db, conv, "assistant", reply, model_provider="titan", model_name="noticias")
         audit.record(db, "news.follow", actor_type="user", actor_id=cu.user.id, entity_type="news_follow",
                      entity_id=str(f.id), data={"topic": f.topic, "via": "chat"})

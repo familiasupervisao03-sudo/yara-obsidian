@@ -10,13 +10,14 @@ const STATE_LABEL: Record<string, string> = {
   online: "ONLINE", offline: "OFFLINE", disabled: "DESATIVADO", unavailable: "INDISPONÍVEL", planned: "PLANEJADO",
 };
 
-export function SystemView({ status, settings, onRefresh, pendingApprovals = 0, onTasks, onMemory }: {
+export function SystemView({ status, settings, onRefresh, pendingApprovals = 0, onTasks, onMemory, onPersonalize }: {
   status: SystemStatus | null;
   settings: SettingsView | null;
   onRefresh: () => void;
   pendingApprovals?: number;
   onTasks?: () => void;
   onMemory?: () => void;
+  onPersonalize?: () => void;
 }) {
   if (!status) return <p className="muted">Carregando…</p>;
   const c = settings?.config ?? {};
@@ -24,6 +25,8 @@ export function SystemView({ status, settings, onRefresh, pendingApprovals = 0, 
     <section className="system-view">
       {onMemory && (
         <div className="you-links">
+          {onPersonalize && <button className="ghost you-main" onClick={onPersonalize}>🎨 Personalizar
+            <span className="muted small">cores, Início, barra de baixo e o jeito do assistente</span></button>}
           <button className="ghost" onClick={onMemory}>🧠 Memória<span className="muted small">o que eu lembro</span></button>
           {onTasks && <button className="ghost" onClick={onTasks}>✅ Tarefas e aprovações
             <span className="muted small">{pendingApprovals > 0 ? `${pendingApprovals} esperando você` : "laboratório"}</span></button>}

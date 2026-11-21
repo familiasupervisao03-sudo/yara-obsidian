@@ -3,12 +3,15 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { CrashScreen, ErrorBoundary } from "./components/ErrorBoundary";
 import { applyAppearance, loadAppearance } from "./theme/themes";
+import { applyPersonal, cachedPersonal } from "./personal";
 import "./theme/futurista.css";
 import "./theme/classico.css";
 import "./theme/vidro.css";
 import "./styles.css";
 
 applyAppearance(loadAppearance()); // antes de desenhar, para não piscar com outro tema
+applyPersonal(cachedPersonal());   // Personalizar (cópia do aparelho; o servidor confirma depois do login)
+window.addEventListener("titan:aparencia", () => applyPersonal(cachedPersonal()));
 
 const root = createRoot(document.getElementById("root")!);
 root.render(
