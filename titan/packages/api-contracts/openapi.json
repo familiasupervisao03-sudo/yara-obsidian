@@ -530,7 +530,7 @@
           "device": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/DeviceOut"
+                "$ref": "#/components/schemas/titan_api__routers__casa__DeviceOut"
               },
               {
                 "type": "null"
@@ -883,71 +883,6 @@
           "online"
         ],
         "title": "DeviceBrief",
-        "type": "object"
-      },
-      "DeviceOut": {
-        "properties": {
-          "aliases": {
-            "title": "Aliases",
-            "type": "string"
-          },
-          "configured": {
-            "title": "Configured",
-            "type": "boolean"
-          },
-          "icon": {
-            "title": "Icon",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "infrared": {
-            "title": "Infrared",
-            "type": "boolean"
-          },
-          "kind": {
-            "title": "Kind",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "online": {
-            "title": "Online",
-            "type": "boolean"
-          },
-          "provider_name": {
-            "title": "Provider Name",
-            "type": "string"
-          },
-          "room": {
-            "title": "Room",
-            "type": "string"
-          },
-          "state": {
-            "additionalProperties": true,
-            "title": "State",
-            "type": "object"
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "name",
-          "icon",
-          "room",
-          "aliases",
-          "configured",
-          "online",
-          "state",
-          "provider_name",
-          "infrared"
-        ],
-        "title": "DeviceOut",
         "type": "object"
       },
       "DevicePatch": {
@@ -2837,6 +2772,23 @@
         "title": "NoteOut",
         "type": "object"
       },
+      "OffIn": {
+        "properties": {
+          "device_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Device Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "device_ids"
+        ],
+        "title": "OffIn",
+        "type": "object"
+      },
       "Overview": {
         "properties": {
           "casa": {
@@ -2903,6 +2855,47 @@
           "show"
         ],
         "title": "Overview",
+        "type": "object"
+      },
+      "Place": {
+        "properties": {
+          "admin1": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Admin1",
+            "type": "string"
+          },
+          "country": {
+            "default": "",
+            "maxLength": 60,
+            "title": "Country",
+            "type": "string"
+          },
+          "lat": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon",
+            "type": "number"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "lat",
+          "lon"
+        ],
+        "title": "Place",
         "type": "object"
       },
       "PlanIn": {
@@ -3008,6 +3001,148 @@
           }
         },
         "title": "PreferencesIO",
+        "type": "object"
+      },
+      "PresenceIn": {
+        "properties": {
+          "state": {
+            "enum": [
+              "home",
+              "away"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "PresenceIn",
+        "type": "object"
+      },
+      "PresenceOut": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "presence": {
+            "title": "Presence",
+            "type": "string"
+          },
+          "ran": {
+            "items": {
+              "$ref": "#/components/schemas/Result"
+            },
+            "title": "Ran",
+            "type": "array"
+          }
+        },
+        "required": [
+          "presence",
+          "changed",
+          "ran",
+          "note"
+        ],
+        "title": "PresenceOut",
+        "type": "object"
+      },
+      "ProtocolIn": {
+        "properties": {
+          "emoji": {
+            "default": "⚡",
+            "maxLength": 4,
+            "title": "Emoji",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "quiet_until": {
+            "default": "",
+            "pattern": "^$|^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Quiet Until",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "maxItems": 30,
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProtocolIn",
+        "type": "object"
+      },
+      "ProtocolOut": {
+        "properties": {
+          "custom": {
+            "title": "Custom",
+            "type": "boolean"
+          },
+          "emoji": {
+            "title": "Emoji",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "quiet_until": {
+            "title": "Quiet Until",
+            "type": "string"
+          },
+          "special": {
+            "title": "Special",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "emoji",
+          "special",
+          "quiet_until",
+          "steps",
+          "lines",
+          "summary",
+          "custom"
+        ],
+        "title": "ProtocolOut",
         "type": "object"
       },
       "QuestionOut": {
@@ -3116,6 +3251,29 @@
         "title": "ReplyIn",
         "type": "object"
       },
+      "Result": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "ok",
+          "detail"
+        ],
+        "title": "Result",
+        "type": "object"
+      },
       "ResumeIn": {
         "properties": {
           "retry_uncertain": {
@@ -3125,6 +3283,27 @@
           }
         },
         "title": "ResumeIn",
+        "type": "object"
+      },
+      "RunOut": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/Result"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "results"
+        ],
+        "title": "RunOut",
         "type": "object"
       },
       "SceneAction": {
@@ -3288,24 +3467,58 @@
         "title": "SessionOut",
         "type": "object"
       },
-      "SettingsOut": {
+      "SettingsIn": {
         "properties": {
-          "config": {
-            "additionalProperties": true,
-            "title": "Config",
-            "type": "object"
+          "arrive_steps": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Step"
+                },
+                "maxItems": 30,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrive Steps"
           },
-          "policies": {
-            "additionalProperties": true,
-            "title": "Policies",
-            "type": "object"
+          "ask_leave": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ask Leave"
+          },
+          "rain_alert": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rain Alert"
+          },
+          "welcome": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Welcome"
           }
         },
-        "required": [
-          "config",
-          "policies"
-        ],
-        "title": "SettingsOut",
+        "title": "SettingsIn",
         "type": "object"
       },
       "ShowIn": {
@@ -3568,6 +3781,30 @@
           "scenes"
         ],
         "title": "StatusOut",
+        "type": "object"
+      },
+      "Step": {
+        "properties": {
+          "device_id": {
+            "pattern": "^[0-9a-f-]{36}$",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "do": {
+            "enum": [
+              "on",
+              "off",
+              "dim"
+            ],
+            "title": "Do",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "do"
+        ],
+        "title": "Step",
         "type": "object"
       },
       "StepIn": {
@@ -4468,6 +4705,195 @@
           "notes"
         ],
         "title": "VoiceStatusOut",
+        "type": "object"
+      },
+      "titan_api__routers__casa__DeviceOut": {
+        "properties": {
+          "aliases": {
+            "title": "Aliases",
+            "type": "string"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "icon": {
+            "title": "Icon",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "infrared": {
+            "title": "Infrared",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "online": {
+            "title": "Online",
+            "type": "boolean"
+          },
+          "provider_name": {
+            "title": "Provider Name",
+            "type": "string"
+          },
+          "room": {
+            "title": "Room",
+            "type": "string"
+          },
+          "state": {
+            "additionalProperties": true,
+            "title": "State",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "icon",
+          "room",
+          "aliases",
+          "configured",
+          "online",
+          "state",
+          "provider_name",
+          "infrared"
+        ],
+        "title": "DeviceOut",
+        "type": "object"
+      },
+      "titan_api__routers__jarvis__DeviceOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "on": {
+            "title": "On",
+            "type": "boolean"
+          },
+          "online": {
+            "title": "Online",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "on",
+          "online"
+        ],
+        "title": "DeviceOut",
+        "type": "object"
+      },
+      "titan_api__routers__jarvis__SettingsOut": {
+        "properties": {
+          "arrive_steps": {
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "title": "Arrive Steps",
+            "type": "array"
+          },
+          "ask_leave": {
+            "title": "Ask Leave",
+            "type": "boolean"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Place"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "presence": {
+            "title": "Presence",
+            "type": "string"
+          },
+          "presence_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presence At"
+          },
+          "quiet_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Until"
+          },
+          "rain_alert": {
+            "title": "Rain Alert",
+            "type": "boolean"
+          },
+          "welcome": {
+            "title": "Welcome",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "place",
+          "rain_alert",
+          "welcome",
+          "ask_leave",
+          "arrive_steps",
+          "presence",
+          "presence_at",
+          "quiet_until"
+        ],
+        "title": "SettingsOut",
+        "type": "object"
+      },
+      "titan_api__schemas__SettingsOut": {
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "title": "Config",
+            "type": "object"
+          },
+          "policies": {
+            "additionalProperties": true,
+            "title": "Policies",
+            "type": "object"
+          }
+        },
+        "required": [
+          "config",
+          "policies"
+        ],
+        "title": "SettingsOut",
         "type": "object"
       }
     }
@@ -6489,7 +6915,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/DeviceOut"
+                    "$ref": "#/components/schemas/titan_api__routers__casa__DeviceOut"
                   },
                   "title": "Response List Devices Api V1 Casa Devices Get",
                   "type": "array"
@@ -6659,7 +7085,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceOut"
+                  "$ref": "#/components/schemas/titan_api__routers__casa__DeviceOut"
                 }
               }
             },
@@ -6732,7 +7158,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceOut"
+                  "$ref": "#/components/schemas/titan_api__routers__casa__DeviceOut"
                 }
               }
             },
@@ -6816,7 +7242,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceOut"
+                  "$ref": "#/components/schemas/titan_api__routers__casa__DeviceOut"
                 }
               }
             },
@@ -7834,6 +8260,712 @@
         ]
       }
     },
+    "/api/v1/jarvis/devices": {
+      "get": {
+        "description": "Aparelhos cadastrados no TITAN Casa desta conta (para escolher nos protocolos).",
+        "operationId": "list_devices_api_v1_jarvis_devices_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/titan_api__routers__jarvis__DeviceOut"
+                  },
+                  "title": "Response List Devices Api V1 Jarvis Devices Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List Devices",
+        "tags": [
+          "jarvis"
+        ]
+      }
+    },
+    "/api/v1/jarvis/leave": {
+      "get": {
+        "description": "O que ficou ligado (para a tela \"Desligo tudo?\").",
+        "operationId": "leave_api_v1_jarvis_leave_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/titan_api__routers__jarvis__DeviceOut"
+                  },
+                  "title": "Response Leave Api V1 Jarvis Leave Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Leave",
+        "tags": [
+          "jarvis"
+        ]
+      }
+    },
+    "/api/v1/jarvis/leave/off": {
+      "post": {
+        "operationId": "leave_off_api_v1_jarvis_leave_off_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OffIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Result"
+                  },
+                  "title": "Response Leave Off Api V1 Jarvis Leave Off Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Leave Off",
+        "tags": [
+          "jarvis"
+        ]
+      }
+    },
+    "/api/v1/jarvis/place": {
+      "delete": {
+        "operationId": "delete_place_api_v1_jarvis_place_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Delete Place",
+        "tags": [
+          "jarvis"
+        ]
+      },
+      "put": {
+        "operationId": "put_place_api_v1_jarvis_place_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Place"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/titan_api__routers__jarvis__SettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Place",
+        "tags": [
+          "jarvis"
+        ]
+      }
+    },
+    "/api/v1/jarvis/places": {
+      "get": {
+        "operationId": "places_api_v1_jarvis_places_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 80,
+              "minLength": 2,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Place"
+                  },
+                  "title": "Response Places Api V1 Jarvis Places Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Places",
+        "tags": [
+          "jarvis"
+        ]
+      }
+    },
+    "/api/v1/jarvis/presence": {
+      "post": {
+        "description": "O app do celular avisa: entrou no Wi-Fi de casa (alcança o notebook pela rede local) ou saiu.",
+        "operationId": "presence_api_v1_jarvis_presence_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresenceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresenceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Presence",
+        "tags": [
+          "jarvis"
+        ]
+      }
+    },
+    "/api/v1/jarvis/protocols": {
+      "get": {
+        "operationId": "list_protocols_api_v1_jarvis_protocols_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProtocolOut"
+                  },
+                  "title": "Response List Protocols Api V1 Jarvis Protocols Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List Protocols",
+        "tags": [
+          "jarvis"
+        ]
+      },
+      "post": {
+        "operationId": "create_protocol_api_v1_jarvis_protocols_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtocolIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtocolOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Create Protocol",
+        "tags": [
+          "jarvis"
+        ]
+      }
+    },
+    "/api/v1/jarvis/protocols/{pid}": {
+      "delete": {
+        "operationId": "remove_protocol_api_v1_jarvis_protocols__pid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Remove Protocol",
+        "tags": [
+          "jarvis"
+        ]
+      },
+      "put": {
+        "operationId": "edit_protocol_api_v1_jarvis_protocols__pid__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtocolIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtocolOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Edit Protocol",
+        "tags": [
+          "jarvis"
+        ]
+      }
+    },
+    "/api/v1/jarvis/protocols/{pid}/run": {
+      "post": {
+        "description": "O dono tocou em Executar (ou segurou o botão da Lousa Limpa).",
+        "operationId": "run_protocol_api_v1_jarvis_protocols__pid__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Protocol",
+        "tags": [
+          "jarvis"
+        ]
+      }
+    },
+    "/api/v1/jarvis/settings": {
+      "get": {
+        "operationId": "get_settings__api_v1_jarvis_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/titan_api__routers__jarvis__SettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get Settings ",
+        "tags": [
+          "jarvis"
+        ]
+      },
+      "put": {
+        "operationId": "put_settings_api_v1_jarvis_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/titan_api__routers__jarvis__SettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Settings",
+        "tags": [
+          "jarvis"
+        ]
+      }
+    },
+    "/api/v1/jarvis/weather": {
+      "get": {
+        "description": "Clima da cidade escolhida (fonte: Open-Meteo). {\"place\": null} se ainda não escolheu.",
+        "operationId": "get_weather_api_v1_jarvis_weather_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Weather Api V1 Jarvis Weather Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get Weather",
+        "tags": [
+          "jarvis"
+        ]
+      }
+    },
     "/api/v1/lessons/{message_id}": {
       "get": {
         "operationId": "get_lesson_api_v1_lessons__message_id__get",
@@ -8682,7 +9814,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsOut"
+                  "$ref": "#/components/schemas/titan_api__schemas__SettingsOut"
                 }
               }
             },

@@ -55,15 +55,79 @@ public class NotesJob extends JobService {
     static synchronized void check(Context c) throws Exception {
         android.content.SharedPreferences p = c.getSharedPreferences("titan", Context.MODE_PRIVATE);
         Exception last = null;
-        for (String server : new String[]{p.getString("server", null), p.getString(MainActivity.KEY_ALT, null)}) {
+        String[] servers = {p.getString("server", null), p.getString(MainActivity.KEY_ALT, null)};
+        for (String server : servers) {
             if (server == null || !server.startsWith("https://")) continue;
-            try { checkAt(c, server); return; } catch (Exception e) { last = e; } // tenta a reserva
+            try {
+                checkAt(c, server);
+                try { presence(c, servers, server); } catch (Exception ignored) { /* tenta na próxima */ }
+                return;
+            } catch (Exception e) { last = e; } // tenta a reserva
         }
+        try { presence(c, servers, null); } catch (Exception ignored) { /* sem notebook: fica para depois */ }
         if (last != null) {
             status(c, "notebook não respondeu (" + last.getClass().getSimpleName() + ")");
             throw last;
         }
         status(c, "sem endereço do notebook salvo");
+    }
+
+    /**
+     * Chegou ou saiu de casa? "Em casa" = no Wi-Fi E alcançando o notebook pelo endereço da rede de
+     * casa (192.168…, 10…). Sem pedir localização. Saída só conta depois de 3 checagens seguidas
+     * (Wi-Fi que pisca não vira "saiu"). Avisa o notebook só quando muda (e tenta de novo se falhar).
+     */
+    static void presence(Context c, String[] servers, String working) throws Exception {
+        String lan = null;
+        for (String s : servers) if (s != null && isLan(s)) lan = s;
+        if (lan == null) return;  // sem endereço da rede de casa: não dá para saber
+        android.content.SharedPreferences ps = c.getSharedPreferences("titan-presenca", Context.MODE_PRIVATE);
+        boolean home = onWifi(c) && reachable(lan);
+        int misses = home ? 0 : ps.getInt("misses", 0) + 1;
+        String now = home ? "home" : misses >= 3 ? "away" : ps.getString("state", "");
+        ps.edit().putInt("misses", Math.min(misses, 10)).putString("state", now).apply();
+        if (now.isEmpty() || now.equals(ps.getString("sent", ""))) return;
+        String server = home ? lan : working;
+        if (server == null) return;  // fora de casa e sem Tailscale: avisa quando conectar
+        String cookie = CookieManager.getInstance().getCookie(server);
+        if (cookie == null || cookie.isEmpty()) return;
+        request(server + "/api/v1/jarvis/presence", "POST", cookie, new JSONObject().put("state", now).toString());
+        ps.edit().putString("sent", now).apply();
+    }
+
+    static boolean isLan(String server) {
+        try {
+            String h = new URL(server).getHost();
+            if (h.startsWith("192.168.") || h.startsWith("10.")) return true;
+            if (h.startsWith("172.")) {
+                int b = Integer.parseInt(h.split("\\.")[1]);
+                return b >= 16 && b <= 31;
+            }
+        } catch (Exception ignored) { }
+        return false;
+    }
+
+    private static boolean onWifi(Context c) {
+        try {
+            android.net.ConnectivityManager cm = c.getSystemService(android.net.ConnectivityManager.class);
+            android.net.NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
+            return nc != null && nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static boolean reachable(String server) {
+        try {
+            HttpURLConnection con = (HttpURLConnection) new URL(server + "/health").openConnection();
+            con.setConnectTimeout(3000);
+            con.setReadTimeout(3000);
+            int code = con.getResponseCode();
+            con.disconnect();
+            return code > 0 && code < 500;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** Guarda o resultado da última checagem (aparece em Sistema → Avisos). */
@@ -89,6 +153,7 @@ public class NotesJob extends JobService {
             String conv = n.optString("conversation_id", "");
             String kind = n.optString("kind", "");
             String target = ("noticia".equals(kind) || "jornal".equals(kind)) ? "titan://acao/noticias"
+                    : ("casa".equals(kind) && n.optString("title", "").contains("saiu")) ? "titan://acao/saida"
                     : UUID.matcher(conv).matches() ? "titan://conversa/" + conv : "titan://acao/inicio";
             Notifier.show(c, n.getString("id").hashCode(), n.optString("title", "TITAN"), n.optString("body", ""),
                     target, "lembrete".equals(n.optString("kind")));

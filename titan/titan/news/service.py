@@ -275,7 +275,10 @@ def _note(db: DBSession, user_id: uuid.UUID, kind: str, title: str, body: str, n
 def rank_for_user(db: DBSession, user_id: uuid.UUID, now: datetime, provider_factory=None,
                   hours: int = 36) -> int:
     """Dá nota às histórias recentes, analisa as importantes e avisa no celular. Devolve quantos avisos."""
+    from titan.jarvis.service import news_quiet
+
     weights = interests(db, user_id)
+    quiet = news_quiet(db, user_id, now)
     stories = list(db.scalars(select(NewsStory).where(NewsStory.last_at >= now - timedelta(hours=hours))))
     counts = dict(db.execute(select(NewsItem.story_id, func.count(func.distinct(NewsItem.source)))
                              .where(NewsItem.story_id.in_([s.id for s in stories]))
@@ -298,6 +301,8 @@ def rank_for_user(db: DBSession, user_id: uuid.UUID, now: datetime, provider_fac
         # avisa só o que é novo (nas primeiras horas): ligar o TITAN não despeja notícia velha no celular
         if important and not us.notified and _aware(st.first_at) >= now - timedelta(hours=6):
             us.notified = True
+            if quiet:  # Protocolo Dormir: a notícia fica na aba, sem apitar o celular
+                continue
             items = story_sources(db, st.id)
             names = ", ".join(sorted({i.source for i in items}))
             why = (json.loads(us.analysis).get("por_que_importa") if us.analysis else "") or ""

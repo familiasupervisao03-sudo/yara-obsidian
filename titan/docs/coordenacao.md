@@ -63,7 +63,7 @@ Este caderno existe para **uma não atrapalhar a outra**. Toda conversa:
 | `packages/api-contracts/openapi.json` | gerado: só rodar o script |
 | `README.md`, `CLAUDE.md`, este caderno | todos lêem |
 
-**Migrações do banco:** a próxima livre é a **0010** (0008 = TITAN.md; 0009 = Notícias). Antes de criar uma, **reserve aqui**
+**Migrações do banco:** a próxima livre é a **0011** (0008 = TITAN.md; 0009 = Notícias; 0010 = Jarvis). Antes de criar uma, **reserve aqui**
 (escreva "0008 — reservada pela conversa X para Y") e só então crie. Nunca duas com o mesmo número.
 
 ## Reservas (migrações e arquivos compartilhados em uso)
@@ -132,3 +132,8 @@ Formato: `AAAA-MM-DD · CONVERSA · o que fez · arquivos compartilhados que mex
 - 2026-11-16 · CENTRAL · Realme: app morre "duro" ao carregar a tela (tela preta, sem aviso). Diário gravado na hora
   (commit), conta mortes ao carregar; 2 seguidas → modo seguro (WebView sem placa de vídeo + leve); 3 → tela de
   problema. APKs 2.0.3 / 1.5.3 · (`apps/android/app/**`)
+- 2026-11-21 · TITAN · Funções do Jarvis: clima (Open-Meteo, aviso de chuva, cartão no Início), chegada/saída de
+  casa (app Android percebe pela rede de casa; boas-vindas e "desligo tudo?"), protocolos (Dormir, Festa, Filme,
+  Acordar, Lousa Limpa; sempre perguntam antes). Migração 0010. Usa o TITAN Casa só por funções dele (sem mexer em
+  `titan/casa/**`). Android 2.0.5 / 1.5.5 no código, **APK não gerado** (chave de assinatura perdida no
+  reinício do servidor de testes) · (`titan/jarvis/**`, `routers/jarvis.py`, `apps/android/app/**`)

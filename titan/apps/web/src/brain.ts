@@ -43,6 +43,8 @@ export type Action =
   | { type: "meta_nova"; id: string; title: string; line: string }
   | { type: "manual"; id: string; line: string; section: string; status: string }
   | { type: "assunto"; id: string; title: string }
+  | { type: "protocolo"; id: string; name: string; emoji: string; special: string; lines: string[] }
+  | { type: "protocolo_feito"; id: string; name: string; emoji: string; results: { name: string; ok: boolean; detail: string }[] }
   | { type: "bloqueado"; detail: string };
 
 /** TITAN.md: o manual de como o TITAN age com o dono. */

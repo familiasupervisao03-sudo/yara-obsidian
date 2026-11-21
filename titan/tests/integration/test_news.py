@@ -69,9 +69,13 @@ def _setup(settings):
     return engine, make_session_factory(engine)
 
 
-def test_coleta_junta_o_mesmo_fato_avisa_e_cada_conta_ve_o_seu(settings):
+def test_coleta_junta_o_mesmo_fato_avisa_e_cada_conta_ve_o_seu(settings, monkeypatch):
+    import titan_api.routers.news as news_router
     from titan.db.models import NewsStory, TitanNote, User
     from titan.news import service
+
+    # a lista mostra as últimas 72 h: o "agora" do servidor fica no dia dos feeds de exemplo
+    monkeypatch.setattr(news_router, "utcnow", lambda: NOW + timedelta(hours=1))
 
     engine, sf = _setup(settings)
     report = service.tick(settings, sf, fake_fetch, None, now=NOW)

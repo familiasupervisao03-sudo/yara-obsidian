@@ -34,7 +34,7 @@ function readLaunch(): { view?: View; intent?: ChatIntent; shared?: Shared; conv
   const acao = q.get("acao");
   const conversa = q.get("conversa");
   if (conversa && /^[0-9a-f-]{36}$/.test(conversa)) return { view: "chat", conversation: conversa };
-  if (acao === "inicio") return { view: "home" };
+  if (acao === "inicio" || acao === "saida") return { view: "home" };
   if (acao === "memoria") return { view: "memory" };
   if (acao === "noticias") return { view: "news" };   // aviso de notícia/jornal no celular
   if (window.location.pathname === "/compartilhar") {

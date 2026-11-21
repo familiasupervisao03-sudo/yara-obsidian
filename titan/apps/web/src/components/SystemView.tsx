@@ -1,5 +1,6 @@
 import type { SettingsView, SystemStatus } from "@titan/api-contracts";
 import { AppearancePanel } from "./AppearancePanel";
+import { JarvisPanel } from "./JarvisPanel";
 import { ManualPanel } from "./ManualPanel";
 import { NotificationsPanel } from "./NotificationsPanel";
 import { PreferencesPanel } from "./PreferencesPanel";
@@ -60,6 +61,7 @@ export function SystemView({ status, settings, onRefresh, pendingApprovals = 0, 
       )}
       <ManualPanel />
       <TitanMessagesPanel />
+      <JarvisPanel open={typeof window !== "undefined" && window.location.hash === "#clima"} />
       <AppearancePanel />
       <NotificationsPanel />
       <PreferencesPanel />

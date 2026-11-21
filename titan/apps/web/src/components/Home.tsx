@@ -3,6 +3,7 @@ import type { SystemStatus } from "@titan/api-contracts";
 import { brain, displayName, fmtWhen, type Goal, type HomeData, type Todo } from "../brain";
 import { remindersChanged } from "../reminders";
 import { Icon } from "./icons";
+import { LeaveSheet, ProtocolsCard, WeatherCard } from "./JarvisCards";
 import type { ChatIntent, View } from "./Shell";
 
 // Rótulos de apresentação para os serviços informados por /system/status.
@@ -28,6 +29,8 @@ export function Home({ username, status, offline, pendingApprovals, onGo, onChat
 }) {
   const [data, setData] = useState<HomeData | null>(null);
   const [allTodos, setAllTodos] = useState<Todo[] | null>(null);
+  // aviso "O senhor saiu de casa" abre o app com ?acao=saida
+  const [leaving, setLeaving] = useState(() => new URLSearchParams(window.location.search).get("acao") === "saida");
 
   const load = useCallback(() => {
     brain.home().then(setData).catch(onError);
@@ -50,6 +53,9 @@ export function Home({ username, status, offline, pendingApprovals, onGo, onChat
         <h1 id="home-title" className="home-title">{data?.greeting ?? "Olá"}, {displayName(username)}.</h1>
         {offline && <p className="muted small">Sem conexão com o notebook.</p>}
       </header>
+      {leaving && <LeaveSheet onClose={() => setLeaving(false)} />}
+
+      <WeatherCard onSetup={() => { window.location.hash = "clima"; onGo("system"); }} />
 
       {cont && (
         <section className="card continue" aria-label="Continuar conversa">
@@ -94,6 +100,8 @@ export function Home({ username, status, offline, pendingApprovals, onGo, onChat
           <button className="small" onClick={() => onGo("tasks")}>Revisar aprovações</button>
         </div>
       )}
+
+      <ProtocolsCard />
 
       <div className="home-actions">
         <button className="action" onClick={() => onChat({ newConversation: true })}>

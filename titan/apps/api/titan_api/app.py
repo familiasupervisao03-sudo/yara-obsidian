@@ -24,8 +24,8 @@ from titan.tasks.runner import TaskRunner
 from titan.tasks.service import recover_on_startup
 from titan.tools.web.research import WebResearcher
 from titan.voice.engines import VoiceService
-from titan_api.routers import (auth, brain, casa, central, conversations, health, lessons, news, preferences,
-                                system, tasks, voice)
+from titan_api.routers import (auth, brain, casa, central, conversations, health, jarvis, lessons, news,
+                                preferences, system, tasks, voice)
 from titan_api.security import (
     CSRFMiddleware,
     NetworkAllowlistMiddleware,
@@ -73,7 +73,15 @@ async def _lifespan(app: FastAPI):
 
         news = NewsScheduler(ctx.settings, ctx.session_factory, lambda: brain_provider(ctx.settings, ctx.session_factory))
         news.start()
+    clima = None
+    if ctx.settings.env.value != "test":  # clima e aviso de chuva (só de quem escolheu a cidade)
+        from titan.jarvis.service import JarvisScheduler
+
+        clima = JarvisScheduler(ctx.settings, ctx.session_factory)
+        clima.start()
     yield
+    if clima is not None:
+        clima.stop()
     if news is not None:
         news.stop()
     if scheduler is not None:
@@ -143,6 +151,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(casa.router)
     app.include_router(central.router)
     app.include_router(news.router)
+    app.include_router(jarvis.router)
 
     if settings.serve_web:
         _mount_web(app, settings.web_dist_dir)

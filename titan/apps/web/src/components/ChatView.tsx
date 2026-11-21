@@ -10,6 +10,8 @@ import { brain, fmtWhen, type Action } from "../brain";
 import { remindersChanged } from "../reminders";
 import { AiPaused } from "./AiPaused";
 import { central } from "../central/api";
+import { jarvis, type Result as JarvisResult } from "../jarvis";
+import { HoldButton, Results } from "./JarvisCards";
 
 const LESSON_MARKER = "▶ Vídeo-aula: ";
 // Mesmo critério do servidor (titan/lessons/script.py): pedido explícito de vídeo-aula.
@@ -447,12 +449,42 @@ function ActionCards({ items }: { items: Action[] }) {
             return <ManualCard key={i} a={a} />;
           case "assunto":
             return <div key={i} className="acard"><span className="k">🔎 Seguindo assunto</span><b>{a.title}</b><span className="muted small">veja em Notícias → Assuntos</span></div>;
+          case "protocolo":
+            return <ProtocolCard key={i} a={a} />;
+          case "protocolo_feito":
+            return <div key={i} className="acard acard-proto"><span className="k">{a.emoji} Protocolo {a.name}</span><Results items={a.results} /></div>;
           case "bloqueado":
             return <div key={i} className="acard acard-block"><span className="k">🔒 {a.detail}</span><span className="muted small">dados pessoais sensíveis ficam de fora da memória</span></div>;
           default:
             return null;
         }
       })}
+    </div>
+  );
+}
+
+/** "Protocolo dormir": mostra o que vai fazer; só executa no Executar (ou no "sim" falado). */
+function ProtocolCard({ a }: { a: Extract<Action, { type: "protocolo" }> }) {
+  const [state, setState] = useState<"ask" | "busy" | "done" | "cancel">("ask");
+  const [res, setRes] = useState<{ text: string; results: JarvisResult[] } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const run = () => {
+    setState("busy");
+    jarvis.run(a.id).then((r) => { setRes(r); setState("done"); })
+      .catch((e) => { setErr((e as Error).message); setState("ask"); });
+  };
+  return (
+    <div className="acard acard-proto">
+      <span className="k">{a.emoji} {state === "done" ? "Feito" : state === "cancel" ? "Cancelado" : `Protocolo ${a.name}`}</span>
+      {state === "done" && res ? <><b>{res.text}</b><Results items={res.results} /></> : <ul>{a.lines.map((l) => <li key={l}>{l}</li>)}</ul>}
+      {err && <span className="warn small">{err}</span>}
+      {(state === "ask" || state === "busy") && (
+        <div className="jv-go">
+          <button className="ghost small" onClick={() => setState("cancel")}>Cancelar</button>
+          {a.special === "all_off" ? <HoldButton label="Segure para desligar" busy={state === "busy"} onDone={run} />
+            : <button className="small" onClick={run} disabled={state === "busy"}>{state === "busy" ? "Executando…" : "Executar"}</button>}
+        </div>
+      )}
     </div>
   );
 }

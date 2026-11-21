@@ -410,7 +410,8 @@ class ModelUsage(TimestampMixin, Base):
 BRAIN_CATEGORIES = ("sobre", "gostos", "negocio", "estudos", "resumo", "outros")
 BRAIN_STATES = ("pending", "active", "archived")
 TODO_KINDS = ("lembrete", "tarefa")
-NOTE_KINDS = ("bom_dia", "boa_noite", "papo", "lembrete", "acompanhamento", "socio", "noticia", "jornal", "sistema")
+NOTE_KINDS = ("bom_dia", "boa_noite", "papo", "lembrete", "acompanhamento", "socio", "noticia", "jornal", "sistema",
+              "clima", "casa")
 
 
 class BrainMemory(TimestampMixin, Base):

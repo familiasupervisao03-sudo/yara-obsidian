@@ -133,7 +133,8 @@ def post_message(
     db.commit()
 
     reply_out = None
-    rem = _follow_answer(ctx, cu, conv.id, body.content) or _reminder_answer(ctx, cu, conv.id, body.content)
+    rem = (_protocol_answer(ctx, cu, conv.id, body.content) or _follow_answer(ctx, cu, conv.id, body.content)
+           or _reminder_answer(ctx, cu, conv.id, body.content))
     if rem is not None:  # lembrete (ou assunto seguido nas Notícias) na hora, sem IA
         rem.pop("_action", None)
         db.expire_all()
@@ -153,6 +154,7 @@ def post_message(
         style = brain.with_memory(style, brain.context_for(ctx.session_factory, cu.user.id, body.content))
         style = brain.with_memory(style, casa_chat.context_block(ctx.settings, ctx.session_factory, cu.user.id))
         style = brain.with_memory(style, _news_context(ctx, cu, body.content))
+        style = brain.with_memory(style, _weather_context(ctx, cu, body.content))
         reply = provider.chat(turns, style=style)
         reply_msg = repo.add_message(
             db, conv, "assistant", reply.content.strip() + footer,
@@ -223,6 +225,15 @@ async def post_message_stream(
         if duplicate_reply is not None:
             yield _sse("done", {"message": duplicate_reply, "duplicate": True})
             return
+        # "Titã, protocolo dormir": mostra o que vai fazer e espera o "sim" (ou o Executar).
+        proto_out = await run_in_threadpool(_protocol_answer, ctx, cu, conversation_id, body.content)
+        if proto_out is not None:
+            action = proto_out.pop("_action")
+            yield _sse("delta", {"text": proto_out["content"]})
+            yield _sse("done", {"message": proto_out, "footer_chars": 0, "metrics": {"protocolo": True}})
+            if action:
+                yield _sse("actions", {"message_id": user_out["id"], "actions": [action]})
+            return
         # "liga o ventilador": o TITAN Casa resolve na hora, sem IA (funciona até sem modelo).
         casa_out = await run_in_threadpool(_casa_answer, ctx, cu, conversation_id, body.content)
         if casa_out is not None:
@@ -262,6 +273,7 @@ async def post_message_stream(
                 st = brain.with_memory(st, brain.context_for(ctx.session_factory, cu.user.id, body.content))
                 st = brain.with_memory(st, casa_chat.context_block(ctx.settings, ctx.session_factory, cu.user.id))
                 st = brain.with_memory(st, _news_context(ctx, cu, body.content))
+                st = brain.with_memory(st, _weather_context(ctx, cu, body.content))
                 replied: dict = {}
 
                 def emit_and_keep(kind: str, data: dict) -> None:
@@ -317,6 +329,43 @@ def _news_context(ctx: AppContext, cu: CurrentUser, text: str) -> str:
             return news.context_block(db, cu.user.id, text)
     except Exception:
         return ""
+
+
+def _weather_context(ctx: AppContext, cu: CurrentUser, text: str) -> str:
+    """Previsão real (Open-Meteo) quando o dono pergunta do tempo: nada de inventar."""
+    from titan.jarvis import state as jstate
+    from titan.jarvis import weather
+
+    try:
+        with ctx.session_factory() as db:
+            st = jstate.get(db, cu.user.id)
+        return weather.context_block(st["weather"], st["place"], text, utcnow(), st["weather_at"])
+    except Exception:
+        return ""
+
+
+def _protocol_answer(ctx: AppContext, cu: CurrentUser, conversation_id: uuid.UUID, text: str):
+    """"Protocolo dormir" → lista o que vai fazer e pergunta; "sim" (até 3 min depois) → executa."""
+    from titan.casa.chat import shared_provider
+    from titan.jarvis import service as jarvis
+
+    try:
+        with ctx.session_factory.begin() as db:
+            r = jarvis.chat_reply(db, ctx.settings, cu.user.id, text, shared_provider(ctx.settings))
+            if r is None:
+                return None
+            reply, action = r
+            conv = repo.get_conversation(db, cu.user.id, conversation_id)
+            msg = repo.add_message(db, conv, "assistant", reply, model_provider="titan", model_name="protocolo")
+            db.flush()
+            out = MessageOut.model_validate(msg).model_dump(mode="json")
+            out["_action"] = action
+            return out
+    except Exception:
+        import logging
+
+        logging.getLogger("titan.jarvis").exception("Falha ao tratar protocolo pela conversa")
+        return None
 
 
 _FOLLOW_HINT = re.compile(r"\b(noticia|noticias|preco|precos|semana|semanas|assunto)\b")
